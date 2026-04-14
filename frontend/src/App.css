@@ -1,34 +1,301 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+@import url('https://fonts.googleapis.com/css2?family=Chivo:wght@400;600;700;900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+/* Custom Properties */
+:root {
+  --bg-main: #050505;
+  --bg-surface: #0A0A0A;
+  --bg-elevated: #121212;
+  --text-primary: #FFFFFF;
+  --text-secondary: #A0A0A0;
+  --text-muted: #525252;
+  --border-default: rgba(255, 255, 255, 0.1);
+  --accent-primary: #00E5FF;
+  --accent-success: #00FF66;
+  --accent-danger: #FF3333;
+  --accent-warning: #FFB800;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+/* Font Families */
+.font-heading {
+  font-family: 'Chivo', sans-serif;
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+.font-body {
+  font-family: 'IBM Plex Sans', sans-serif;
 }
 
-.App-link {
-    color: #61dafb;
+.font-mono {
+  font-family: 'IBM Plex Mono', monospace;
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+/* Base Styles */
+body {
+  font-family: 'IBM Plex Sans', sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* App Container */
+.App {
+  min-height: 100vh;
+  background-color: var(--bg-main);
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Animations */
+@keyframes scan-line {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px var(--accent-primary);
+  }
+  50% {
+    box-shadow: 0 0 20px var(--accent-primary);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-scan {
+  animation: scan-line 2s linear infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+/* VAR-specific Components */
+.var-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1.5rem;
+}
+
+.var-card {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 2px;
+}
+
+.var-card:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  background-color: #1a1a1a;
+}
+
+/* Confidence Score Styling */
+.confidence-high {
+  color: var(--accent-success);
+}
+
+.confidence-medium {
+  color: var(--accent-primary);
+}
+
+.confidence-low {
+  color: var(--accent-warning);
+}
+
+.confidence-critical {
+  color: var(--accent-danger);
+}
+
+/* Video Stage Overlay */
+.video-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tracking-box {
+  border: 2px solid var(--accent-primary);
+  background-color: rgba(0, 229, 255, 0.1);
+  border-radius: 2px;
+}
+
+/* Timeline Component */
+.timeline-track {
+  height: 8px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  position: relative;
+}
+
+.timeline-progress {
+  height: 100%;
+  background-color: var(--accent-primary);
+  border-radius: 4px;
+}
+
+.timeline-marker {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.timeline-marker:hover {
+  transform: translate(-50%, -50%) scale(1.25);
+}
+
+.timeline-marker.incident-offside {
+  background-color: var(--accent-warning);
+}
+
+.timeline-marker.incident-foul {
+  background-color: var(--accent-primary);
+}
+
+.timeline-marker.incident-penalty {
+  background-color: var(--accent-danger);
+}
+
+.timeline-marker.incident-goal {
+  background-color: var(--accent-success);
+}
+
+/* Badge Styles */
+.badge-offside {
+  background-color: rgba(255, 184, 0, 0.2);
+  color: var(--accent-warning);
+  border: 1px solid rgba(255, 184, 0, 0.3);
+}
+
+.badge-foul {
+  background-color: rgba(0, 229, 255, 0.2);
+  color: var(--accent-primary);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+}
+
+.badge-penalty {
+  background-color: rgba(255, 51, 51, 0.2);
+  color: var(--accent-danger);
+  border: 1px solid rgba(255, 51, 51, 0.3);
+}
+
+.badge-confirmed {
+  background-color: rgba(0, 255, 102, 0.2);
+  color: var(--accent-success);
+  border: 1px solid rgba(0, 255, 102, 0.3);
+}
+
+/* Status Indicators */
+.status-online {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--accent-success);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.status-processing {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--accent-primary);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Loading States */
+.loading-text {
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--accent-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* Recharts Custom Styling */
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: rgba(255, 255, 255, 0.1);
+}
+
+.recharts-tooltip-wrapper {
+  outline: none;
+}
+
+/* Transitions */
+.transition-var {
+  transition: all 0.15s ease-out;
+}
+
+/* Hover Effects */
+.hover-glow:hover {
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.2);
+}
+
+/* Text Selection */
+::selection {
+  background-color: var(--accent-primary);
+  color: var(--bg-main);
+}
+
+/* Focus States */
+*:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Print Styles */
+@media print {
+  .no-print {
+    display: none;
+  }
+  
+  body {
+    background-color: white;
+    color: black;
+  }
 }
