@@ -1,0 +1,155 @@
+{
+  "theme": "dark",
+  "archetype": "Performance Pro / Swiss High-Contrast",
+  "emotional_tone": "Professional, authoritative, high-tech, precise, urgent",
+  "typography": {
+    "fonts": {
+      "heading": "Chivo, sans-serif",
+      "body": "IBM Plex Sans, sans-serif",
+      "mono": "IBM Plex Mono, monospace",
+      "install_command": "Import from Google Fonts (Chivo, IBM Plex Sans, IBM Plex Mono)"
+    },
+    "rules": {
+      "h1": "text-4xl sm:text-5xl font-heading font-black tracking-tight text-white",
+      "h2": "text-2xl sm:text-3xl font-heading font-bold tracking-tight text-white",
+      "h3": "text-xl font-heading font-semibold text-white",
+      "metrics": "text-4xl font-mono font-medium tracking-tighter text-white",
+      "body": "text-sm sm:text-base font-body text-gray-300 leading-relaxed",
+      "overline": "text-xs font-mono uppercase tracking-[0.2em] text-gray-400"
+    }
+  },
+  "colors": {
+    "background": {
+      "main": "#050505",
+      "surface": "#0A0A0A",
+      "surface_elevated": "#121212"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#A0A0A0",
+      "muted": "#525252"
+    },
+    "border": {
+      "default": "rgba(255, 255, 255, 0.1)",
+      "focus": "rgba(255, 255, 255, 0.3)"
+    },
+    "accents": {
+      "primary": "#00E5FF", 
+      "success": "#00FF66",
+      "danger": "#FF3333",
+      "warning": "#FFB800"
+    },
+    "classes": {
+      "bg_main": "bg-[#050505]",
+      "bg_surface": "bg-[#0A0A0A]",
+      "bg_card": "bg-[#121212]",
+      "text_primary": "text-white",
+      "text_secondary": "text-gray-400",
+      "border_default": "border-white/10",
+      "accent_primary": "text-[#00E5FF]",
+      "bg_accent_primary": "bg-[#00E5FF]",
+      "ring_focus": "focus:ring-[#00E5FF]"
+    }
+  },
+  "layout": {
+    "grid_system": "The Control Room Grid",
+    "container": "w-full max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8",
+    "sidebar": "w-64 flex-shrink-0 border-r border-white/10 h-screen sticky top-0 bg-[#050505]",
+    "main_content": "flex-1 min-w-0 p-6 sm:p-8 space-y-6",
+    "bento_grid": "grid grid-cols-1 md:grid-cols-12 gap-6",
+    "panels": {
+      "video_stage": "col-span-1 md:col-span-8 lg:col-span-9 border border-white/10 bg-[#0A0A0A] p-1 flex flex-col relative",
+      "analysis_sidebar": "col-span-1 md:col-span-4 lg:col-span-3 flex flex-col gap-6",
+      "timeline_row": "col-span-full border border-white/10 bg-[#0A0A0A] p-4",
+      "metrics_row": "col-span-full grid grid-cols-2 md:grid-cols-4 gap-4"
+    },
+    "spacing": "Use tight gaps (gap-4, gap-6) for data correlation. Use generous padding inside empty state containers (p-12).",
+    "borders": "1px solid border-white/10. Corner radius max 4px (rounded-sm) for a sharp, tactical look."
+  },
+  "surfaces": {
+    "cards": "bg-[#121212] border border-white/10 rounded-sm shadow-none overflow-hidden",
+    "glassmorphism": "Not recommended for health/data/precision apps. Stick to solid dark surfaces (#121212) to prevent visual refraction of data.",
+    "hover_states": "hover:border-white/30 hover:bg-[#1a1a1a] transition-all duration-200"
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-white text-black hover:bg-gray-200 font-semibold rounded-sm px-6 py-2 transition-colors",
+      "secondary": "bg-transparent text-white border border-white/20 hover:border-white/50 hover:bg-white/5 rounded-sm px-6 py-2 transition-colors",
+      "danger": "bg-[#FF3333]/10 text-[#FF3333] border border-[#FF3333]/20 hover:bg-[#FF3333]/20 rounded-sm px-6 py-2 transition-colors",
+      "success": "bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/20 hover:bg-[#00FF66]/20 rounded-sm px-6 py-2 transition-colors"
+    },
+    "inputs": "bg-[#050505] border-white/10 text-white rounded-sm focus:border-[#00E5FF] focus:ring-1 focus:ring-[#00E5FF]",
+    "badges": {
+      "offside": "bg-[#FFB800]/20 text-[#FFB800] border border-[#FFB800]/30 rounded-full px-2 py-0.5 text-xs font-mono uppercase",
+      "foul": "bg-[#FF3333]/20 text-[#FF3333] border border-[#FF3333]/30 rounded-full px-2 py-0.5 text-xs font-mono uppercase",
+      "clear": "bg-[#00FF66]/20 text-[#00FF66] border border-[#00FF66]/30 rounded-full px-2 py-0.5 text-xs font-mono uppercase",
+      "ai_confidence": "bg-[#00E5FF]/10 text-[#00E5FF] border border-[#00E5FF]/30 rounded-sm px-2 py-1 font-mono text-sm"
+    },
+    "video_player": "Relative container. Overlays must use absolute positioning. AI tracking boxes use border-2 border-[#00E5FF] with subtle bg-[#00E5FF]/10. Include a 'Live' or 'Playback' indicator.",
+    "timeline_scrubber": "Horizontal track bg-white/10, active segment bg-[#00E5FF]. Markers for incidents (red/yellow dots) placed absolutely along track."
+  },
+  "animation_and_motion": {
+    "philosophy": "Minimalist and immediate. Feedback must feel instantaneous.",
+    "transitions": "transition-all duration-150 ease-out",
+    "loading": "Use mono text like 'ANALYZING FRAMES...' or 'CALCULATING CONFIDENCE [|||||  ]' rather than generic spinners. Add a subtle scanning line animation over the video stage.",
+    "hover": "Subtle border brightness increase (border-white/10 to border-white/40). No bouncy scales."
+  },
+  "icons_and_assets": {
+    "library": "@phosphor-icons/react (Duotone or Regular) or lucide-react (already installed). Use sharp, technical icons.",
+    "style": "Always set specific colors on hover. Example: text-gray-400 hover:text-white"
+  },
+  "media": {
+    "video_placeholder": {
+      "url": "https://images.pexels.com/photos/33911793/pexels-photo-33911793.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Stadium view to mock the video feed stage"
+    },
+    "secondary_camera": {
+      "url": "https://images.unsplash.com/photo-1616069827791-e010937f22a8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjV8MHwxfHNlYXJjaHwzfHxmb290YmFsbCUyMGNhbWVyYXxlbnwwfHx8fDE3NzYxOTM0Mzd8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Close up action shot for frame analysis"
+    },
+    "referee_avatars": [
+      {
+        "url": "https://images.unsplash.com/photo-1634162635368-004f5fb27427?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODh8MHwxfHNlYXJjaHwxfHxwcm9maWxlJTIwcG9ydHJhaXQlMjBzZXJpb3VzfGVufDB8fHx8MTc3NjE5MzQzN3ww&ixlib=rb-4.1.0&q=85",
+        "description": "Referee avatar 1"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1763583145932-5f8aef6cfe68?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODh8MHwxfHNlYXJjaHwzfHxwcm9maWxlJTIwcG9ydHJhaXQlMjBzZXJpb3VzfGVufDB8fHx8MTc3NjE5MzQzN3ww&ixlib=rb-4.1.0&q=85",
+        "description": "Referee avatar 2"
+      }
+    ],
+    "team_logos": [
+      {
+        "url": "https://images.unsplash.com/photo-1761315191206-a592f6bdb523?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHwxfHxwcmVtaWVyJTIwbGVhZ3VlJTIwbG9nb3xlbnwwfHx8fDE3NzYxOTM0MzN8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Mock team A logo (Liverpool crest)"
+      },
+      {
+        "url": "https://images.pexels.com/photos/6408720/pexels-photo-6408720.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Mock team B logo (Chelsea locker branding)"
+      }
+    ]
+  },
+  "testing_attributes": {
+    "rule": "All interactive and key informational elements MUST include a data-testid attribute.",
+    "convention": "kebab-case, role-based (NOT appearance-based)",
+    "examples": [
+      "data-testid='video-player-container'",
+      "data-testid='ai-confidence-score'",
+      "data-testid='timeline-scrubber'",
+      "data-testid='incident-classification-badge'",
+      "data-testid='override-decision-button'",
+      "data-testid='confirm-decision-button'"
+    ]
+  },
+  "instructions_to_main_agent": [
+    "1. Setup Shadcn UI with dark mode enabled. Set global backgrounds to #050505 and surfaces to #0A0A0A or #121212.",
+    "2. Override all border radii to `rounded-sm` or `rounded-none` to fit the Performance Pro archetype.",
+    "3. Use a strict grid layout: The main view is the video player (left/center) with the AI analysis feed and confidence scores on the right.",
+    "4. For the video player overlay, use absolute positioning to draw bounding boxes and trajectory lines over the image.",
+    "5. Use 'IBM Plex Mono' for all data, timecodes, and confidence percentages (e.g., 98.4%).",
+    "6. Build the navigation sidebar on the left with links for: Live VAR, Incident History, Referee Analytics, Settings.",
+    "7. Include a bottom timeline component that mimics a video scrubber with markers for specific incidents.",
+    "8. Implement Shadcn's Form, Input, and Textarea components for the manual incident upload and text description functionality.",
+    "9. Use recharts for Referee performance analytics and historical decision patterns (keep charts dark, lines neon/cyan).",
+    "10. Strictly use the provided unsplash media URLs for placeholders. No dummyimage.com placeholders allowed."
+  ]
+}
