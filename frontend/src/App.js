@@ -894,8 +894,8 @@ const AnalyticsPage = () => {
             <CardTitle className="text-sm font-mono uppercase text-gray-400">INCIDENT DISTRIBUTION</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-[300px] min-h-[300px]">
+              <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
                     data={incidentTypeData}
@@ -925,8 +925,8 @@ const AnalyticsPage = () => {
             <CardTitle className="text-sm font-mono uppercase text-gray-400">REFEREE ACCURACY</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-[300px] min-h-[300px]">
+              <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={refereePerformanceData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                   <XAxis dataKey="name" stroke="#666" fontSize={12} />
@@ -1028,9 +1028,9 @@ const SettingsPage = () => {
 
       <Tabs defaultValue="general" className="w-full">
         <TabsList className="bg-[#121212] border border-white/10 rounded-sm p-1">
-          <TabsTrigger value="general" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-sm">General</TabsTrigger>
-          <TabsTrigger value="ai" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-sm">AI Settings</TabsTrigger>
-          <TabsTrigger value="admin" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-sm">Admin Tools</TabsTrigger>
+          <TabsTrigger value="general" data-testid="settings-tab-general" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-sm">General</TabsTrigger>
+          <TabsTrigger value="ai" data-testid="settings-tab-ai" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-sm">AI Settings</TabsTrigger>
+          <TabsTrigger value="admin" data-testid="settings-tab-admin" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-sm">Admin Tools</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="mt-6 space-y-6">
