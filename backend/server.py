@@ -142,6 +142,17 @@ class TextAnalysisRequest(BaseModel):
     additional_context: Optional[str] = None
 
 
+class MatchAssignment(BaseModel):
+    referee_id: Optional[str] = None
+    var_operator_id: Optional[str] = None
+
+
+class FeedbackCreate(BaseModel):
+    incident_id: str
+    was_ai_correct: bool
+    operator_notes: Optional[str] = None
+
+
 # ── Helpers ────────────────────────────────────────────────
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
     response.set_cookie(
@@ -367,6 +378,11 @@ async def get_incident(incident_id: str):
 
 @api_router.put("/incidents/{incident_id}/decision")
 async def update_decision(incident_id: str, decision: DecisionUpdate, request: Request):
+    # Fetch current incident to compare AI suggestion with operator decision
+    current = await db.incidents.find_one({"id": incident_id}, {"_id": 0})
+    if not current:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
     update_data = {
         "decision_status": decision.decision_status.value,
         "final_decision": decision.final_decision,
@@ -379,8 +395,31 @@ async def update_decision(incident_id: str, decision: DecisionUpdate, request: R
         return_document=True,
         projection={"_id": 0},
     )
-    if not result:
-        raise HTTPException(status_code=404, detail="Incident not found")
+
+    # ── AI Feedback Loop: record whether AI suggestion matched operator decision ──
+    ai_analysis = current.get("ai_analysis", {})
+    ai_suggestion = ai_analysis.get("suggested_decision", "")
+    was_confirmed = decision.decision_status.value == "confirmed"
+    feedback_doc = {
+        "id": str(uuid.uuid4()),
+        "incident_id": incident_id,
+        "incident_type": current.get("incident_type", "other"),
+        "ai_suggestion": ai_suggestion,
+        "ai_confidence": ai_analysis.get("final_confidence", 0),
+        "operator_decision": decision.final_decision,
+        "decision_status": decision.decision_status.value,
+        "was_ai_correct": was_confirmed,
+        "decided_by": decision.decided_by,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.ai_feedback.insert_one(feedback_doc)
+
+    # Update match incident count if linked
+    if current.get("match_id"):
+        await db.matches.update_one(
+            {"id": current["match_id"]},
+            {"$inc": {"incidents_count": 0}},  # just touch it
+        )
 
     await ws_manager.send_decision_made(
         incident_id, decision.final_decision, decision.decision_status.value
@@ -659,6 +698,151 @@ async def referee_analytics(referee_id: str):
         "type_distribution": type_dist,
         "accuracy_rate": round(accuracy, 2),
     }
+
+
+# ── Match Assignment ───────────────────────────────────────
+@api_router.put("/matches/{match_id}/assign")
+async def assign_match(match_id: str, assignment: MatchAssignment, request: Request):
+    """Assign referee and/or VAR operator to a match (admin only)."""
+    await require_role(request, db, ["admin"])
+    match = await db.matches.find_one({"id": match_id}, {"_id": 0})
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    update = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if assignment.referee_id is not None:
+        ref = await db.referees.find_one({"id": assignment.referee_id})
+        if not ref:
+            raise HTTPException(status_code=404, detail="Referee not found")
+        update["referee_id"] = assignment.referee_id
+        update["referee_name"] = ref.get("name", "")
+    if assignment.var_operator_id is not None:
+        op = await db.referees.find_one({"id": assignment.var_operator_id})
+        if not op:
+            raise HTTPException(status_code=404, detail="VAR operator not found")
+        update["var_operator_id"] = assignment.var_operator_id
+        update["var_operator_name"] = op.get("name", "")
+
+    result = await db.matches.find_one_and_update(
+        {"id": match_id},
+        {"$set": update},
+        return_document=True,
+        projection={"_id": 0},
+    )
+    return result
+
+
+@api_router.put("/matches/{match_id}/status")
+async def update_match_status(match_id: str, request: Request, status: str = Query(...)):
+    """Update match status (admin only)."""
+    await require_role(request, db, ["admin"])
+    if status not in ("scheduled", "live", "completed"):
+        raise HTTPException(status_code=400, detail="Invalid status")
+    result = await db.matches.find_one_and_update(
+        {"id": match_id},
+        {"$set": {"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        return_document=True,
+        projection={"_id": 0},
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Match not found")
+    return result
+
+
+# ── AI Feedback Loop ──────────────────────────────────────
+@api_router.post("/feedback")
+async def submit_feedback(fb: FeedbackCreate, request: Request):
+    """Explicit operator feedback on AI accuracy."""
+    user = await get_current_user(request, db)
+    incident = await db.incidents.find_one({"id": fb.incident_id}, {"_id": 0})
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    feedback_doc = {
+        "id": str(uuid.uuid4()),
+        "incident_id": fb.incident_id,
+        "incident_type": incident.get("incident_type", "other"),
+        "was_ai_correct": fb.was_ai_correct,
+        "operator_notes": fb.operator_notes,
+        "submitted_by": user.get("_id", ""),
+        "submitted_by_name": user.get("name", ""),
+        "ai_confidence": incident.get("ai_analysis", {}).get("final_confidence", 0),
+        "ai_suggestion": incident.get("ai_analysis", {}).get("suggested_decision", ""),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.ai_feedback.insert_one(feedback_doc)
+    feedback_doc.pop("_id", None)
+    return feedback_doc
+
+
+@api_router.get("/feedback/stats")
+async def feedback_stats():
+    """Get AI feedback statistics for the learning loop."""
+    total = await db.ai_feedback.count_documents({})
+    correct = await db.ai_feedback.count_documents({"was_ai_correct": True})
+    incorrect = total - correct
+    accuracy = (correct / total * 100) if total > 0 else 0
+
+    # Per incident type
+    pipeline = [
+        {"$group": {
+            "_id": "$incident_type",
+            "total": {"$sum": 1},
+            "correct": {"$sum": {"$cond": ["$was_ai_correct", 1, 0]}},
+        }},
+        {"$sort": {"total": -1}},
+    ]
+    by_type = await db.ai_feedback.aggregate(pipeline).to_list(20)
+    type_stats = {}
+    for t in by_type:
+        type_stats[t["_id"]] = {
+            "total": t["total"],
+            "correct": t["correct"],
+            "accuracy": round((t["correct"] / t["total"] * 100) if t["total"] > 0 else 0, 1),
+        }
+
+    # Confidence calibration: avg confidence for correct vs incorrect
+    cal_pipeline = [
+        {"$group": {
+            "_id": "$was_ai_correct",
+            "avg_confidence": {"$avg": "$ai_confidence"},
+            "count": {"$sum": 1},
+        }}
+    ]
+    calibration = await db.ai_feedback.aggregate(cal_pipeline).to_list(5)
+    confidence_calibration = {}
+    for c in calibration:
+        key = "correct" if c["_id"] else "incorrect"
+        confidence_calibration[key] = {
+            "avg_confidence": round(c["avg_confidence"], 1),
+            "count": c["count"],
+        }
+
+    return {
+        "total_feedback": total,
+        "correct": correct,
+        "incorrect": incorrect,
+        "overall_accuracy": round(accuracy, 1),
+        "by_incident_type": type_stats,
+        "confidence_calibration": confidence_calibration,
+    }
+
+
+@api_router.get("/feedback")
+async def get_feedback(limit: int = Query(50, ge=1, le=200)):
+    """List recent feedback entries."""
+    return await db.ai_feedback.find({}, {"_id": 0}).sort("created_at", -1).to_list(limit)
+
+
+# ── Admin: list users ─────────────────────────────────────
+@api_router.get("/users")
+async def list_users(request: Request):
+    """List all users (admin only)."""
+    await require_role(request, db, ["admin"])
+    users = await db.users.find({}, {"_id": 0, "password_hash": 0}).to_list(200)
+    for u in users:
+        u.pop("password_hash", None)
+    return users
 
 
 # ── WebSocket ─────────────────────────────────────────────

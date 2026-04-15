@@ -418,6 +418,19 @@ class OctonBrainEngine:
                 f"Overturned rate: {historical_data.get('overturned_count', 0)}. "
                 f"Historical accuracy: {historical_data.get('accuracy_rate', 0):.1f}%."
             )
+        # Feedback loop context
+        if historical_data.get("feedback_total", 0) > 0:
+            historical_context += (
+                f" AI Feedback: {historical_data['feedback_total']} operator reviews, "
+                f"{historical_data.get('feedback_accuracy', 0):.1f}% AI accuracy."
+            )
+        corrections = historical_data.get("recent_corrections", [])
+        if corrections:
+            correction_text = "; ".join(
+                [f"AI said '{c.get('ai_suggestion','')}' but operator chose '{c.get('operator_decision','')}''"
+                 for c in corrections[:3]]
+            )
+            historical_context += f" Recent corrections: {correction_text}"
 
         # Step 4: Neo Cortex deep analysis (receives Hippocampus findings)
         neo_cortex_result = await self.neo_cortex.analyze(
@@ -450,7 +463,7 @@ class OctonBrainEngine:
     async def _get_historical_context(
         self, incident_type: str, db
     ) -> Dict:
-        """Pull historical decision patterns for self-learning."""
+        """Pull historical decision patterns and AI feedback for self-learning."""
         try:
             total_similar = await db.incidents.count_documents(
                 {"incident_type": incident_type, "decision_status": {"$ne": "pending"}}
@@ -485,12 +498,32 @@ class OctonBrainEngine:
                 (confirmed_count / total_decided * 100) if total_decided > 0 else 0
             )
 
+            # ── AI Feedback Loop: pull operator corrections ──
+            feedback_total = await db.ai_feedback.count_documents(
+                {"incident_type": incident_type}
+            )
+            feedback_correct = await db.ai_feedback.count_documents(
+                {"incident_type": incident_type, "was_ai_correct": True}
+            )
+            feedback_accuracy = (
+                (feedback_correct / feedback_total * 100) if feedback_total > 0 else 0
+            )
+
+            # Get recent corrections to learn from
+            recent_corrections = await db.ai_feedback.find(
+                {"incident_type": incident_type, "was_ai_correct": False},
+                {"_id": 0, "ai_suggestion": 1, "operator_decision": 1},
+            ).sort("created_at", -1).to_list(5)
+
             return {
                 "total_similar": total_similar,
                 "most_common_decision": most_common,
                 "accuracy_rate": accuracy_rate,
                 "confirmed_count": confirmed_count,
                 "overturned_count": total_decided - confirmed_count,
+                "feedback_total": feedback_total,
+                "feedback_accuracy": feedback_accuracy,
+                "recent_corrections": recent_corrections,
             }
         except Exception as e:
             logger.error(f"Historical context error: {e}")
@@ -500,6 +533,9 @@ class OctonBrainEngine:
                 "accuracy_rate": 0,
                 "confirmed_count": 0,
                 "overturned_count": 0,
+                "feedback_total": 0,
+                "feedback_accuracy": 0,
+                "recent_corrections": [],
             }
 
 

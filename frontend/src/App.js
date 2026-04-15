@@ -7,7 +7,7 @@ import {
   Video, History, BarChart3, Settings, AlertTriangle, CheckCircle2,
   XCircle, Clock, RefreshCw, Upload, Play, Brain, Users, Shield,
   Target, Eye, LogOut, LogIn, UserPlus, Zap, Activity, Image,
-  ArrowRight, Radio, Wifi, WifiOff
+  ArrowRight, Radio, Wifi, WifiOff, Trophy, Calendar, ThumbsUp, ThumbsDown, Lock
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./components/ui/card";
@@ -271,11 +271,13 @@ const Sidebar = () => {
   const navigate = useNavigate();
 
   const navItems = [
-    { path: "/", icon: Video, label: "Live VAR" },
-    { path: "/history", icon: History, label: "Incident History" },
-    { path: "/analytics", icon: BarChart3, label: "Referee Analytics" },
-    { path: "/settings", icon: Settings, label: "Settings" },
-  ];
+    { path: "/", icon: Video, label: "Live VAR", roles: null },
+    { path: "/history", icon: History, label: "Incident History", roles: null },
+    { path: "/matches", icon: Trophy, label: "Matches", roles: ["admin"] },
+    { path: "/analytics", icon: BarChart3, label: "Referee Analytics", roles: null },
+    { path: "/feedback", icon: Brain, label: "AI Feedback", roles: ["admin", "var_operator"] },
+    { path: "/settings", icon: Settings, label: "Settings", roles: null },
+  ].filter(item => !item.roles || (user && item.roles.includes(user.role)));
 
   const handleLogout = async () => {
     await logout();
@@ -910,7 +912,7 @@ const SettingsPage = () => {
         <TabsList className="bg-[#121212] border border-white/10 rounded-sm p-1">
           <TabsTrigger value="general" data-testid="settings-tab-general" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-sm">General</TabsTrigger>
           <TabsTrigger value="architecture" data-testid="settings-tab-architecture" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-sm">Architecture</TabsTrigger>
-          <TabsTrigger value="admin" data-testid="settings-tab-admin" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-sm">Admin Tools</TabsTrigger>
+          {user?.role === "admin" && <TabsTrigger value="admin" data-testid="settings-tab-admin" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-sm">Admin Tools</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="general" className="mt-6 space-y-6">
@@ -971,11 +973,278 @@ const SettingsPage = () => {
   );
 };
 
+// ── Matches Page (Admin) ──────────────────────────────────
+const MatchesPage = () => {
+  const { user } = useAuth();
+  const [matches, setMatches] = useState([]);
+  const [referees, setReferees] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newMatch, setNewMatch] = useState({ team_home: "", team_away: "", date: "", competition: "", stadium: "" });
+  const [assignDialog, setAssignDialog] = useState({ open: false, matchId: null, match: null });
+
+  const fetchData = useCallback(async () => {
+    try {
+      const [m, r] = await Promise.all([axios.get(`${API}/matches`), axios.get(`${API}/referees`)]);
+      setMatches(m.data); setReferees(r.data);
+    } catch { toast.error("Failed to load matches"); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleCreate = async () => {
+    if (!newMatch.team_home || !newMatch.team_away) { toast.error("Fill in team names"); return; }
+    try {
+      await axios.post(`${API}/matches`, newMatch);
+      toast.success("Match created!"); setShowCreate(false);
+      setNewMatch({ team_home: "", team_away: "", date: "", competition: "", stadium: "" });
+      fetchData();
+    } catch { toast.error("Failed to create match"); }
+  };
+
+  const handleAssign = async (matchId, refId, opId) => {
+    try {
+      await axios.put(`${API}/matches/${matchId}/assign`, { referee_id: refId || null, var_operator_id: opId || null });
+      toast.success("Assignment updated!"); setAssignDialog({ open: false, matchId: null, match: null }); fetchData();
+    } catch (e) { toast.error(e.response?.data?.detail || "Assignment failed"); }
+  };
+
+  const handleStatusChange = async (matchId, status) => {
+    try {
+      await axios.put(`${API}/matches/${matchId}/status?status=${status}`);
+      toast.success("Status updated!"); fetchData();
+    } catch { toast.error("Failed to update status"); }
+  };
+
+  const statusColors = { scheduled: "#FFB800", live: "#00FF66", completed: "#A0A0A0" };
+  const refereeList = referees.filter(r => r.role === "referee");
+  const operatorList = referees.filter(r => r.role === "var_operator");
+
+  if (loading) return <div className="flex-1 flex items-center justify-center bg-[#050505]"><div className="text-sm font-mono text-[#00E5FF] animate-pulse">LOADING MATCHES...</div></div>;
+
+  return (
+    <div className="flex-1 min-w-0 p-6 space-y-6 bg-[#050505]" data-testid="matches-page">
+      <div className="flex items-center justify-between">
+        <div><h1 className="text-3xl font-heading font-black text-white tracking-tight">MATCH MANAGEMENT</h1><p className="text-sm font-body text-gray-400 mt-1">Assign referees and VAR operators to matches</p></div>
+        <Dialog open={showCreate} onOpenChange={setShowCreate}>
+          <DialogTrigger asChild><Button className="bg-white text-black hover:bg-gray-200 rounded-sm font-semibold" data-testid="create-match-button"><Trophy className="w-4 h-4 mr-2" />NEW MATCH</Button></DialogTrigger>
+          <DialogContent className="bg-[#121212] border-white/10 text-white max-w-lg">
+            <DialogHeader><DialogTitle className="font-heading">Create Match</DialogTitle><DialogDescription className="text-gray-400">Add a new match to the system</DialogDescription></DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label className="text-gray-300">Home Team</Label><Input value={newMatch.team_home} onChange={e => setNewMatch({...newMatch, team_home: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-sm" data-testid="match-home-input" /></div>
+                <div className="space-y-2"><Label className="text-gray-300">Away Team</Label><Input value={newMatch.team_away} onChange={e => setNewMatch({...newMatch, team_away: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-sm" data-testid="match-away-input" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label className="text-gray-300">Date</Label><Input type="date" value={newMatch.date} onChange={e => setNewMatch({...newMatch, date: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-sm" /></div>
+                <div className="space-y-2"><Label className="text-gray-300">Competition</Label><Input value={newMatch.competition} onChange={e => setNewMatch({...newMatch, competition: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-sm" /></div>
+              </div>
+              <div className="space-y-2"><Label className="text-gray-300">Stadium</Label><Input value={newMatch.stadium} onChange={e => setNewMatch({...newMatch, stadium: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-sm" /></div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-white">Cancel</Button>
+              <Button onClick={handleCreate} className="bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 rounded-sm" data-testid="submit-match-button">CREATE</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="grid gap-4">
+        {matches.map(match => (
+          <Card key={match.id} className="bg-[#121212] border-white/10 rounded-sm hover:border-white/30 transition-colors">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-lg font-heading font-bold text-white">{match.team_home}</span>
+                    <span className="text-xs font-mono text-gray-400">VS</span>
+                    <span className="text-lg font-heading font-bold text-white">{match.team_away}</span>
+                    <span className="text-xs font-mono px-2 py-0.5 rounded-full border" style={{ color: statusColors[match.status], borderColor: statusColors[match.status] + '50', backgroundColor: statusColors[match.status] + '15' }}>{match.status?.toUpperCase()}</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-gray-400">
+                    {match.competition && <span>{match.competition}</span>}
+                    {match.date && <span><Calendar className="w-3 h-3 inline mr-1" />{match.date}</span>}
+                    {match.stadium && <span>{match.stadium}</span>}
+                  </div>
+                  <div className="flex items-center gap-4 mt-2 text-xs">
+                    <span className="text-gray-400">Referee: <span className="text-white">{match.referee_name || "Unassigned"}</span></span>
+                    <span className="text-gray-400">VAR Op: <span className="text-white">{match.var_operator_name || "Unassigned"}</span></span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={match.status} onValueChange={v => handleStatusChange(match.id, v)}>
+                    <SelectTrigger className="w-32 bg-[#050505] border-white/10 text-white rounded-sm text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-[#121212] border-white/10">
+                      <SelectItem value="scheduled" className="text-white">Scheduled</SelectItem>
+                      <SelectItem value="live" className="text-white">Live</SelectItem>
+                      <SelectItem value="completed" className="text-white">Completed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Dialog open={assignDialog.open && assignDialog.matchId === match.id} onOpenChange={open => setAssignDialog(open ? { open: true, matchId: match.id, match } : { open: false, matchId: null, match: null })}>
+                    <DialogTrigger asChild><Button size="sm" className="bg-[#00E5FF]/10 text-[#00E5FF] border border-[#00E5FF]/20 hover:bg-[#00E5FF]/20 rounded-sm" data-testid={`assign-match-${match.id}`}><Users className="w-3 h-3 mr-1" />ASSIGN</Button></DialogTrigger>
+                    <DialogContent className="bg-[#121212] border-white/10 text-white max-w-md">
+                      <DialogHeader><DialogTitle className="font-heading">Assign Officials</DialogTitle><DialogDescription className="text-gray-400">{match.team_home} vs {match.team_away}</DialogDescription></DialogHeader>
+                      <AssignForm referees={refereeList} operators={operatorList} match={match} onAssign={handleAssign} />
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {matches.length === 0 && <div className="text-center py-12"><Trophy className="w-12 h-12 text-gray-600 mx-auto mb-2" /><p className="text-gray-400">No matches found</p></div>}
+      </div>
+    </div>
+  );
+};
+
+const AssignForm = ({ referees, operators, match, onAssign }) => {
+  const [refId, setRefId] = useState(match.referee_id || "none");
+  const [opId, setOpId] = useState(match.var_operator_id || "none");
+  return (
+    <div className="space-y-4 py-4">
+      <div className="space-y-2">
+        <Label className="text-gray-300">Referee</Label>
+        <Select value={refId} onValueChange={setRefId}>
+          <SelectTrigger className="bg-[#050505] border-white/10 text-white rounded-sm" data-testid="assign-referee-select"><SelectValue /></SelectTrigger>
+          <SelectContent className="bg-[#121212] border-white/10">
+            <SelectItem value="none" className="text-white">Unassigned</SelectItem>
+            {referees.map(r => <SelectItem key={r.id} value={r.id} className="text-white">{r.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label className="text-gray-300">VAR Operator</Label>
+        <Select value={opId} onValueChange={setOpId}>
+          <SelectTrigger className="bg-[#050505] border-white/10 text-white rounded-sm" data-testid="assign-operator-select"><SelectValue /></SelectTrigger>
+          <SelectContent className="bg-[#121212] border-white/10">
+            <SelectItem value="none" className="text-white">Unassigned</SelectItem>
+            {operators.map(o => <SelectItem key={o.id} value={o.id} className="text-white">{o.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+      <Button onClick={() => onAssign(match.id, refId === "none" ? null : refId, opId === "none" ? null : opId)} className="w-full bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 rounded-sm" data-testid="confirm-assignment-button">CONFIRM ASSIGNMENT</Button>
+    </div>
+  );
+};
+
+// ── AI Feedback Page ──────────────────────────────────────
+const FeedbackPage = () => {
+  const [stats, setStats] = useState(null);
+  const [feedbackList, setFeedbackList] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetch_ = async () => {
+      try {
+        const [s, f] = await Promise.all([axios.get(`${API}/feedback/stats`), axios.get(`${API}/feedback?limit=50`)]);
+        setStats(s.data); setFeedbackList(f.data);
+      } catch { toast.error("Failed to load feedback"); }
+      finally { setLoading(false); }
+    };
+    fetch_();
+  }, []);
+
+  const COLORS = ['#00E5FF', '#00FF66', '#FFB800', '#FF3333', '#A855F7', '#F97316'];
+
+  if (loading) return <div className="flex-1 flex items-center justify-center bg-[#050505]"><div className="text-sm font-mono text-[#00E5FF] animate-pulse">LOADING FEEDBACK...</div></div>;
+
+  const typeData = stats?.by_incident_type ? Object.entries(stats.by_incident_type).map(([name, data]) => ({ name, accuracy: data.accuracy, total: data.total, correct: data.correct })) : [];
+
+  return (
+    <div className="flex-1 min-w-0 p-6 space-y-6 bg-[#050505]" data-testid="feedback-page">
+      <div><h1 className="text-3xl font-heading font-black text-white tracking-tight">AI FEEDBACK LOOP</h1><p className="text-sm font-body text-gray-400 mt-1">OCTON learning from operator corrections - Dr Finnegan's self-improving AI</p></div>
+
+      {/* Overview */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="bg-[#121212] border-white/10 rounded-sm"><CardContent className="p-4"><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">TOTAL FEEDBACK</p><p className="text-3xl font-mono font-medium text-white mt-1">{stats?.total_feedback || 0}</p></CardContent></Card>
+        <Card className="bg-[#121212] border-white/10 rounded-sm"><CardContent className="p-4"><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">AI ACCURACY</p><p className="text-3xl font-mono font-medium text-[#00FF66] mt-1">{stats?.overall_accuracy || 0}%</p></CardContent></Card>
+        <Card className="bg-[#121212] border-white/10 rounded-sm"><CardContent className="p-4"><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">CORRECT</p><p className="text-3xl font-mono font-medium text-[#00E5FF] mt-1">{stats?.correct || 0}</p></CardContent></Card>
+        <Card className="bg-[#121212] border-white/10 rounded-sm"><CardContent className="p-4"><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">CORRECTIONS</p><p className="text-3xl font-mono font-medium text-[#FF3333] mt-1">{stats?.incorrect || 0}</p></CardContent></Card>
+      </div>
+
+      {/* Confidence Calibration */}
+      {stats?.confidence_calibration && (
+        <Card className="bg-[#121212] border-white/10 rounded-sm">
+          <CardHeader><CardTitle className="text-sm font-mono uppercase text-gray-400">CONFIDENCE CALIBRATION</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-6">
+              {stats.confidence_calibration.correct && (
+                <div className="p-4 bg-[#050505] rounded-sm border border-[#00FF66]/20">
+                  <p className="text-xs font-mono text-[#00FF66] mb-1">WHEN AI WAS CORRECT</p>
+                  <p className="text-2xl font-mono text-white">{stats.confidence_calibration.correct.avg_confidence}%</p>
+                  <p className="text-xs text-gray-400">avg confidence ({stats.confidence_calibration.correct.count} cases)</p>
+                </div>
+              )}
+              {stats.confidence_calibration.incorrect && (
+                <div className="p-4 bg-[#050505] rounded-sm border border-[#FF3333]/20">
+                  <p className="text-xs font-mono text-[#FF3333] mb-1">WHEN AI WAS WRONG</p>
+                  <p className="text-2xl font-mono text-white">{stats.confidence_calibration.incorrect.avg_confidence}%</p>
+                  <p className="text-xs text-gray-400">avg confidence ({stats.confidence_calibration.incorrect.count} cases)</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Per-Type Accuracy */}
+      {typeData.length > 0 && (
+        <Card className="bg-[#121212] border-white/10 rounded-sm">
+          <CardHeader><CardTitle className="text-sm font-mono uppercase text-gray-400">ACCURACY BY INCIDENT TYPE</CardTitle></CardHeader>
+          <CardContent><div className="h-[300px] min-h-[300px]">
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={typeData}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" /><XAxis dataKey="name" stroke="#666" fontSize={12} /><YAxis stroke="#666" fontSize={12} domain={[0, 100]} /><Tooltip contentStyle={{ backgroundColor: '#121212', border: '1px solid rgba(255,255,255,0.1)' }} labelStyle={{ color: '#fff' }} /><Bar dataKey="accuracy" fill="#00E5FF" radius={[2,2,0,0]} /></BarChart>
+            </ResponsiveContainer>
+          </div></CardContent>
+        </Card>
+      )}
+
+      {/* Recent Feedback */}
+      <Card className="bg-[#121212] border-white/10 rounded-sm">
+        <CardHeader><CardTitle className="text-sm font-mono uppercase text-gray-400">RECENT OPERATOR FEEDBACK</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          {feedbackList.map(fb => (
+            <div key={fb.id} className="flex items-center justify-between p-3 bg-[#050505] rounded-sm border border-white/5">
+              <div className="flex items-center gap-3">
+                {fb.was_ai_correct ? <ThumbsUp className="w-4 h-4 text-[#00FF66]" /> : <ThumbsDown className="w-4 h-4 text-[#FF3333]" />}
+                <div>
+                  <span className={`text-xs font-mono uppercase px-2 py-0.5 rounded-full border ${incidentTypeConfig[fb.incident_type]?.color || 'text-white border-white/30'}`}>{fb.incident_type}</span>
+                  <p className="text-xs text-gray-400 mt-1">AI: {fb.ai_suggestion?.substring(0, 50)}</p>
+                  {!fb.was_ai_correct && fb.operator_decision && <p className="text-xs text-[#FFB800] mt-0.5">Operator: {fb.operator_decision?.substring(0, 50)}</p>}
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-mono" style={{ color: fb.was_ai_correct ? '#00FF66' : '#FF3333' }}>{fb.ai_confidence?.toFixed(1)}%</p>
+                <p className="text-[10px] text-gray-500">{fb.submitted_by_name}</p>
+              </div>
+            </div>
+          ))}
+          {feedbackList.length === 0 && <p className="text-sm text-gray-400 text-center py-4">No feedback yet. Decisions will generate feedback automatically.</p>}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
 // ── Protected Route ───────────────────────────────────────
-const ProtectedRoute = ({ children }) => {
+const ProtectedRoute = ({ children, roles }) => {
   const { user, loading } = useAuth();
   if (loading) return <div className="min-h-screen bg-[#050505] flex items-center justify-center"><div className="text-sm font-mono text-[#00E5FF] animate-pulse">AUTHENTICATING...</div></div>;
   if (user === false) return <Navigate to="/login" replace />;
+  if (roles && !roles.includes(user?.role)) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-[#050505]" data-testid="access-denied">
+        <div className="text-center space-y-3">
+          <Lock className="w-12 h-12 text-[#FF3333] mx-auto" />
+          <h2 className="text-xl font-heading font-bold text-white">ACCESS DENIED</h2>
+          <p className="text-sm text-gray-400">Your role ({user?.role?.replace("_"," ")}) does not have permission.</p>
+          <Button onClick={() => window.history.back()} className="bg-white text-black hover:bg-gray-200 rounded-sm">Go Back</Button>
+        </div>
+      </div>
+    );
+  }
   return children;
 };
 
@@ -995,7 +1264,9 @@ function App() {
                   <Routes>
                     <Route path="/" element={<LiveVARPage />} />
                     <Route path="/history" element={<HistoryPage />} />
+                    <Route path="/matches" element={<ProtectedRoute roles={["admin"]}><MatchesPage /></ProtectedRoute>} />
                     <Route path="/analytics" element={<AnalyticsPage />} />
+                    <Route path="/feedback" element={<ProtectedRoute roles={["admin", "var_operator"]}><FeedbackPage /></ProtectedRoute>} />
                     <Route path="/settings" element={<SettingsPage />} />
                   </Routes>
                 </div>
