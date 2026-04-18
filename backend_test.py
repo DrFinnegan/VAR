@@ -475,6 +475,98 @@ class VARAPITester:
         
         return success, response
 
+    # ── ID PROTECTION MODULE TESTING ──────────────────────────────────
+
+    def test_id_verify(self):
+        """Test ID document verification"""
+        verification_data = {
+            "document_type": "passport",
+            "applicant_name": "John Test Smith",
+            "date_of_birth": "1990-05-15",
+            "id_number": "P123456789",
+            "nationality": "United Kingdom",
+            "address": "123 Test Street, London, UK",
+            "extracted_text": "PASSPORT United Kingdom John Test Smith Date of birth 15 MAY 1990",
+            "notes": "Test verification for OCTON ID system"
+        }
+        success, response = self.run_test(
+            "ID Document Verification",
+            "POST",
+            "id/verify",
+            200,
+            data=verification_data,
+            description="Submit ID document for OCTON AI verification"
+        )
+        return success, response
+
+    def test_get_id_verifications(self):
+        """Test getting all ID verifications"""
+        return self.run_test(
+            "Get ID Verifications",
+            "GET",
+            "id/verifications",
+            200,
+            description="Retrieve list of ID verifications"
+        )
+
+    def test_get_id_verifications_with_filters(self):
+        """Test getting ID verifications with filters"""
+        return self.run_test(
+            "Get ID Verifications (Filtered)",
+            "GET",
+            "id/verifications?status=pending&document_type=passport",
+            200,
+            description="Retrieve filtered ID verifications"
+        )
+
+    def test_get_specific_id_verification(self, verification_id):
+        """Test getting a specific ID verification"""
+        return self.run_test(
+            "Get Specific ID Verification",
+            "GET",
+            f"id/verifications/{verification_id}",
+            200,
+            description=f"Retrieve ID verification {verification_id}"
+        )
+
+    def test_review_id_verification(self, verification_id, status="approved"):
+        """Test reviewing an ID verification"""
+        review_data = {
+            "review_status": status,
+            "reviewer_notes": f"Test review - {status} by automated test",
+            "was_ai_correct": True
+        }
+        return self.run_test(
+            f"Review ID Verification ({status})",
+            "PUT",
+            f"id/verifications/{verification_id}/review",
+            200,
+            data=review_data,
+            description=f"Review ID verification with {status} status",
+            use_auth=True,
+            auth_type="operator"
+        )
+
+    def test_id_analytics(self):
+        """Test ID verification analytics"""
+        return self.run_test(
+            "ID Analytics",
+            "GET",
+            "id/analytics",
+            200,
+            description="Get ID verification analytics and fraud statistics"
+        )
+
+    def test_id_feedback_stats(self):
+        """Test ID feedback statistics"""
+        return self.run_test(
+            "ID Feedback Stats",
+            "GET",
+            "id/feedback/stats",
+            200,
+            description="Get AI feedback statistics for ID module"
+        )
+
 def main():
     print("🏟️  VAR Audit System API Testing - NEW FEATURES")
     print("=" * 60)
@@ -556,6 +648,28 @@ def main():
     if success and match_response:
         match_id = match_response.get('id')
         print(f"   Created match ID: {match_id}")
+    
+    # Test ID Protection Module
+    print("\n🆔 ID PROTECTION MODULE")
+    print("-" * 30)
+    
+    # Test ID verification creation
+    success, verification_response = tester.test_id_verify()
+    verification_id = None
+    if success and verification_response:
+        verification_id = verification_response.get('id')
+        print(f"   Created verification ID: {verification_id}")
+    
+    # Test ID data retrieval
+    tester.test_get_id_verifications()
+    tester.test_get_id_verifications_with_filters()
+    tester.test_id_analytics()
+    tester.test_id_feedback_stats()
+    
+    # Test specific verification operations if we have a verification ID
+    if verification_id:
+        tester.test_get_specific_id_verification(verification_id)
+        tester.test_review_id_verification(verification_id, "approved")
     
     # Test AI feedback loop
     print("\n🧠 AI FEEDBACK LOOP TESTING")

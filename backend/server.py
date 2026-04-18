@@ -49,6 +49,7 @@ from auth import (
     clear_failed_attempts,
 )
 from ai_engine import brain_engine
+from id_engine import id_engine
 from storage import init_storage, put_object, get_object, generate_upload_path
 from websocket_manager import ws_manager
 
@@ -151,6 +152,25 @@ class FeedbackCreate(BaseModel):
     incident_id: str
     was_ai_correct: bool
     operator_notes: Optional[str] = None
+
+
+class IDVerificationCreate(BaseModel):
+    document_type: str = "passport"  # passport, drivers_license, national_id
+    applicant_name: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    id_number: Optional[str] = None
+    nationality: Optional[str] = None
+    address: Optional[str] = None
+    extracted_text: str = ""
+    notes: Optional[str] = None
+    document_image_b64: Optional[str] = None
+    selfie_b64: Optional[str] = None
+
+
+class IDReviewUpdate(BaseModel):
+    review_status: str  # approved, rejected, escalated
+    reviewer_notes: str
+    was_ai_correct: Optional[bool] = None
 
 
 # ── Helpers ────────────────────────────────────────────────
@@ -843,6 +863,251 @@ async def list_users(request: Request):
     for u in users:
         u.pop("password_hash", None)
     return users
+
+
+# ── ID PROTECTION Routes ──────────────────────────────────
+@api_router.post("/id/verify")
+async def verify_id(data: IDVerificationCreate, request: Request):
+    """Submit an ID document for OCTON verification."""
+    user = await get_optional_user(request, db)
+    verification_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Upload images to storage
+    doc_storage_path = None
+    selfie_storage_path = None
+    uid = user.get("_id", "anonymous") if user else "anonymous"
+
+    if data.document_image_b64:
+        try:
+            path = generate_upload_path(uid, f"id-doc-{verification_id}.jpg")
+            put_object(path, base64.b64decode(data.document_image_b64), "image/jpeg")
+            doc_storage_path = path
+        except Exception as e:
+            logger.warning(f"Doc image upload failed: {e}")
+
+    if data.selfie_b64:
+        try:
+            path = generate_upload_path(uid, f"selfie-{verification_id}.jpg")
+            put_object(path, base64.b64decode(data.selfie_b64), "image/jpeg")
+            selfie_storage_path = path
+        except Exception as e:
+            logger.warning(f"Selfie upload failed: {e}")
+
+    # Build applicant data
+    applicant_data = {
+        "name": data.applicant_name,
+        "date_of_birth": data.date_of_birth,
+        "id_number": data.id_number,
+        "nationality": data.nationality,
+        "address": data.address,
+    }
+
+    # Build extracted text from all available data
+    text_parts = [data.extracted_text or ""]
+    if data.applicant_name:
+        text_parts.append(f"name: {data.applicant_name}")
+    if data.notes:
+        text_parts.append(data.notes)
+    full_text = " ".join(text_parts)
+
+    # Run OCTON ID Engine (Hippocampus -> Neo Cortex)
+    analysis = await id_engine.verify_document(
+        document_type=data.document_type,
+        extracted_text=full_text,
+        db=db,
+        applicant_data=applicant_data,
+        document_image_b64=data.document_image_b64,
+        selfie_b64=data.selfie_b64,
+    )
+
+    verification_doc = {
+        "id": verification_id,
+        "document_type": data.document_type,
+        "applicant_name": data.applicant_name,
+        "date_of_birth": data.date_of_birth,
+        "id_number": data.id_number,
+        "nationality": data.nationality,
+        "address": data.address,
+        "extracted_text": data.extracted_text,
+        "notes": data.notes,
+        "doc_storage_path": doc_storage_path,
+        "selfie_storage_path": selfie_storage_path,
+        "has_document_image": bool(data.document_image_b64),
+        "has_selfie": bool(data.selfie_b64),
+        "ai_analysis": analysis,
+        "review_status": "pending",
+        "reviewer_notes": None,
+        "reviewed_by": None,
+        "submitted_by": user.get("_id") if user else None,
+        "submitted_by_name": user.get("name") if user else None,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    await db.id_verifications.insert_one(verification_doc)
+    verification_doc.pop("_id", None)
+
+    await ws_manager.broadcast({
+        "type": "id_verification_created",
+        "data": {"id": verification_id, "document_type": data.document_type,
+                 "verdict": analysis.get("verdict", ""), "trust_score": analysis.get("final_trust_score", 0)},
+        "message": "New ID verification submitted",
+    })
+
+    return verification_doc
+
+
+@api_router.get("/id/verifications")
+async def get_id_verifications(
+    status: Optional[str] = None,
+    document_type: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=200),
+):
+    query = {}
+    if status:
+        query["review_status"] = status
+    if document_type:
+        query["document_type"] = document_type
+    return await db.id_verifications.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
+
+
+@api_router.get("/id/verifications/{vid}")
+async def get_id_verification(vid: str):
+    doc = await db.id_verifications.find_one({"id": vid}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Verification not found")
+    return doc
+
+
+@api_router.put("/id/verifications/{vid}/review")
+async def review_id_verification(vid: str, review: IDReviewUpdate, request: Request):
+    """Agent reviews a verification - feeds back into AI learning."""
+    user = await get_current_user(request, db)
+    current = await db.id_verifications.find_one({"id": vid}, {"_id": 0})
+    if not current:
+        raise HTTPException(status_code=404, detail="Verification not found")
+
+    update = {
+        "review_status": review.review_status,
+        "reviewer_notes": review.reviewer_notes,
+        "reviewed_by": user.get("name", ""),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    result = await db.id_verifications.find_one_and_update(
+        {"id": vid}, {"$set": update}, return_document=True, projection={"_id": 0}
+    )
+
+    # AI Feedback Loop: auto-record
+    ai_analysis = current.get("ai_analysis", {})
+    ai_verdict = ai_analysis.get("verdict", "")
+    ai_action = ai_analysis.get("recommended_action", "")
+    was_correct = review.was_ai_correct
+    if was_correct is None:
+        was_correct = (
+            (review.review_status == "approved" and ai_action in ("approve", "manual_review"))
+            or (review.review_status == "rejected" and ai_action in ("reject", "escalate"))
+        )
+
+    feedback_doc = {
+        "id": str(uuid.uuid4()),
+        "verification_id": vid,
+        "document_type": current.get("document_type", ""),
+        "ai_verdict": ai_verdict,
+        "ai_trust_score": ai_analysis.get("final_trust_score", 0),
+        "ai_recommended_action": ai_action,
+        "agent_verdict": review.review_status,
+        "agent_notes": review.reviewer_notes,
+        "was_ai_correct": was_correct,
+        "reviewed_by": user.get("name", ""),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.id_feedback.insert_one(feedback_doc)
+
+    await ws_manager.broadcast({
+        "type": "id_review_completed",
+        "data": {"id": vid, "status": review.review_status},
+        "message": f"ID review: {review.review_status}",
+    })
+
+    return result
+
+
+@api_router.get("/id/analytics")
+async def id_analytics():
+    """ID verification analytics."""
+    total = await db.id_verifications.count_documents({})
+    pending = await db.id_verifications.count_documents({"review_status": "pending"})
+    approved = await db.id_verifications.count_documents({"review_status": "approved"})
+    rejected = await db.id_verifications.count_documents({"review_status": "rejected"})
+
+    type_pipeline = [{"$group": {"_id": "$document_type", "count": {"$sum": 1}}}]
+    by_type = await db.id_verifications.aggregate(type_pipeline).to_list(20)
+    type_dist = {t["_id"]: t["count"] for t in by_type}
+
+    # AI accuracy from feedback
+    fb_total = await db.id_feedback.count_documents({})
+    fb_correct = await db.id_feedback.count_documents({"was_ai_correct": True})
+    ai_accuracy = (fb_correct / fb_total * 100) if fb_total > 0 else 0
+
+    # Trust score distribution
+    trust_pipeline = [
+        {"$match": {"ai_analysis.final_trust_score": {"$exists": True}}},
+        {"$bucket": {
+            "groupBy": "$ai_analysis.final_trust_score",
+            "boundaries": [0, 30, 50, 70, 90, 101],
+            "default": "other",
+            "output": {"count": {"$sum": 1}},
+        }},
+    ]
+    try:
+        trust_dist = await db.id_verifications.aggregate(trust_pipeline).to_list(10)
+    except Exception:
+        trust_dist = []
+
+    return {
+        "total_verifications": total,
+        "pending": pending,
+        "approved": approved,
+        "rejected": rejected,
+        "by_document_type": type_dist,
+        "ai_accuracy": round(ai_accuracy, 1),
+        "feedback_count": fb_total,
+        "trust_score_distribution": trust_dist,
+        "fraud_rate": round((rejected / total * 100) if total > 0 else 0, 1),
+    }
+
+
+@api_router.get("/id/feedback/stats")
+async def id_feedback_stats():
+    """AI feedback stats for ID module."""
+    total = await db.id_feedback.count_documents({})
+    correct = await db.id_feedback.count_documents({"was_ai_correct": True})
+    accuracy = (correct / total * 100) if total > 0 else 0
+
+    by_type_pipeline = [
+        {"$group": {
+            "_id": "$document_type",
+            "total": {"$sum": 1},
+            "correct": {"$sum": {"$cond": ["$was_ai_correct", 1, 0]}},
+        }},
+    ]
+    by_type = await db.id_feedback.aggregate(by_type_pipeline).to_list(20)
+    type_stats = {}
+    for t in by_type:
+        type_stats[t["_id"]] = {
+            "total": t["total"],
+            "correct": t["correct"],
+            "accuracy": round((t["correct"] / t["total"] * 100) if t["total"] > 0 else 0, 1),
+        }
+
+    return {
+        "total_feedback": total,
+        "correct": correct,
+        "incorrect": total - correct,
+        "overall_accuracy": round(accuracy, 1),
+        "by_document_type": type_stats,
+    }
 
 
 # ── WebSocket ─────────────────────────────────────────────
