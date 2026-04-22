@@ -8,7 +8,8 @@ import {
   XCircle, Clock, RefreshCw, Upload, Play, Brain, Users, Shield,
   Target, Eye, LogOut, LogIn, UserPlus, Zap, Activity, Image,
   ArrowRight, Radio, Wifi, WifiOff, Trophy, Calendar, ThumbsUp, ThumbsDown, Lock,
-  Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Maximize2, Volume2
+  Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Maximize2, Volume2,
+  Pen, Circle, Minus, Undo2, Trash2, Save, Crosshair
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./components/ui/card";
@@ -528,8 +529,131 @@ const DecisionBadge = ({ status }) => {
   return <span className={`${c.color} border rounded-none px-2 py-1 text-xs font-mono uppercase flex items-center gap-1`}><Icon className="w-3 h-3" />{c.label}</span>;
 };
 
+// ── Frame Annotation Tool ─────────────────────────────────
+const ANNOTATION_TOOLS = { LINE: "line", CIRCLE: "circle", MARKER: "marker", NONE: "none" };
+const ANNOTATION_COLORS = ["#00E5FF", "#00FF88", "#FF2A2A", "#FFB800", "#FFFFFF"];
+
+const AnnotationCanvas = ({ width, height, annotations, setAnnotations, activeTool, activeColor, isDrawing, setIsDrawing }) => {
+  const canvasRef = useRef(null);
+  const [startPos, setStartPos] = useState(null);
+  const [currentPos, setCurrentPos] = useState(null);
+
+  const getPos = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    return { x: ((e.clientX - rect.left) / rect.width) * 100, y: ((e.clientY - rect.top) / rect.height) * 100 };
+  };
+
+  const handleMouseDown = (e) => {
+    if (activeTool === ANNOTATION_TOOLS.NONE) return;
+    const pos = getPos(e);
+    if (!pos) return;
+    setIsDrawing(true);
+    setStartPos(pos);
+    setCurrentPos(pos);
+    if (activeTool === ANNOTATION_TOOLS.MARKER) {
+      setAnnotations(prev => [...prev, { type: "marker", x: pos.x, y: pos.y, color: activeColor, id: Date.now() }]);
+      setIsDrawing(false);
+    }
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDrawing || !startPos) return;
+    setCurrentPos(getPos(e));
+  };
+
+  const handleMouseUp = () => {
+    if (!isDrawing || !startPos || !currentPos) { setIsDrawing(false); return; }
+    if (activeTool === ANNOTATION_TOOLS.LINE) {
+      setAnnotations(prev => [...prev, { type: "line", x1: startPos.x, y1: startPos.y, x2: currentPos.x, y2: currentPos.y, color: activeColor, id: Date.now() }]);
+    } else if (activeTool === ANNOTATION_TOOLS.CIRCLE) {
+      const dx = currentPos.x - startPos.x, dy = currentPos.y - startPos.y;
+      const r = Math.sqrt(dx * dx + dy * dy);
+      setAnnotations(prev => [...prev, { type: "circle", cx: startPos.x, cy: startPos.y, r, color: activeColor, id: Date.now() }]);
+    }
+    setIsDrawing(false);
+    setStartPos(null);
+    setCurrentPos(null);
+  };
+
+  // Render to SVG overlay
+  return (
+    <svg
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      style={{ cursor: activeTool !== ANNOTATION_TOOLS.NONE ? 'crosshair' : 'default', pointerEvents: activeTool !== ANNOTATION_TOOLS.NONE ? 'auto' : 'none', zIndex: 20 }}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={() => { if (isDrawing) handleMouseUp(); }}
+      data-testid="annotation-canvas"
+    >
+      {/* Saved annotations */}
+      {annotations.map(a => {
+        if (a.type === "line") return <line key={a.id} x1={a.x1} y1={a.y1} x2={a.x2} y2={a.y2} stroke={a.color} strokeWidth="0.4" strokeLinecap="round" />;
+        if (a.type === "circle") return <circle key={a.id} cx={a.cx} cy={a.cy} r={a.r} stroke={a.color} strokeWidth="0.4" fill="none" />;
+        if (a.type === "marker") return (
+          <g key={a.id}>
+            <circle cx={a.x} cy={a.y} r="1.2" fill={a.color} opacity="0.8" />
+            <circle cx={a.x} cy={a.y} r="2.5" stroke={a.color} strokeWidth="0.3" fill="none" opacity="0.5" />
+          </g>
+        );
+        return null;
+      })}
+      {/* Live preview while drawing */}
+      {isDrawing && startPos && currentPos && activeTool === ANNOTATION_TOOLS.LINE && (
+        <line x1={startPos.x} y1={startPos.y} x2={currentPos.x} y2={currentPos.y} stroke={activeColor} strokeWidth="0.4" strokeDasharray="1" opacity="0.7" />
+      )}
+      {isDrawing && startPos && currentPos && activeTool === ANNOTATION_TOOLS.CIRCLE && (
+        <circle cx={startPos.x} cy={startPos.y} r={Math.sqrt(Math.pow(currentPos.x - startPos.x, 2) + Math.pow(currentPos.y - startPos.y, 2))} stroke={activeColor} strokeWidth="0.4" fill="none" strokeDasharray="1" opacity="0.7" />
+      )}
+    </svg>
+  );
+};
+
+// ── Annotation Toolbar ────────────────────────────────────
+const AnnotationToolbar = ({ activeTool, setActiveTool, activeColor, setActiveColor, annotations, setAnnotations, onSave }) => (
+  <div className="flex items-center gap-1 bg-[#0A0A0A] border border-white/[0.08] p-1" data-testid="annotation-toolbar">
+    {/* Tool buttons */}
+    {[
+      { tool: ANNOTATION_TOOLS.LINE, icon: Minus, label: "Offside Line", testid: "tool-line" },
+      { tool: ANNOTATION_TOOLS.CIRCLE, icon: Circle, label: "Circle Marker", testid: "tool-circle" },
+      { tool: ANNOTATION_TOOLS.MARKER, icon: Crosshair, label: "Contact Point", testid: "tool-marker" },
+    ].map(({ tool, icon: Icon, label, testid }) => (
+      <button key={tool} onClick={() => setActiveTool(activeTool === tool ? ANNOTATION_TOOLS.NONE : tool)} title={label}
+        className={`h-7 w-7 flex items-center justify-center transition-all ${activeTool === tool ? 'bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/40' : 'text-gray-500 hover:text-white border border-transparent'}`}
+        data-testid={testid}>
+        <Icon className="w-3.5 h-3.5" />
+      </button>
+    ))}
+
+    <div className="h-4 w-[1px] bg-white/[0.06] mx-1" />
+
+    {/* Color picker */}
+    <div className="flex items-center gap-0.5" data-testid="color-picker">
+      {ANNOTATION_COLORS.map(c => (
+        <button key={c} onClick={() => setActiveColor(c)} className={`w-4 h-4 transition-all ${activeColor === c ? 'ring-1 ring-white ring-offset-1 ring-offset-[#050505] scale-125' : 'opacity-60 hover:opacity-100'}`} style={{ backgroundColor: c }} data-testid={`color-${c.replace('#','')}`} />
+      ))}
+    </div>
+
+    <div className="h-4 w-[1px] bg-white/[0.06] mx-1" />
+
+    {/* Actions */}
+    <button onClick={() => setAnnotations(prev => prev.slice(0, -1))} className="h-7 w-7 flex items-center justify-center text-gray-500 hover:text-[#FFB800] border border-transparent transition-all" title="Undo" data-testid="annotation-undo"><Undo2 className="w-3.5 h-3.5" /></button>
+    <button onClick={() => setAnnotations([])} className="h-7 w-7 flex items-center justify-center text-gray-500 hover:text-[#FF2A2A] border border-transparent transition-all" title="Clear all" data-testid="annotation-clear"><Trash2 className="w-3.5 h-3.5" /></button>
+    {onSave && annotations.length > 0 && (
+      <button onClick={onSave} className="h-7 px-2 flex items-center justify-center gap-1 text-[#00FF88] text-[9px] font-mono border border-[#00FF88]/30 bg-[#00FF88]/10 hover:bg-[#00FF88]/20 transition-all" title="Save annotations" data-testid="annotation-save"><Save className="w-3 h-3" />SAVE</button>
+    )}
+
+    {annotations.length > 0 && <span className="text-[9px] font-mono text-gray-600 ml-1">{annotations.length} marks</span>}
+  </div>
+);
+
 // ── Video Stage with Match Replay Scrubber ────────────────
-const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo }) => {
+const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, onSaveAnnotations }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(1847);
   const [totalFrames] = useState(3200);
@@ -538,8 +662,27 @@ const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo }) => {
   const [scrubberHover, setScrubberHover] = useState(null);
   const scrubberRef = useRef(null);
   const videoRef = useRef(null);
+  const [annotations, setAnnotations] = useState([]);
+  const [activeTool, setActiveTool] = useState(ANNOTATION_TOOLS.NONE);
+  const [activeColor, setActiveColor] = useState("#00E5FF");
+  const [isAnnotating, setIsAnnotating] = useState(false);
   const imgSrc = previewImage || (incident?.has_image && incident?.storage_path ? `${API}/files/${incident.storage_path}` : null);
   const videoSrc = previewVideo || (incident?.has_video && incident?.video_storage_path ? `${API}/files/${incident.video_storage_path}` : null);
+
+  // Load saved annotations from incident
+  useEffect(() => {
+    if (incident?.annotations) setAnnotations(incident.annotations);
+    else setAnnotations([]);
+  }, [incident?.id, incident?.annotations]);
+
+  const handleSaveAnnotations = async () => {
+    if (!incident?.id || annotations.length === 0) return;
+    try {
+      await axios.put(`${API}/incidents/${incident.id}/annotations`, { annotations, frame: currentFrame, match_time: `${String(matchTime.min).padStart(2,'0')}:${String(matchTime.sec).padStart(2,'0')}.${String(matchTime.ms).padStart(3,'0')}` });
+      toast.success(`${annotations.length} annotations saved!`);
+      if (onSaveAnnotations) onSaveAnnotations(annotations);
+    } catch { toast.error("Failed to save annotations"); }
+  };
 
   // Sync video element with scrubber
   useEffect(() => {
@@ -627,6 +770,8 @@ const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo }) => {
           <img src="https://images.pexels.com/photos/12201296/pexels-photo-12201296.jpeg" alt="Stadium" className="w-full h-full object-cover opacity-40" />
         )}
         <div className="absolute inset-0 grid-overlay opacity-50" />
+        {/* Annotation Canvas Overlay */}
+        <AnnotationCanvas width={100} height={100} annotations={annotations} setAnnotations={setAnnotations} activeTool={activeTool} activeColor={activeColor} isDrawing={isAnnotating} setIsDrawing={setIsAnnotating} />
         <div className="absolute inset-0 pointer-events-none overflow-hidden"><div className="w-full h-[2px] bg-gradient-to-r from-transparent via-[#00E5FF]/60 to-transparent animate-scan" /></div>
         {incident?.ai_analysis && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
@@ -650,6 +795,9 @@ const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo }) => {
         </div>
         <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#00E5FF]/40 to-transparent" />
       </div>
+
+      {/* ANNOTATION TOOLBAR */}
+      <AnnotationToolbar activeTool={activeTool} setActiveTool={setActiveTool} activeColor={activeColor} setActiveColor={setActiveColor} annotations={annotations} setAnnotations={setAnnotations} onSave={incident?.id ? handleSaveAnnotations : null} />
 
       {/* MATCH REPLAY SCRUBBER */}
       <div className="bg-[#050505] border-t border-white/[0.06]">

@@ -450,6 +450,32 @@ async def delete_incident(incident_id: str, request: Request):
     return {"message": "Incident deleted"}
 
 
+
+class AnnotationSave(BaseModel):
+    annotations: list
+    frame: Optional[int] = None
+    match_time: Optional[str] = None
+
+
+@api_router.put("/incidents/{incident_id}/annotations")
+async def save_annotations(incident_id: str, data: AnnotationSave, request: Request):
+    """Save frame annotations drawn by operators."""
+    result = await db.incidents.find_one_and_update(
+        {"id": incident_id},
+        {"$set": {
+            "annotations": data.annotations,
+            "annotation_frame": data.frame,
+            "annotation_time": data.match_time,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        return_document=True,
+        projection={"_id": 0},
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    return result
+
+
 @api_router.post("/incidents/{incident_id}/reanalyze")
 async def reanalyze_incident(incident_id: str, request: Request):
     doc = await db.incidents.find_one({"id": incident_id}, {"_id": 0})
