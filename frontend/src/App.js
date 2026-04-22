@@ -151,10 +151,10 @@ const LoginPage = () => {
 
   return (
     <div className="min-h-screen bg-[#050505] flex items-center justify-center p-4" data-testid="login-page">
-      <Card className="w-full max-w-md bg-[#121212] border-white/10 rounded-sm">
+      <Card className="w-full max-w-md bg-[#121212] border-white/10 rounded-none">
         <CardHeader className="text-center space-y-4 pb-2">
           <div className="flex items-center justify-center gap-3">
-            <div className="w-12 h-12 rounded-sm bg-[#00E5FF] flex items-center justify-center">
+            <div className="w-12 h-12 rounded-none bg-[#00E5FF] flex items-center justify-center">
               <Shield className="w-7 h-7 text-black" />
             </div>
           </div>
@@ -166,16 +166,16 @@ const LoginPage = () => {
         </CardHeader>
         <CardContent className="pt-4">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && <div className="p-3 bg-[#FF3333]/10 border border-[#FF3333]/30 rounded-sm text-sm text-[#FF3333]" data-testid="login-error">{error}</div>}
+            {error && <div className="p-3 bg-[#FF3333]/10 border border-[#FF3333]/30 rounded-none text-sm text-[#FF3333]" data-testid="login-error">{error}</div>}
             <div className="space-y-2">
               <Label className="text-gray-300">Email</Label>
-              <Input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="operator@octonvar.com" className="bg-[#050505] border-white/10 text-white rounded-sm" data-testid="login-email-input" required />
+              <Input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="operator@octonvar.com" className="bg-[#050505] border-white/10 text-white rounded-none" data-testid="login-email-input" required />
             </div>
             <div className="space-y-2">
               <Label className="text-gray-300">Password</Label>
-              <Input value={password} onChange={e => setPassword(e.target.value)} type="password" placeholder="Enter password" className="bg-[#050505] border-white/10 text-white rounded-sm" data-testid="login-password-input" required />
+              <Input value={password} onChange={e => setPassword(e.target.value)} type="password" placeholder="Enter password" className="bg-[#050505] border-white/10 text-white rounded-none" data-testid="login-password-input" required />
             </div>
-            <Button type="submit" disabled={loading} className="w-full bg-white text-black hover:bg-gray-200 rounded-sm font-semibold" data-testid="login-form-submit-button">
+            <Button type="submit" disabled={loading} className="w-full bg-white text-black hover:bg-gray-200 rounded-none font-semibold" data-testid="login-form-submit-button">
               {loading ? "AUTHENTICATING..." : <><LogIn className="w-4 h-4 mr-2" />SIGN IN</>}
             </Button>
           </form>
@@ -213,10 +213,10 @@ const RegisterPage = () => {
 
   return (
     <div className="min-h-screen bg-[#050505] flex items-center justify-center p-4" data-testid="register-page">
-      <Card className="w-full max-w-md bg-[#121212] border-white/10 rounded-sm">
+      <Card className="w-full max-w-md bg-[#121212] border-white/10 rounded-none">
         <CardHeader className="text-center space-y-4 pb-2">
           <div className="flex items-center justify-center gap-3">
-            <div className="w-12 h-12 rounded-sm bg-[#00E5FF] flex items-center justify-center">
+            <div className="w-12 h-12 rounded-none bg-[#00E5FF] flex items-center justify-center">
               <Shield className="w-7 h-7 text-black" />
             </div>
           </div>
@@ -225,23 +225,23 @@ const RegisterPage = () => {
         </CardHeader>
         <CardContent className="pt-4">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && <div className="p-3 bg-[#FF3333]/10 border border-[#FF3333]/30 rounded-sm text-sm text-[#FF3333]" data-testid="register-error">{error}</div>}
+            {error && <div className="p-3 bg-[#FF3333]/10 border border-[#FF3333]/30 rounded-none text-sm text-[#FF3333]" data-testid="register-error">{error}</div>}
             <div className="space-y-2">
               <Label className="text-gray-300">Full Name</Label>
-              <Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Your name" className="bg-[#050505] border-white/10 text-white rounded-sm" data-testid="register-name-input" required />
+              <Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Your name" className="bg-[#050505] border-white/10 text-white rounded-none" data-testid="register-name-input" required />
             </div>
             <div className="space-y-2">
               <Label className="text-gray-300">Email</Label>
-              <Input value={form.email} onChange={e => setForm({...form, email: e.target.value})} type="email" placeholder="you@octonvar.com" className="bg-[#050505] border-white/10 text-white rounded-sm" data-testid="register-email-input" required />
+              <Input value={form.email} onChange={e => setForm({...form, email: e.target.value})} type="email" placeholder="you@octonvar.com" className="bg-[#050505] border-white/10 text-white rounded-none" data-testid="register-email-input" required />
             </div>
             <div className="space-y-2">
               <Label className="text-gray-300">Password</Label>
-              <Input value={form.password} onChange={e => setForm({...form, password: e.target.value})} type="password" placeholder="Min 6 characters" className="bg-[#050505] border-white/10 text-white rounded-sm" data-testid="register-password-input" required />
+              <Input value={form.password} onChange={e => setForm({...form, password: e.target.value})} type="password" placeholder="Min 6 characters" className="bg-[#050505] border-white/10 text-white rounded-none" data-testid="register-password-input" required />
             </div>
             <div className="space-y-2">
               <Label className="text-gray-300">Role</Label>
               <Select value={form.role} onValueChange={v => setForm({...form, role: v})}>
-                <SelectTrigger className="bg-[#050505] border-white/10 text-white rounded-sm" data-testid="register-role-select">
+                <SelectTrigger className="bg-[#050505] border-white/10 text-white rounded-none" data-testid="register-role-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-[#121212] border-white/10">
@@ -250,7 +250,7 @@ const RegisterPage = () => {
                 </SelectContent>
               </Select>
             </div>
-            <Button type="submit" disabled={loading} className="w-full bg-white text-black hover:bg-gray-200 rounded-sm font-semibold" data-testid="register-form-submit-button">
+            <Button type="submit" disabled={loading} className="w-full bg-white text-black hover:bg-gray-200 rounded-none font-semibold" data-testid="register-form-submit-button">
               {loading ? "CREATING ACCOUNT..." : <><UserPlus className="w-4 h-4 mr-2" />REGISTER</>}
             </Button>
           </form>
@@ -314,7 +314,7 @@ const Sidebar = () => {
                 </div>
               )}
               <NavLink to={path} data-testid={`nav-${label.toLowerCase().replace(/\s/g, '-')}`}
-                className={`flex items-center gap-3 px-4 py-2.5 rounded-sm transition-all duration-200 ${isActive ? "bg-white/10 text-white border-l-2 border-[#00E5FF]" : "text-gray-400 hover:text-white hover:bg-white/5"}`}>
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-none transition-all duration-200 ${isActive ? "bg-white/10 text-white border-l-2 border-[#00E5FF]" : "text-gray-400 hover:text-white hover:bg-white/5"}`}>
                 <Icon className="w-4 h-4" /><span className="font-body text-sm">{label}</span>
               </NavLink>
             </div>
@@ -480,7 +480,7 @@ const IncidentBadge = ({ type }) => {
 const DecisionBadge = ({ status }) => {
   const c = decisionStatusConfig[status] || decisionStatusConfig.pending;
   const Icon = c.icon;
-  return <span className={`${c.color} border rounded-sm px-2 py-1 text-xs font-mono uppercase flex items-center gap-1`}><Icon className="w-3 h-3" />{c.label}</span>;
+  return <span className={`${c.color} border rounded-none px-2 py-1 text-xs font-mono uppercase flex items-center gap-1`}><Icon className="w-3 h-3" />{c.label}</span>;
 };
 
 // ── Video Stage ───────────────────────────────────────────
@@ -683,7 +683,7 @@ const LiveVARPage = () => {
                 <div className="space-y-2">
                   <Label className="text-gray-300">Incident Type</Label>
                   <Select value={newIncident.incident_type} onValueChange={v => setNewIncident({...newIncident, incident_type: v})}>
-                    <SelectTrigger className="bg-[#050505] border-white/10 text-white rounded-sm"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="bg-[#050505] border-white/10 text-white rounded-none"><SelectValue /></SelectTrigger>
                     <SelectContent className="bg-[#121212] border-white/10">
                       {Object.entries(incidentTypeConfig).map(([k, v]) => <SelectItem key={k} value={k} className="text-white">{v.label}</SelectItem>)}
                     </SelectContent>
@@ -691,20 +691,20 @@ const LiveVARPage = () => {
                 </div>
                 <div className="space-y-2">
                   <Label className="text-gray-300">Description</Label>
-                  <Textarea placeholder="Describe the incident..." value={newIncident.description} onChange={e => setNewIncident({...newIncident, description: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-sm min-h-[80px]" data-testid="incident-description-input" />
+                  <Textarea placeholder="Describe the incident..." value={newIncident.description} onChange={e => setNewIncident({...newIncident, description: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-none min-h-[80px]" data-testid="incident-description-input" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2"><Label className="text-gray-300">Match Time</Label><Input placeholder="e.g., 45:30" value={newIncident.timestamp_in_match} onChange={e => setNewIncident({...newIncident, timestamp_in_match: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-sm" /></div>
-                  <div className="space-y-2"><Label className="text-gray-300">Team</Label><Input placeholder="Team name" value={newIncident.team_involved} onChange={e => setNewIncident({...newIncident, team_involved: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-sm" /></div>
+                  <div className="space-y-2"><Label className="text-gray-300">Match Time</Label><Input placeholder="e.g., 45:30" value={newIncident.timestamp_in_match} onChange={e => setNewIncident({...newIncident, timestamp_in_match: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-none" /></div>
+                  <div className="space-y-2"><Label className="text-gray-300">Team</Label><Input placeholder="Team name" value={newIncident.team_involved} onChange={e => setNewIncident({...newIncident, team_involved: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-none" /></div>
                 </div>
-                <div className="space-y-2"><Label className="text-gray-300">Player Involved</Label><Input placeholder="Player name" value={newIncident.player_involved} onChange={e => setNewIncident({...newIncident, player_involved: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-sm" /></div>
+                <div className="space-y-2"><Label className="text-gray-300">Player Involved</Label><Input placeholder="Player name" value={newIncident.player_involved} onChange={e => setNewIncident({...newIncident, player_involved: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-none" /></div>
                 <div className="space-y-2">
                   <Label className="text-gray-300">Upload Frame / Image</Label>
-                  <div className="border border-dashed border-white/20 rounded-sm p-4 text-center hover:border-[#00E5FF]/50 transition-colors">
+                  <div className="border border-dashed border-white/20 rounded-none p-4 text-center hover:border-[#00E5FF]/50 transition-colors">
                     <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageChange} className="hidden" id="image-upload" data-testid="image-upload-input" />
                     <label htmlFor="image-upload" className="cursor-pointer">
                       {previewImage ? (
-                        <img src={previewImage} alt="Preview" className="max-h-32 mx-auto rounded-sm" />
+                        <img src={previewImage} alt="Preview" className="max-h-32 mx-auto rounded-none" />
                       ) : (
                         <div className="space-y-2"><Image className="w-8 h-8 text-gray-400 mx-auto" /><p className="text-xs text-gray-400">Click to upload JPEG, PNG, or WebP</p></div>
                       )}
@@ -714,7 +714,7 @@ const LiveVARPage = () => {
               </div>
               <DialogFooter>
                 <Button variant="ghost" onClick={() => { setShowNewIncident(false); setPreviewImage(null); }} className="text-gray-400 hover:text-white">Cancel</Button>
-                <Button onClick={handleCreateIncident} disabled={submitting} className="bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 rounded-sm" data-testid="submit-incident-button">
+                <Button onClick={handleCreateIncident} disabled={submitting} className="bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 rounded-none" data-testid="submit-incident-button">
                   {submitting ? "ANALYZING..." : "SUBMIT & ANALYZE"}
                 </Button>
               </DialogFooter>
@@ -861,14 +861,14 @@ const HistoryPage = () => {
         <div><h1 className="text-3xl font-heading font-black text-white tracking-tight">INCIDENT HISTORY</h1><p className="text-sm font-body text-gray-400 mt-1">Historical audit trail - OCTON learning database</p></div>
         <div className="flex gap-2">
           <Select value={filter.status || "all"} onValueChange={v => setFilter({...filter, status: v==="all"?null:v})}>
-            <SelectTrigger className="w-40 bg-[#121212] border-white/10 text-white rounded-sm"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectTrigger className="w-40 bg-[#121212] border-white/10 text-white rounded-none"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent className="bg-[#121212] border-white/10">
               <SelectItem value="all" className="text-white">All Status</SelectItem>
               {Object.keys(decisionStatusConfig).map(k => <SelectItem key={k} value={k} className="text-white">{decisionStatusConfig[k].label}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filter.type || "all"} onValueChange={v => setFilter({...filter, type: v==="all"?null:v})}>
-            <SelectTrigger className="w-40 bg-[#121212] border-white/10 text-white rounded-sm"><SelectValue placeholder="Type" /></SelectTrigger>
+            <SelectTrigger className="w-40 bg-[#121212] border-white/10 text-white rounded-none"><SelectValue placeholder="Type" /></SelectTrigger>
             <SelectContent className="bg-[#121212] border-white/10">
               <SelectItem value="all" className="text-white">All Types</SelectItem>
               {Object.keys(incidentTypeConfig).map(k => <SelectItem key={k} value={k} className="text-white">{incidentTypeConfig[k].label}</SelectItem>)}
@@ -881,14 +881,14 @@ const HistoryPage = () => {
           {incidents.map(inc => {
             const a = inc.ai_analysis;
             return (
-              <Card key={inc.id} className="bg-[#121212] border-white/10 rounded-sm hover:border-white/30 transition-colors">
+              <Card key={inc.id} className="bg-[#121212] border-white/10 rounded-none hover:border-white/30 transition-colors">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2"><IncidentBadge type={inc.incident_type} /><DecisionBadge status={inc.decision_status} />{inc.timestamp_in_match && <span className="text-xs font-mono text-gray-400">@ {inc.timestamp_in_match}</span>}</div>
                       <p className="text-sm font-body text-white mb-2">{inc.description}</p>
                       <div className="flex items-center gap-4 text-xs text-gray-400">{inc.team_involved && <span>Team: {inc.team_involved}</span>}{inc.player_involved && <span>Player: {inc.player_involved}</span>}</div>
-                      {inc.final_decision && <div className="mt-2 p-2 bg-white/5 rounded-sm"><span className="text-xs font-mono text-gray-400">FINAL: </span><span className="text-sm text-white">{inc.final_decision}</span></div>}
+                      {inc.final_decision && <div className="mt-2 p-2 bg-white/5 rounded-none"><span className="text-xs font-mono text-gray-400">FINAL: </span><span className="text-sm text-white">{inc.final_decision}</span></div>}
                     </div>
                     {a && <div className="ml-4 text-right"><ConfidenceScore score={a.final_confidence || a.confidence_score || 0} size="small" /></div>}
                   </div>
@@ -938,13 +938,13 @@ const AnalyticsPage = () => {
           { l: "ACCURACY RATE", v: `${analytics?.decision_accuracy_rate?.toFixed(1) || 0}%`, c: "#00FF66" },
           { l: "AVG DECISION TIME", v: `${analytics?.average_decision_time_seconds?.toFixed(1) || 0}s`, c: "#00E5FF" },
         ].map(({ l, v, c }) => (
-          <Card key={l} className="bg-[#121212] border-white/10 rounded-sm"><CardContent className="p-4"><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">{l}</p><p className="text-3xl font-mono font-medium mt-1" style={{ color: c || '#fff' }}>{v}</p></CardContent></Card>
+          <Card key={l} className="bg-[#121212] border-white/10 rounded-none"><CardContent className="p-4"><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">{l}</p><p className="text-3xl font-mono font-medium mt-1" style={{ color: c || '#fff' }}>{v}</p></CardContent></Card>
         ))}
       </div>
 
       {/* Learning Metrics */}
       {patterns?.learning_metrics && (
-        <Card className="bg-[#121212] border-white/10 rounded-sm">
+        <Card className="bg-[#121212] border-white/10 rounded-none">
           <CardHeader><CardTitle className="text-sm font-mono uppercase text-gray-400">OCTON LEARNING METRICS</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-4 gap-4">
@@ -958,7 +958,7 @@ const AnalyticsPage = () => {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="bg-[#121212] border-white/10 rounded-sm">
+        <Card className="bg-[#121212] border-white/10 rounded-none">
           <CardHeader><CardTitle className="text-sm font-mono uppercase text-gray-400">INCIDENT DISTRIBUTION</CardTitle></CardHeader>
           <CardContent><div className="h-[300px] min-h-[300px]">
             <ResponsiveContainer width="100%" height={300}>
@@ -968,7 +968,7 @@ const AnalyticsPage = () => {
             </ResponsiveContainer>
           </div></CardContent>
         </Card>
-        <Card className="bg-[#121212] border-white/10 rounded-sm">
+        <Card className="bg-[#121212] border-white/10 rounded-none">
           <CardHeader><CardTitle className="text-sm font-mono uppercase text-gray-400">REFEREE ACCURACY</CardTitle></CardHeader>
           <CardContent><div className="h-[300px] min-h-[300px]">
             <ResponsiveContainer width="100%" height={300}>
@@ -978,7 +978,7 @@ const AnalyticsPage = () => {
         </Card>
       </div>
 
-      <Card className="bg-[#121212] border-white/10 rounded-sm">
+      <Card className="bg-[#121212] border-white/10 rounded-none">
         <CardHeader><CardTitle className="text-sm font-mono uppercase text-gray-400">REFEREE PERFORMANCE</CardTitle></CardHeader>
         <CardContent><div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b border-white/10">
           {["Name", "Role", "Decisions", "Correct", "Accuracy", "Avg Time"].map(h => <th key={h} className="text-left py-3 px-4 text-xs font-mono uppercase text-gray-400">{h}</th>)}
@@ -1015,14 +1015,14 @@ const SettingsPage = () => {
       <div><h1 className="text-3xl font-heading font-black text-white tracking-tight">SETTINGS</h1><p className="text-sm font-body text-gray-400 mt-1">OCTON VAR system configuration</p></div>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="bg-[#121212] border border-white/10 rounded-sm p-1">
-          <TabsTrigger value="general" data-testid="settings-tab-general" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-sm">General</TabsTrigger>
-          <TabsTrigger value="architecture" data-testid="settings-tab-architecture" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-sm">Architecture</TabsTrigger>
-          {user?.role === "admin" && <TabsTrigger value="admin" data-testid="settings-tab-admin" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-sm">Admin Tools</TabsTrigger>}
+        <TabsList className="bg-[#121212] border border-white/10 rounded-none p-1">
+          <TabsTrigger value="general" data-testid="settings-tab-general" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-none">General</TabsTrigger>
+          <TabsTrigger value="architecture" data-testid="settings-tab-architecture" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-none">Architecture</TabsTrigger>
+          {user?.role === "admin" && <TabsTrigger value="admin" data-testid="settings-tab-admin" className="data-[state=active]:bg-white data-[state=active]:text-black rounded-none">Admin Tools</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="general" className="mt-6 space-y-6">
-          <Card className="bg-[#121212] border-white/10 rounded-sm">
+          <Card className="bg-[#121212] border-white/10 rounded-none">
             <CardHeader><CardTitle className="text-white">System Information</CardTitle><CardDescription className="text-gray-400">OCTON VAR - Dr Finnegan's Forensic AI</CardDescription></CardHeader>
             <CardContent className="space-y-4">
               {[
@@ -1044,16 +1044,16 @@ const SettingsPage = () => {
         </TabsContent>
 
         <TabsContent value="architecture" className="mt-6 space-y-6">
-          <Card className="bg-[#121212] border-white/10 rounded-sm">
+          <Card className="bg-[#121212] border-white/10 rounded-none">
             <CardHeader><CardTitle className="text-white">Neural Pathway Architecture</CardTitle><CardDescription className="text-gray-400">Dr Finnegan's dual-brain decision system</CardDescription></CardHeader>
             <CardContent className="space-y-6">
-              <div className="p-4 bg-[#050505] rounded-sm border border-[#00FF66]/20">
+              <div className="p-4 bg-[#050505] rounded-none border border-[#00FF66]/20">
                 <div className="flex items-center gap-2 mb-3"><Zap className="w-5 h-5 text-[#00FF66]" /><h3 className="text-lg font-heading font-bold text-[#00FF66]">HIPPOCAMPUS</h3></div>
                 <p className="text-sm text-gray-300 mb-2">Lightning speed pattern matching engine. Conducts initial analysis in under 100ms by comparing incident characteristics against a comprehensive pattern database of known football decisions.</p>
                 <div className="flex gap-4 text-xs font-mono text-gray-400"><span>Speed: &lt;100ms</span><span>Pattern DB: 7 categories</span><span>Keyword matching + historical boost</span></div>
               </div>
               <div className="flex items-center justify-center"><ArrowRight className="w-6 h-6 text-[#00E5FF]" /><span className="text-xs font-mono text-gray-500 mx-2">NEURAL SIGNAL PATHWAY</span><ArrowRight className="w-6 h-6 text-[#00E5FF]" /></div>
-              <div className="p-4 bg-[#050505] rounded-sm border border-[#00E5FF]/20">
+              <div className="p-4 bg-[#050505] rounded-none border border-[#00E5FF]/20">
                 <div className="flex items-center gap-2 mb-3"><Brain className="w-5 h-5 text-[#00E5FF]" /><h3 className="text-lg font-heading font-bold text-[#00E5FF]">NEO CORTEX</h3></div>
                 <p className="text-sm text-gray-300 mb-2">Deep cognitive analysis powered by GPT-5.2. Receives Hippocampus findings and performs the heavy lifting - nuanced reasoning, historical context integration, image analysis, and comprehensive decision recommendation.</p>
                 <div className="flex gap-4 text-xs font-mono text-gray-400"><span>Model: GPT-5.2</span><span>Image analysis capable</span><span>Historical learning</span></div>
@@ -1063,13 +1063,13 @@ const SettingsPage = () => {
         </TabsContent>
 
         <TabsContent value="admin" className="mt-6 space-y-6">
-          <Card className="bg-[#121212] border-white/10 rounded-sm">
+          <Card className="bg-[#121212] border-white/10 rounded-none">
             <CardHeader><CardTitle className="text-white">Admin Tools</CardTitle><CardDescription className="text-gray-400">Administrative functions for league officials</CardDescription></CardHeader>
             <CardContent className="space-y-4">
-              <div className="p-4 bg-[#050505] rounded-sm border border-white/10">
+              <div className="p-4 bg-[#050505] rounded-none border border-white/10">
                 <h3 className="text-sm font-medium text-white mb-2">Seed Demo Data</h3>
                 <p className="text-xs text-gray-400 mb-4">Populate OCTON with sample incidents, referees, and matches.</p>
-                <Button onClick={seedDemo} disabled={seeding} className="bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 rounded-sm" data-testid="seed-demo-button">{seeding ? "SEEDING..." : "SEED DATA"}</Button>
+                <Button onClick={seedDemo} disabled={seeding} className="bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 rounded-none" data-testid="seed-demo-button">{seeding ? "SEEDING..." : "SEED DATA"}</Button>
               </div>
             </CardContent>
           </Card>
@@ -1134,23 +1134,23 @@ const MatchesPage = () => {
       <div className="flex items-center justify-between">
         <div><h1 className="text-3xl font-heading font-black text-white tracking-tight">MATCH MANAGEMENT</h1><p className="text-sm font-body text-gray-400 mt-1">Assign referees and VAR operators to matches</p></div>
         <Dialog open={showCreate} onOpenChange={setShowCreate}>
-          <DialogTrigger asChild><Button className="bg-white text-black hover:bg-gray-200 rounded-sm font-semibold" data-testid="create-match-button"><Trophy className="w-4 h-4 mr-2" />NEW MATCH</Button></DialogTrigger>
+          <DialogTrigger asChild><Button className="bg-white text-black hover:bg-gray-200 rounded-none font-semibold" data-testid="create-match-button"><Trophy className="w-4 h-4 mr-2" />NEW MATCH</Button></DialogTrigger>
           <DialogContent className="bg-[#121212] border-white/10 text-white max-w-lg">
             <DialogHeader><DialogTitle className="font-heading">Create Match</DialogTitle><DialogDescription className="text-gray-400">Add a new match to the system</DialogDescription></DialogHeader>
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label className="text-gray-300">Home Team</Label><Input value={newMatch.team_home} onChange={e => setNewMatch({...newMatch, team_home: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-sm" data-testid="match-home-input" /></div>
-                <div className="space-y-2"><Label className="text-gray-300">Away Team</Label><Input value={newMatch.team_away} onChange={e => setNewMatch({...newMatch, team_away: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-sm" data-testid="match-away-input" /></div>
+                <div className="space-y-2"><Label className="text-gray-300">Home Team</Label><Input value={newMatch.team_home} onChange={e => setNewMatch({...newMatch, team_home: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-none" data-testid="match-home-input" /></div>
+                <div className="space-y-2"><Label className="text-gray-300">Away Team</Label><Input value={newMatch.team_away} onChange={e => setNewMatch({...newMatch, team_away: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-none" data-testid="match-away-input" /></div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label className="text-gray-300">Date</Label><Input type="date" value={newMatch.date} onChange={e => setNewMatch({...newMatch, date: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-sm" /></div>
-                <div className="space-y-2"><Label className="text-gray-300">Competition</Label><Input value={newMatch.competition} onChange={e => setNewMatch({...newMatch, competition: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-sm" /></div>
+                <div className="space-y-2"><Label className="text-gray-300">Date</Label><Input type="date" value={newMatch.date} onChange={e => setNewMatch({...newMatch, date: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-none" /></div>
+                <div className="space-y-2"><Label className="text-gray-300">Competition</Label><Input value={newMatch.competition} onChange={e => setNewMatch({...newMatch, competition: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-none" /></div>
               </div>
-              <div className="space-y-2"><Label className="text-gray-300">Stadium</Label><Input value={newMatch.stadium} onChange={e => setNewMatch({...newMatch, stadium: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-sm" /></div>
+              <div className="space-y-2"><Label className="text-gray-300">Stadium</Label><Input value={newMatch.stadium} onChange={e => setNewMatch({...newMatch, stadium: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-none" /></div>
             </div>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-white">Cancel</Button>
-              <Button onClick={handleCreate} className="bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 rounded-sm" data-testid="submit-match-button">CREATE</Button>
+              <Button onClick={handleCreate} className="bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 rounded-none" data-testid="submit-match-button">CREATE</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1158,7 +1158,7 @@ const MatchesPage = () => {
 
       <div className="grid gap-4">
         {matches.map(match => (
-          <Card key={match.id} className="bg-[#121212] border-white/10 rounded-sm hover:border-white/30 transition-colors">
+          <Card key={match.id} className="bg-[#121212] border-white/10 rounded-none hover:border-white/30 transition-colors">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
@@ -1180,7 +1180,7 @@ const MatchesPage = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Select value={match.status} onValueChange={v => handleStatusChange(match.id, v)}>
-                    <SelectTrigger className="w-32 bg-[#050505] border-white/10 text-white rounded-sm text-xs"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-32 bg-[#050505] border-white/10 text-white rounded-none text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent className="bg-[#121212] border-white/10">
                       <SelectItem value="scheduled" className="text-white">Scheduled</SelectItem>
                       <SelectItem value="live" className="text-white">Live</SelectItem>
@@ -1188,7 +1188,7 @@ const MatchesPage = () => {
                     </SelectContent>
                   </Select>
                   <Dialog open={assignDialog.open && assignDialog.matchId === match.id} onOpenChange={open => setAssignDialog(open ? { open: true, matchId: match.id, match } : { open: false, matchId: null, match: null })}>
-                    <DialogTrigger asChild><Button size="sm" className="bg-[#00E5FF]/10 text-[#00E5FF] border border-[#00E5FF]/20 hover:bg-[#00E5FF]/20 rounded-sm" data-testid={`assign-match-${match.id}`}><Users className="w-3 h-3 mr-1" />ASSIGN</Button></DialogTrigger>
+                    <DialogTrigger asChild><Button size="sm" className="bg-[#00E5FF]/10 text-[#00E5FF] border border-[#00E5FF]/20 hover:bg-[#00E5FF]/20 rounded-none" data-testid={`assign-match-${match.id}`}><Users className="w-3 h-3 mr-1" />ASSIGN</Button></DialogTrigger>
                     <DialogContent className="bg-[#121212] border-white/10 text-white max-w-md">
                       <DialogHeader><DialogTitle className="font-heading">Assign Officials</DialogTitle><DialogDescription className="text-gray-400">{match.team_home} vs {match.team_away}</DialogDescription></DialogHeader>
                       <AssignForm referees={refereeList} operators={operatorList} match={match} onAssign={handleAssign} />
@@ -1213,7 +1213,7 @@ const AssignForm = ({ referees, operators, match, onAssign }) => {
       <div className="space-y-2">
         <Label className="text-gray-300">Referee</Label>
         <Select value={refId} onValueChange={setRefId}>
-          <SelectTrigger className="bg-[#050505] border-white/10 text-white rounded-sm" data-testid="assign-referee-select"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="bg-[#050505] border-white/10 text-white rounded-none" data-testid="assign-referee-select"><SelectValue /></SelectTrigger>
           <SelectContent className="bg-[#121212] border-white/10">
             <SelectItem value="none" className="text-white">Unassigned</SelectItem>
             {referees.map(r => <SelectItem key={r.id} value={r.id} className="text-white">{r.name}</SelectItem>)}
@@ -1223,14 +1223,14 @@ const AssignForm = ({ referees, operators, match, onAssign }) => {
       <div className="space-y-2">
         <Label className="text-gray-300">VAR Operator</Label>
         <Select value={opId} onValueChange={setOpId}>
-          <SelectTrigger className="bg-[#050505] border-white/10 text-white rounded-sm" data-testid="assign-operator-select"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="bg-[#050505] border-white/10 text-white rounded-none" data-testid="assign-operator-select"><SelectValue /></SelectTrigger>
           <SelectContent className="bg-[#121212] border-white/10">
             <SelectItem value="none" className="text-white">Unassigned</SelectItem>
             {operators.map(o => <SelectItem key={o.id} value={o.id} className="text-white">{o.name}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
-      <Button onClick={() => onAssign(match.id, refId === "none" ? null : refId, opId === "none" ? null : opId)} className="w-full bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 rounded-sm" data-testid="confirm-assignment-button">CONFIRM ASSIGNMENT</Button>
+      <Button onClick={() => onAssign(match.id, refId === "none" ? null : refId, opId === "none" ? null : opId)} className="w-full bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 rounded-none" data-testid="confirm-assignment-button">CONFIRM ASSIGNMENT</Button>
     </div>
   );
 };
@@ -1264,27 +1264,27 @@ const FeedbackPage = () => {
 
       {/* Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="bg-[#121212] border-white/10 rounded-sm"><CardContent className="p-4"><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">TOTAL FEEDBACK</p><p className="text-3xl font-mono font-medium text-white mt-1">{stats?.total_feedback || 0}</p></CardContent></Card>
-        <Card className="bg-[#121212] border-white/10 rounded-sm"><CardContent className="p-4"><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">AI ACCURACY</p><p className="text-3xl font-mono font-medium text-[#00FF66] mt-1">{stats?.overall_accuracy || 0}%</p></CardContent></Card>
-        <Card className="bg-[#121212] border-white/10 rounded-sm"><CardContent className="p-4"><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">CORRECT</p><p className="text-3xl font-mono font-medium text-[#00E5FF] mt-1">{stats?.correct || 0}</p></CardContent></Card>
-        <Card className="bg-[#121212] border-white/10 rounded-sm"><CardContent className="p-4"><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">CORRECTIONS</p><p className="text-3xl font-mono font-medium text-[#FF3333] mt-1">{stats?.incorrect || 0}</p></CardContent></Card>
+        <Card className="bg-[#121212] border-white/10 rounded-none"><CardContent className="p-4"><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">TOTAL FEEDBACK</p><p className="text-3xl font-mono font-medium text-white mt-1">{stats?.total_feedback || 0}</p></CardContent></Card>
+        <Card className="bg-[#121212] border-white/10 rounded-none"><CardContent className="p-4"><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">AI ACCURACY</p><p className="text-3xl font-mono font-medium text-[#00FF66] mt-1">{stats?.overall_accuracy || 0}%</p></CardContent></Card>
+        <Card className="bg-[#121212] border-white/10 rounded-none"><CardContent className="p-4"><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">CORRECT</p><p className="text-3xl font-mono font-medium text-[#00E5FF] mt-1">{stats?.correct || 0}</p></CardContent></Card>
+        <Card className="bg-[#121212] border-white/10 rounded-none"><CardContent className="p-4"><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">CORRECTIONS</p><p className="text-3xl font-mono font-medium text-[#FF3333] mt-1">{stats?.incorrect || 0}</p></CardContent></Card>
       </div>
 
       {/* Confidence Calibration */}
       {stats?.confidence_calibration && (
-        <Card className="bg-[#121212] border-white/10 rounded-sm">
+        <Card className="bg-[#121212] border-white/10 rounded-none">
           <CardHeader><CardTitle className="text-sm font-mono uppercase text-gray-400">CONFIDENCE CALIBRATION</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-6">
               {stats.confidence_calibration.correct && (
-                <div className="p-4 bg-[#050505] rounded-sm border border-[#00FF66]/20">
+                <div className="p-4 bg-[#050505] rounded-none border border-[#00FF66]/20">
                   <p className="text-xs font-mono text-[#00FF66] mb-1">WHEN AI WAS CORRECT</p>
                   <p className="text-2xl font-mono text-white">{stats.confidence_calibration.correct.avg_confidence}%</p>
                   <p className="text-xs text-gray-400">avg confidence ({stats.confidence_calibration.correct.count} cases)</p>
                 </div>
               )}
               {stats.confidence_calibration.incorrect && (
-                <div className="p-4 bg-[#050505] rounded-sm border border-[#FF3333]/20">
+                <div className="p-4 bg-[#050505] rounded-none border border-[#FF3333]/20">
                   <p className="text-xs font-mono text-[#FF3333] mb-1">WHEN AI WAS WRONG</p>
                   <p className="text-2xl font-mono text-white">{stats.confidence_calibration.incorrect.avg_confidence}%</p>
                   <p className="text-xs text-gray-400">avg confidence ({stats.confidence_calibration.incorrect.count} cases)</p>
@@ -1297,7 +1297,7 @@ const FeedbackPage = () => {
 
       {/* Per-Type Accuracy */}
       {typeData.length > 0 && (
-        <Card className="bg-[#121212] border-white/10 rounded-sm">
+        <Card className="bg-[#121212] border-white/10 rounded-none">
           <CardHeader><CardTitle className="text-sm font-mono uppercase text-gray-400">ACCURACY BY INCIDENT TYPE</CardTitle></CardHeader>
           <CardContent><div className="h-[300px] min-h-[300px]">
             <ResponsiveContainer width="100%" height={300}>
@@ -1308,11 +1308,11 @@ const FeedbackPage = () => {
       )}
 
       {/* Recent Feedback */}
-      <Card className="bg-[#121212] border-white/10 rounded-sm">
+      <Card className="bg-[#121212] border-white/10 rounded-none">
         <CardHeader><CardTitle className="text-sm font-mono uppercase text-gray-400">RECENT OPERATOR FEEDBACK</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {feedbackList.map(fb => (
-            <div key={fb.id} className="flex items-center justify-between p-3 bg-[#050505] rounded-sm border border-white/5">
+            <div key={fb.id} className="flex items-center justify-between p-3 bg-[#050505] rounded-none border border-white/5">
               <div className="flex items-center gap-3">
                 {fb.was_ai_correct ? <ThumbsUp className="w-4 h-4 text-[#00FF66]" /> : <ThumbsDown className="w-4 h-4 text-[#FF3333]" />}
                 <div>
@@ -1346,7 +1346,7 @@ const ProtectedRoute = ({ children, roles }) => {
           <Lock className="w-12 h-12 text-[#FF3333] mx-auto" />
           <h2 className="text-xl font-heading font-bold text-white">ACCESS DENIED</h2>
           <p className="text-sm text-gray-400">Your role ({user?.role?.replace("_"," ")}) does not have permission.</p>
-          <Button onClick={() => window.history.back()} className="bg-white text-black hover:bg-gray-200 rounded-sm">Go Back</Button>
+          <Button onClick={() => window.history.back()} className="bg-white text-black hover:bg-gray-200 rounded-none">Go Back</Button>
         </div>
       </div>
     );
