@@ -7,7 +7,8 @@ import {
   Video, History, BarChart3, Settings, AlertTriangle, CheckCircle2,
   XCircle, Clock, RefreshCw, Upload, Play, Brain, Users, Shield,
   Target, Eye, LogOut, LogIn, UserPlus, Zap, Activity, Image,
-  ArrowRight, Radio, Wifi, WifiOff, Trophy, Calendar, ThumbsUp, ThumbsDown, Lock
+  ArrowRight, Radio, Wifi, WifiOff, Trophy, Calendar, ThumbsUp, ThumbsDown, Lock,
+  Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Maximize2, Volume2
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./components/ui/card";
@@ -483,82 +484,124 @@ const DecisionBadge = ({ status }) => {
   return <span className={`${c.color} border rounded-none px-2 py-1 text-xs font-mono uppercase flex items-center gap-1`}><Icon className="w-3 h-3" />{c.label}</span>;
 };
 
-// ── Video Stage ───────────────────────────────────────────
+// ── Video Stage with Match Replay Scrubber ────────────────
 const VideoStage = ({ incident, onAnalyze, previewImage }) => {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentFrame, setCurrentFrame] = useState(1847);
+  const [totalFrames] = useState(3200);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [matchTime, setMatchTime] = useState({ min: 67, sec: 12, ms: 450 });
+  const [scrubberHover, setScrubberHover] = useState(null);
+  const scrubberRef = useRef(null);
   const imgSrc = previewImage || (incident?.has_image && incident?.storage_path ? `${API}/files/${incident.storage_path}` : null);
+
+  useEffect(() => {
+    if (incident?.timestamp_in_match) {
+      const parts = incident.timestamp_in_match.split(":");
+      if (parts.length >= 2) setMatchTime({ min: parseInt(parts[0]) || 0, sec: parseInt(parts[1]) || 0, ms: 0 });
+    }
+  }, [incident]);
+
+  useEffect(() => {
+    if (!isPlaying) return;
+    const interval = setInterval(() => {
+      setCurrentFrame(f => { const next = f + playbackSpeed; if (next >= totalFrames) { setIsPlaying(false); return totalFrames; } return next; });
+      setMatchTime(t => {
+        let ms = t.ms + (33 * playbackSpeed), sec = t.sec, min = t.min;
+        if (ms >= 1000) { sec += Math.floor(ms / 1000); ms = ms % 1000; }
+        if (sec >= 60) { min += Math.floor(sec / 60); sec = sec % 60; }
+        return { min, sec, ms: Math.floor(ms) };
+      });
+    }, 33);
+    return () => clearInterval(interval);
+  }, [isPlaying, playbackSpeed, totalFrames]);
+
+  const stepFrame = (delta) => {
+    setCurrentFrame(f => Math.max(0, Math.min(totalFrames, f + delta)));
+    setMatchTime(t => {
+      const total = Math.max(0, (t.min * 60000) + (t.sec * 1000) + t.ms + (delta * 33));
+      return { min: Math.floor(total / 60000), sec: Math.floor((total % 60000) / 1000), ms: Math.floor(total % 1000) };
+    });
+  };
+
+  const handleScrub = (e) => {
+    if (!scrubberRef.current) return;
+    const rect = scrubberRef.current.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    setCurrentFrame(Math.floor(pct * totalFrames));
+  };
+
+  const progressPct = (currentFrame / totalFrames) * 100;
+  const timeStr = `${String(matchTime.min).padStart(2,'0')}:${String(matchTime.sec).padStart(2,'0')}.${String(matchTime.ms).padStart(3,'0')}`;
+  const speeds = [0.25, 0.5, 1, 2, 4];
 
   return (
     <div className="relative border border-white/[0.08] bg-black overflow-hidden" data-testid="video-player-container">
       <div className="aspect-video relative">
-        {imgSrc ? (
-          <img src={imgSrc} alt="Incident frame" className="w-full h-full object-cover" />
-        ) : (
-          <img src="https://images.pexels.com/photos/12201296/pexels-photo-12201296.jpeg" alt="Stadium" className="w-full h-full object-cover opacity-40" />
-        )}
-        
-        {/* Grid overlay */}
+        {imgSrc ? <img src={imgSrc} alt="Incident" className="w-full h-full object-cover" /> : <img src="https://images.pexels.com/photos/12201296/pexels-photo-12201296.jpeg" alt="Stadium" className="w-full h-full object-cover opacity-40" />}
         <div className="absolute inset-0 grid-overlay opacity-50" />
-        
-        {/* Scan line */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="w-full h-[2px] bg-gradient-to-r from-transparent via-[#00E5FF]/60 to-transparent animate-scan" />
-        </div>
-        
-        {/* Targeting reticle */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden"><div className="w-full h-[2px] bg-gradient-to-r from-transparent via-[#00E5FF]/60 to-transparent animate-scan" /></div>
         {incident?.ai_analysis && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            {/* Outer reticle */}
             <div className="w-48 h-48 border-2 border-[#00E5FF]/30 relative reticle-spin" style={{ borderRadius: '50%' }}>
-              <div className="absolute top-1/2 left-0 w-3 h-[1px] bg-[#00E5FF]/60 -translate-y-1/2" />
-              <div className="absolute top-1/2 right-0 w-3 h-[1px] bg-[#00E5FF]/60 -translate-y-1/2" />
-              <div className="absolute left-1/2 top-0 h-3 w-[1px] bg-[#00E5FF]/60 -translate-x-1/2" />
-              <div className="absolute left-1/2 bottom-0 h-3 w-[1px] bg-[#00E5FF]/60 -translate-x-1/2" />
+              <div className="absolute top-1/2 left-0 w-3 h-[1px] bg-[#00E5FF]/60 -translate-y-1/2" /><div className="absolute top-1/2 right-0 w-3 h-[1px] bg-[#00E5FF]/60 -translate-y-1/2" />
+              <div className="absolute left-1/2 top-0 h-3 w-[1px] bg-[#00E5FF]/60 -translate-x-1/2" /><div className="absolute left-1/2 bottom-0 h-3 w-[1px] bg-[#00E5FF]/60 -translate-x-1/2" />
             </div>
-            {/* Inner crosshair */}
-            <div className="absolute w-24 h-24 border border-[#00E5FF]/20">
-              <div className="absolute top-1/2 left-0 w-full h-[1px] bg-[#00E5FF]/10" />
-              <div className="absolute left-1/2 top-0 h-full w-[1px] bg-[#00E5FF]/10" />
-            </div>
-            {/* Analysis zone label */}
-            <div className="absolute top-[20%] left-1/2 -translate-x-1/2 px-3 py-1 bg-[#00E5FF]/90 text-black text-[10px] font-mono font-bold tracking-wider">
-              OCTON ANALYSIS ZONE
-            </div>
+            <div className="absolute w-24 h-24 border border-[#00E5FF]/20"><div className="absolute top-1/2 left-0 w-full h-[1px] bg-[#00E5FF]/10" /><div className="absolute left-1/2 top-0 h-full w-[1px] bg-[#00E5FF]/10" /></div>
+            <div className="absolute top-[20%] left-1/2 -translate-x-1/2 px-3 py-1 bg-[#00E5FF]/90 text-black text-[10px] font-mono font-bold tracking-wider">OCTON ANALYSIS ZONE</div>
           </div>
         )}
-        
-        {/* Top HUD */}
         <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-3">
           <div className="flex items-center gap-2 bg-black/70 backdrop-blur-sm px-2 py-1">
             <div className={`w-2 h-2 ${isPlaying ? 'bg-[#FF2A2A]' : 'bg-[#00FF88]'} animate-pulse`} />
-            <span className="text-[10px] font-mono text-white uppercase tracking-wider">{isPlaying ? 'LIVE' : 'PLAYBACK'}</span>
+            <span className="text-[10px] font-mono text-white uppercase tracking-wider">{isPlaying ? 'PLAYING' : 'PAUSED'}</span>
+            <span className="text-[10px] font-mono text-[#00E5FF]/60 ml-1">{playbackSpeed}x</span>
           </div>
-          {incident?.timestamp_in_match && (
-            <div className="bg-black/70 backdrop-blur-sm px-3 py-1">
-              <span className="text-sm font-mono text-white font-bold">{incident.timestamp_in_match}</span>
-            </div>
-          )}
+          <div className="bg-black/70 backdrop-blur-sm px-3 py-1">
+            <span className="text-lg font-mono text-white font-bold glow-text-cyan tracking-wider">{timeStr}</span>
+          </div>
         </div>
-        
-        {/* Bottom edge glow */}
         <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#00E5FF]/40 to-transparent" />
       </div>
-      
-      {/* Controls */}
-      <div className="p-3 border-t border-white/[0.06] flex items-center justify-between bg-[#050505]">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white h-8 w-8 p-0" onClick={() => setIsPlaying(!isPlaying)} data-testid="play-pause-button"><Play className="w-4 h-4" /></Button>
-          <span className="text-[10px] font-mono text-gray-500 tracking-wider">FRM 1847/3200</span>
+
+      {/* MATCH REPLAY SCRUBBER */}
+      <div className="bg-[#050505] border-t border-white/[0.06]">
+        <div className="px-3 pt-2 pb-1">
+          <div ref={scrubberRef} className="relative h-3 bg-white/[0.04] cursor-pointer group" onClick={handleScrub}
+            onMouseMove={(e) => { if (!scrubberRef.current) return; const r=scrubberRef.current.getBoundingClientRect(); const p=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)); setScrubberHover({pct:p*100,frame:Math.floor(p*totalFrames)}); }}
+            onMouseLeave={() => setScrubberHover(null)} data-testid="replay-scrubber-track">
+            <div className="absolute top-0 left-0 h-full bg-gradient-to-r from-[#00E5FF]/60 to-[#00E5FF]/30 transition-all duration-75" style={{ width: `${progressPct}%` }} />
+            <div className="absolute top-1/2 -translate-y-1/2 w-[3px] h-5 bg-[#00E5FF] transition-all duration-75 group-hover:h-6 group-hover:shadow-[0_0_8px_rgba(0,229,255,0.6)]" style={{ left: `${progressPct}%` }} />
+            {scrubberHover && <div className="absolute -top-7 -translate-x-1/2 px-2 py-0.5 bg-black/90 border border-white/10 text-[9px] font-mono text-[#00E5FF] whitespace-nowrap pointer-events-none" style={{ left: `${scrubberHover.pct}%` }}>FRM {scrubberHover.frame}</div>}
+            <div className="absolute top-1/2 -translate-y-1/2 w-1.5 h-4 bg-[#FFB800]" style={{ left: '45%' }} title="Incident marker" />
+          </div>
         </div>
-        {onAnalyze && (
-          <Button size="sm" className="bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 h-8 px-4 font-heading font-bold text-[11px] tracking-wider uppercase" onClick={onAnalyze} data-testid="analyze-frame-button">
-            <Brain className="w-3.5 h-3.5 mr-1.5" />REANALYZE
-          </Button>
-        )}
+        <div className="px-3 pb-2 flex items-center justify-between">
+          <div className="flex items-center gap-0.5">
+            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-white h-7 w-7 p-0" onClick={() => stepFrame(-10)} data-testid="step-back-10" title="-10 frames"><SkipBack className="w-3.5 h-3.5" /></Button>
+            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-white h-7 w-7 p-0" onClick={() => stepFrame(-1)} data-testid="step-back-1" title="-1 frame"><ChevronLeft className="w-3.5 h-3.5" /></Button>
+            <Button variant="ghost" size="sm" className="text-white hover:text-[#00E5FF] h-8 w-8 p-0 border border-white/10 hover:border-[#00E5FF]/40 mx-0.5 transition-all" onClick={() => setIsPlaying(!isPlaying)} data-testid="play-pause-button">
+              {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+            </Button>
+            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-white h-7 w-7 p-0" onClick={() => stepFrame(1)} data-testid="step-forward-1" title="+1 frame"><ChevronRight className="w-3.5 h-3.5" /></Button>
+            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-white h-7 w-7 p-0" onClick={() => stepFrame(10)} data-testid="step-forward-10" title="+10 frames"><SkipForward className="w-3.5 h-3.5" /></Button>
+            <div className="h-4 w-[1px] bg-white/[0.06] mx-1.5" />
+            <div className="flex items-center gap-0.5" data-testid="speed-selector">
+              {speeds.map(s => (
+                <button key={s} onClick={() => setPlaybackSpeed(s)} className={`text-[9px] font-mono px-1.5 py-0.5 transition-all ${playbackSpeed === s ? 'bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/30' : 'text-gray-600 hover:text-gray-400 border border-transparent'}`} data-testid={`speed-${s}x`}>{s}x</button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right"><span className="text-[10px] font-mono text-gray-600">FRM </span><span className="text-[11px] font-mono text-white font-bold">{currentFrame}</span><span className="text-[10px] font-mono text-gray-600">/{totalFrames}</span></div>
+            {onAnalyze && <Button size="sm" className="bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 h-7 px-3 font-heading font-bold text-[10px] tracking-wider uppercase active:scale-[0.98]" onClick={onAnalyze} data-testid="analyze-frame-button"><Brain className="w-3 h-3 mr-1" />ANALYZE FRAME</Button>}
+          </div>
+        </div>
       </div>
     </div>
   );
 };
+
 
 // ── Live VAR Page ─────────────────────────────────────────
 const LiveVARPage = () => {
