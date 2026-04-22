@@ -42,121 +42,103 @@ class HippocampusAnalyzer:
     PATTERN_DB = {
         "offside": {
             "keywords": [
-                "offside",
-                "through ball",
-                "last defender",
-                "behind",
-                "goal scored",
-                "onside line",
-                "linesman",
-                "flag",
+                "offside", "through ball", "last defender", "behind",
+                "goal scored", "onside line", "linesman", "flag",
+                "beyond", "ahead of", "forward run", "played onside",
+                "marginal", "tight call", "level", "daylight",
             ],
+            "negative_keywords": ["onside", "behind the ball", "own half", "goal kick", "throw-in", "corner"],
             "common_decisions": [
                 "Goal Disallowed - Offside",
                 "Onside - Goal Stands",
             ],
             "severity_weight": 0.85,
-            "base_confidence": 72.0,
+            "base_confidence": 55.0,
         },
         "handball": {
             "keywords": [
-                "handball",
-                "hand",
-                "arm",
-                "ball contact",
-                "unnatural",
-                "deliberate",
-                "raised arm",
-                "body position",
+                "handball", "hand", "arm", "ball contact", "unnatural",
+                "deliberate", "raised arm", "body position", "above shoulder",
+                "extended arm", "making body bigger", "ball to hand",
+                "hand to ball", "natural position", "tucked in",
             ],
+            "negative_keywords": ["own head", "own body", "deflection", "close range", "natural", "by side"],
             "common_decisions": [
                 "Handball - Free Kick/Penalty",
                 "No Handball - Natural Position",
             ],
             "severity_weight": 0.80,
-            "base_confidence": 68.0,
+            "base_confidence": 50.0,
         },
         "foul": {
             "keywords": [
-                "foul",
-                "tackle",
-                "challenge",
-                "contact",
-                "trip",
-                "push",
-                "pull",
-                "obstruction",
-                "holding",
+                "foul", "tackle", "challenge", "contact", "trip", "push",
+                "pull", "obstruction", "holding", "late", "reckless",
+                "from behind", "no ball contact", "missed the ball",
+                "tactical", "counter-attack", "promising attack",
             ],
+            "negative_keywords": ["fair", "clean", "won the ball", "shoulder to shoulder", "ball first"],
             "common_decisions": [
                 "Foul Confirmed",
                 "No Foul - Fair Challenge",
                 "Yellow Card - Tactical Foul",
             ],
             "severity_weight": 0.70,
-            "base_confidence": 65.0,
+            "base_confidence": 50.0,
         },
         "penalty": {
             "keywords": [
-                "penalty",
-                "box",
-                "area",
-                "foul in box",
-                "spot kick",
-                "penalty area",
-                "challenge in box",
-                "brought down",
+                "penalty", "box", "area", "foul in box", "spot kick",
+                "penalty area", "challenge in box", "brought down",
+                "inside the area", "tripped in box", "pushed in box",
+                "handball in box", "contact in area",
             ],
+            "negative_keywords": ["outside box", "simulation", "dive", "outside the area", "no contact"],
             "common_decisions": [
                 "Penalty Awarded",
-                "No Penalty",
+                "No Penalty - Outside Area / Simulation",
                 "Penalty - Handball in Box",
             ],
             "severity_weight": 0.90,
-            "base_confidence": 70.0,
+            "base_confidence": 50.0,
         },
         "goal_line": {
             "keywords": [
-                "goal line",
-                "crossed",
-                "ball over",
-                "technology",
-                "hawk-eye",
-                "crossed the line",
-                "cleared",
+                "goal line", "crossed", "ball over", "technology", "hawk-eye",
+                "crossed the line", "cleared", "on the line", "fully over",
+                "goal confirmed", "no goal", "cleared off line",
             ],
+            "negative_keywords": ["not crossed", "on the line", "part of ball"],
             "common_decisions": [
                 "Goal Confirmed - Ball Crossed Line",
                 "No Goal - Ball Did Not Cross",
             ],
             "severity_weight": 0.95,
-            "base_confidence": 85.0,
+            "base_confidence": 60.0,
         },
         "red_card": {
             "keywords": [
-                "red card",
-                "serious",
-                "violent",
-                "dangerous",
-                "reckless",
-                "excessive force",
-                "straight red",
-                "studs up",
-                "elbow",
+                "red card", "serious", "violent", "dangerous", "reckless",
+                "excessive force", "straight red", "studs up", "elbow",
+                "head butt", "spitting", "dogso", "last man",
+                "denied goal scoring", "brutal", "endangered safety",
+                "off the ball", "violent conduct",
             ],
+            "negative_keywords": ["yellow", "first offence", "minor", "accidental", "attempt to play ball"],
             "common_decisions": [
                 "Red Card - Serious Foul Play",
                 "Red Card - Violent Conduct",
-                "Yellow Card Only",
+                "Yellow Card Only - Not Excessive Force",
             ],
             "severity_weight": 0.88,
-            "base_confidence": 75.0,
+            "base_confidence": 52.0,
         },
         "other": {
             "keywords": [],
+            "negative_keywords": [],
             "common_decisions": ["Review Required"],
             "severity_weight": 0.50,
-            "base_confidence": 50.0,
+            "base_confidence": 40.0,
         },
     }
 
@@ -175,16 +157,45 @@ class HippocampusAnalyzer:
         matched_keywords = [kw for kw in pattern["keywords"] if kw in desc_lower]
         keyword_score = len(matched_keywords) / max(len(pattern["keywords"]), 1)
 
-        confidence = pattern["base_confidence"] + (keyword_score * 15)
+        # Check negative keywords that suggest the opposite outcome
+        negative_keywords = pattern.get("negative_keywords", [])
+        matched_negatives = [nk for nk in negative_keywords if nk in desc_lower]
+        negative_score = len(matched_negatives) / max(len(negative_keywords), 1)
 
+        # Calculate confidence - start lower, earn it with evidence
+        confidence = pattern["base_confidence"]
+        confidence += keyword_score * 20
+        confidence -= negative_score * 15  # Negatives pull confidence down
+
+        # Description quality bonus: longer, more detailed = more confident
+        word_count = len(description.split())
+        if word_count > 30:
+            confidence += 5
+        elif word_count < 10:
+            confidence -= 10  # Very short descriptions = low confidence
+
+        # Historical boost (capped)
         historical_boost = 0
         if historical_data and historical_data.get("total_similar", 0) > 5:
-            historical_boost = min(10, historical_data["total_similar"] * 0.4)
+            historical_boost = min(8, historical_data["total_similar"] * 0.3)
             confidence += historical_boost
 
-        confidence = min(98, max(20, confidence))
+        # Feedback-based calibration
+        feedback_adjust = 0
+        if historical_data and historical_data.get("feedback_accuracy", 0) > 0:
+            fb_acc = historical_data["feedback_accuracy"]
+            if fb_acc < 60:
+                feedback_adjust = -5  # AI has been wrong often, be less confident
+            elif fb_acc > 85:
+                feedback_adjust = 3
+            confidence += feedback_adjust
 
-        if keyword_score > 0.4 and len(pattern["common_decisions"]) > 0:
+        confidence = min(92, max(15, confidence))
+
+        # Decision: if negatives outweigh positives, flip to conservative option
+        if negative_score > keyword_score and len(pattern["common_decisions"]) > 1:
+            initial_decision = pattern["common_decisions"][-1]  # Conservative
+        elif keyword_score > 0.3 and len(pattern["common_decisions"]) > 0:
             initial_decision = pattern["common_decisions"][0]
         elif len(pattern["common_decisions"]) > 1:
             initial_decision = pattern["common_decisions"][-1]
@@ -198,9 +209,13 @@ class HippocampusAnalyzer:
             "initial_confidence": round(confidence, 1),
             "initial_decision": initial_decision,
             "matched_keywords": matched_keywords,
+            "matched_negatives": matched_negatives,
             "keyword_match_ratio": round(keyword_score, 2),
+            "negative_match_ratio": round(negative_score, 2),
             "severity_weight": pattern["severity_weight"],
             "historical_boost": round(historical_boost, 1),
+            "feedback_adjustment": round(feedback_adjust, 1),
+            "description_quality": "detailed" if word_count > 30 else "brief" if word_count > 15 else "minimal",
             "processing_time_ms": max(processing_ms, 1),
         }
 
@@ -213,6 +228,63 @@ class NeoCortexAnalyzer:
     nuanced reasoning, historical context integration,
     and comprehensive decision support.
     """
+
+    # IFAB Laws of the Game reference for accurate decisions
+    RULES_REFERENCE = {
+        "offside": (
+            "IFAB Law 11 - Offside: A player is offside if any part of their head, body or feet "
+            "is in the opponents' half (excluding the halfway line) AND nearer to the opponents' "
+            "goal line than both the ball and the second-last opponent. Being offside is NOT an "
+            "offence itself. An offside offence occurs when the ball is played/touched by a teammate "
+            "AND the player is: interfering with play, interfering with an opponent, or gaining an "
+            "advantage. A player is NOT offside from a goal kick, throw-in, or corner kick. "
+            "Tight/marginal offside = low confidence. Clear offside (>1m beyond) = high confidence."
+        ),
+        "handball": (
+            "IFAB Law 12 - Handball: It is an offence if a player deliberately handles the ball "
+            "OR scores/creates a goal-scoring opportunity after touching their hand/arm. "
+            "It is usually an offence if the hand/arm makes the body unnaturally bigger, or the "
+            "hand/arm is above shoulder height. It is NOT an offence if the ball touches a player's "
+            "hand/arm directly from their own head/body/foot, or from a nearby player's head/body/foot. "
+            "Natural arm position (by the side) = usually no handball. Arm away from body = likely handball. "
+            "Ball-to-hand vs hand-to-ball is a KEY distinction."
+        ),
+        "foul": (
+            "IFAB Law 12 - Fouls: Direct free kick for: kicking, tripping, jumping at, charging, "
+            "striking, pushing an opponent, or a tackle that contacts the opponent before the ball. "
+            "Yellow card for: persistent offences, dissent, delaying restart, tactical fouls that "
+            "stop promising attacks. Red card criteria: serious foul play (excessive force), violent "
+            "conduct, denying obvious goal-scoring opportunity (DOGSO). Consider: was there genuine "
+            "attempt to play the ball? Amount of force? Impact on the opponent?"
+        ),
+        "penalty": (
+            "IFAB Law 14 - Penalty Kick: Awarded when a direct free-kick offence is committed by "
+            "a player inside their own penalty area. The offence must occur INSIDE the penalty area. "
+            "Criteria: same as direct free kick fouls (trip, push, hold, kick, handball). "
+            "DOGSO in penalty area = penalty + yellow card (not red, unless the foul was not an "
+            "attempt to play the ball). Simulation/diving = no penalty + yellow card to attacker."
+        ),
+        "goal_line": (
+            "IFAB Law 10 - Goal: The whole ball must cross the whole goal line between the goalposts "
+            "and under the crossbar. Goal-line technology (GLT) provides definitive binary answer. "
+            "If GLT unavailable, VAR uses camera angles to determine if ball fully crossed. "
+            "Millimeter precision required - if ANY part of the ball is on or above the line, it's NOT a goal."
+        ),
+        "red_card": (
+            "IFAB Law 12 - Sending Off: Red card for: serious foul play (tackle/challenge using "
+            "excessive force or brutality), violent conduct, spitting, DOGSO by foul (outside penalty area "
+            "or non-ball-playing foul in box), DOGSO by handball, offensive language/gestures, "
+            "receiving second yellow. Serious foul play = endangered safety of opponent. "
+            "Assess: speed of tackle, use of studs, height of challenge, contact point, "
+            "whether from behind, whether ball was playable."
+        ),
+        "other": (
+            "General VAR protocol: VAR can only intervene for clear and obvious errors or serious "
+            "missed incidents in four categories: goals, penalty decisions, direct red cards, "
+            "and mistaken identity. The threshold is 'clear and obvious error' - borderline "
+            "calls should stand as the on-field referee's decision."
+        ),
+    }
 
     async def analyze(
         self,
@@ -234,45 +306,71 @@ class NeoCortexAnalyzer:
                 logger.warning("EMERGENT_LLM_KEY not found, Neo Cortex using heuristics")
                 return self._fallback_analysis(incident_type, hippocampus_result, start)
 
+            rules = self.RULES_REFERENCE.get(incident_type, self.RULES_REFERENCE["other"])
+
             session_id = f"octon-neocortex-{int(time.time())}"
             chat = LlmChat(
                 api_key=api_key,
                 session_id=session_id,
                 system_message=(
-                    "You are the Neo Cortex module of the OCTON VAR system, designed by Dr Finnegan. "
-                    "You are an elite VAR analyst performing deep cognitive analysis of football incidents. "
-                    "You receive initial findings from the Hippocampus module and perform the heavy cognitive lifting.\n"
+                    "You are the Neo Cortex module of OCTON VAR, an elite forensic VAR analyst designed by Dr Finnegan.\n\n"
+                    "YOUR ROLE: Make accurate VAR decisions by applying IFAB Laws of the Game precisely.\n\n"
+                    "CRITICAL RULES:\n"
+                    "- You MUST apply the specific law relevant to the incident type\n"
+                    "- Do NOT default to the Hippocampus suggestion - independently evaluate\n"
+                    "- Consider ALL evidence: description details, context, player positions, intent\n"
+                    "- Confidence score must reflect actual certainty: 90+ only for clear-cut cases\n"
+                    "- 60-75 for borderline cases that could go either way\n"
+                    "- Below 50 means you're genuinely uncertain\n"
+                    "- The VAR threshold is 'clear and obvious error' - if the call is marginal, "
+                    "the on-field decision should typically stand\n\n"
+                    "DECISION ACCURACY GUIDELINES:\n"
+                    "- For OFFSIDE: focus on the exact moment the ball is played, not when received. "
+                    "Consider which body parts are offside. Marginal = suggest on-field decision stands.\n"
+                    "- For HANDBALL: distinguish ball-to-hand vs hand-to-ball. Natural position matters. "
+                    "Arm tucked in = usually no handball. Arm extended/raised = likely handball.\n"
+                    "- For FOULS: assess genuine attempt to play ball, force used, point of contact, "
+                    "and whether it stopped a promising attack (yellow) or DOGSO (red).\n"
+                    "- For PENALTIES: same as fouls but MUST be inside the penalty area. Check for simulation.\n"
+                    "- For RED CARDS: distinguish serious foul play (excessive force) from normal fouls. "
+                    "Not every bad tackle is a red card. Studs up + excessive force + endangered safety = red.\n"
+                    "- For GOAL LINE: the WHOLE ball must cross the WHOLE line. Any doubt = no goal.\n\n"
                     "ALWAYS respond in this exact JSON format:\n"
                     "{\n"
-                    '  "confidence_score": number (0-100),\n'
-                    '  "suggested_decision": "string",\n'
-                    '  "reasoning": "string",\n'
-                    '  "key_factors": ["string array"],\n'
+                    '  "confidence_score": number (0-100, calibrated accurately),\n'
+                    '  "suggested_decision": "specific decision string",\n'
+                    '  "reasoning": "detailed step-by-step reasoning applying the relevant law",\n'
+                    '  "key_factors": ["specific factual factors from the description"],\n'
                     '  "risk_level": "low|medium|high|critical",\n'
-                    '  "neo_cortex_notes": "string"\n'
+                    '  "neo_cortex_notes": "any caveats, what additional evidence would help"\n'
                     "}"
                 ),
             ).with_model("openai", "gpt-5.2")
 
             prompt = (
-                f"OCTON VAR Deep Analysis Request:\n\n"
-                f"HIPPOCAMPUS INITIAL FINDINGS:\n"
+                f"OCTON VAR FORENSIC ANALYSIS:\n\n"
+                f"APPLICABLE LAW:\n{rules}\n\n"
+                f"HIPPOCAMPUS RAPID SCAN:\n"
                 f"- Initial Confidence: {hippocampus_result['initial_confidence']}%\n"
                 f"- Initial Decision: {hippocampus_result['initial_decision']}\n"
-                f"- Keyword Matches: {', '.join(hippocampus_result['matched_keywords']) or 'None'}\n"
-                f"- Severity Weight: {hippocampus_result['severity_weight']}\n\n"
-                f"INCIDENT DETAILS:\n"
-                f"- Type: {incident_type}\n"
-                f"- Description: {description}\n"
+                f"- Matched Patterns: {', '.join(hippocampus_result['matched_keywords']) or 'None'}\n\n"
+                f"INCIDENT UNDER REVIEW:\n"
+                f"- Category: {incident_type.upper()}\n"
+                f"- Full Description: {description}\n"
             )
             if historical_context:
-                prompt += f"\nHISTORICAL CONTEXT:\n{historical_context}\n"
-            prompt += "\nPerform deep cognitive analysis. Refine the Hippocampus findings. Respond in JSON only."
+                prompt += f"\nSELF-LEARNING CONTEXT:\n{historical_context}\n"
+            prompt += (
+                "\nINSTRUCTIONS: Apply the law above to the incident description. "
+                "Do NOT blindly agree with the Hippocampus - make your own independent assessment. "
+                "If the description lacks critical details, lower your confidence and note what's missing. "
+                "Respond in JSON format only."
+            )
 
             if has_image and image_base64:
                 image_content = ImageContent(image_base64=image_base64)
                 user_message = UserMessage(
-                    text=prompt + "\n\nAn image frame is attached. Analyze it carefully.",
+                    text=prompt + "\n\nMatch frame attached. Analyze visual evidence carefully.",
                     file_contents=[image_content],
                 )
             else:
@@ -287,12 +385,12 @@ class NeoCortexAnalyzer:
                 analysis_data = json.loads(json_match.group())
             else:
                 analysis_data = {
-                    "confidence_score": hippocampus_result["initial_confidence"] + 5,
+                    "confidence_score": hippocampus_result["initial_confidence"],
                     "suggested_decision": hippocampus_result["initial_decision"],
                     "reasoning": response[:500] if response else "Neo Cortex analysis completed",
-                    "key_factors": ["Deep analysis performed"],
+                    "key_factors": ["Analysis performed - JSON parsing fallback"],
                     "risk_level": "medium",
-                    "neo_cortex_notes": "JSON extraction required manual parsing",
+                    "neo_cortex_notes": "Response required manual extraction",
                 }
 
             processing_ms = int((time.time() - start) * 1000)
@@ -300,7 +398,7 @@ class NeoCortexAnalyzer:
             return {
                 "stage": "neo_cortex",
                 "confidence_score": min(
-                    100, max(0, float(analysis_data.get("confidence_score", 75)))
+                    100, max(0, float(analysis_data.get("confidence_score", 50)))
                 ),
                 "suggested_decision": str(
                     analysis_data.get("suggested_decision", "Review Required")
@@ -309,7 +407,7 @@ class NeoCortexAnalyzer:
                     analysis_data.get("reasoning", "Analysis completed")
                 ),
                 "key_factors": analysis_data.get(
-                    "key_factors", ["Deep analysis performed"]
+                    "key_factors", ["Analysis performed"]
                 ),
                 "risk_level": analysis_data.get("risk_level", "medium"),
                 "neo_cortex_notes": analysis_data.get("neo_cortex_notes", ""),
@@ -324,49 +422,62 @@ class NeoCortexAnalyzer:
         self, incident_type: str, hippocampus_result: Dict, start_time: float
     ) -> Dict:
         processing_ms = int((time.time() - start_time) * 1000)
+        hip_conf = hippocampus_result["initial_confidence"]
+        has_negatives = hippocampus_result.get("negative_match_ratio", 0) > 0.2
+
+        # More nuanced fallback that respects Hippocampus findings
         decision_map = {
-            "offside": (
-                "Offside - Goal Should Be Disallowed",
-                "Player position analysis suggests offside based on available evidence",
-            ),
-            "handball": (
-                "Handball - Free Kick/Penalty",
-                "Ball contact with arm/hand detected in the incident description",
-            ),
-            "foul": (
-                "Foul Confirmed",
-                "Contact appears to meet foul criteria based on incident details",
-            ),
-            "penalty": (
-                "Penalty - Review Recommended",
-                "Incident occurred in penalty area, warranting further review",
-            ),
-            "goal_line": (
-                "Goal Line Review Required",
-                "Ball position relative to goal line needs technology verification",
-            ),
-            "red_card": (
-                "Red Card - Serious Foul Play",
-                "Challenge severity warrants dismissal based on description",
-            ),
-            "other": (
-                "Further Review Required",
-                "Additional analysis needed for definitive ruling",
-            ),
+            "offside": [
+                ("Offside - Goal Disallowed", "Pattern analysis indicates player beyond last defender", 70),
+                ("Marginal - On-Field Decision Stands", "Insufficient evidence for clear offside call", 50),
+            ],
+            "handball": [
+                ("Handball - Free Kick Awarded", "Ball-to-arm contact detected in description", 65),
+                ("No Handball - Natural Arm Position", "Arm position appears natural based on context", 55),
+            ],
+            "foul": [
+                ("Foul Confirmed - Free Kick", "Challenge appears to meet foul criteria", 60),
+                ("No Foul - Fair Challenge", "Description suggests legitimate attempt to play ball", 50),
+            ],
+            "penalty": [
+                ("Penalty Awarded", "Offence appears to have occurred inside penalty area", 65),
+                ("No Penalty - Insufficient Evidence", "Cannot confirm foul occurred inside the area", 50),
+            ],
+            "goal_line": [
+                ("Goal Confirmed", "Evidence suggests ball fully crossed the line", 70),
+                ("No Goal - Ball Did Not Fully Cross", "Insufficient evidence ball completely crossed", 55),
+            ],
+            "red_card": [
+                ("Red Card - Serious Foul Play", "Excessive force or endangering safety detected", 70),
+                ("Yellow Card - Reckless but Not Excessive", "Foul was reckless but not brutal/excessive", 55),
+            ],
+            "other": [
+                ("Further Review Required", "Insufficient information for definitive ruling", 40),
+            ],
         }
-        suggestion, reasoning = decision_map.get(incident_type, decision_map["other"])
+
+        options = decision_map.get(incident_type, decision_map["other"])
+        # Pick based on whether negatives were found
+        if has_negatives and len(options) > 1:
+            suggestion, reasoning, conf = options[1]
+        else:
+            suggestion, reasoning, conf = options[0]
+
+        # Blend with hippocampus confidence
+        final_conf = (hip_conf * 0.4 + conf * 0.6)
+
         return {
             "stage": "neo_cortex",
-            "confidence_score": hippocampus_result["initial_confidence"] + 3,
+            "confidence_score": round(min(85, max(20, final_conf)), 1),
             "suggested_decision": suggestion,
             "reasoning": reasoning,
             "key_factors": [
-                "Incident classification",
-                "Rule interpretation",
-                "Historical precedent",
+                "Pattern-based analysis",
+                "IFAB Law interpretation",
+                "Heuristic confidence calibration",
             ],
-            "risk_level": "medium",
-            "neo_cortex_notes": "Heuristic analysis - GPT-5.2 enhancement available",
+            "risk_level": "medium" if final_conf >= 50 else "high",
+            "neo_cortex_notes": "Heuristic mode - GPT-5.2 unavailable. Results less reliable.",
             "processing_time_ms": processing_ms,
         }
 
