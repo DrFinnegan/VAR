@@ -24,3 +24,6 @@ Pure football VAR audit system. ID PROTECTION module has been separated into its
 - Frontend: React 19, Tailwind, Shadcn/UI, Recharts
 - AI: GPT-5.2 via Emergent Integrations
 - Storage: Emergent Object Storage
+
+## Changelog
+- 2026-02: Player Tracking Trail added to Decision Comparison Mode — SVG overlay draws dashed cyan arrows with Δ distance labels between matching BEFORE/AFTER player positions (formation players matched by team+id order; markers matched by color+index). Toggle (TRAIL ON/OFF) with moved-count badge; trail also rendered in PNG export for referee report.
