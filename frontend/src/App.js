@@ -9,7 +9,7 @@ import {
   Target, Eye, LogOut, LogIn, UserPlus, Zap, Activity, Image,
   ArrowRight, Radio, Wifi, WifiOff, Trophy, Calendar, ThumbsUp, ThumbsDown, Lock,
   Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Maximize2, Volume2,
-  Pen, Circle, Minus, Undo2, Trash2, Save, Crosshair
+  Pen, Circle, Minus, Undo2, Trash2, Save, Crosshair, Download, Users2, Layers
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./components/ui/card";
@@ -533,10 +533,46 @@ const DecisionBadge = ({ status }) => {
 const ANNOTATION_TOOLS = { LINE: "line", CIRCLE: "circle", MARKER: "marker", NONE: "none" };
 const ANNOTATION_COLORS = ["#00E5FF", "#00FF88", "#FF2A2A", "#FFB800", "#FFFFFF"];
 
-const AnnotationCanvas = ({ width, height, annotations, setAnnotations, activeTool, activeColor, isDrawing, setIsDrawing }) => {
+// ── Tactical Formation Presets ────────────────────────────
+const FORMATIONS = {
+  "4-4-2": { label: "4-4-2", positions: [
+    { x: 50, y: 92 }, // GK
+    { x: 15, y: 72 }, { x: 37, y: 75 }, { x: 63, y: 75 }, { x: 85, y: 72 }, // DEF
+    { x: 15, y: 50 }, { x: 37, y: 52 }, { x: 63, y: 52 }, { x: 85, y: 50 }, // MID
+    { x: 35, y: 28 }, { x: 65, y: 28 }, // FWD
+  ]},
+  "4-3-3": { label: "4-3-3", positions: [
+    { x: 50, y: 92 },
+    { x: 15, y: 72 }, { x: 37, y: 75 }, { x: 63, y: 75 }, { x: 85, y: 72 },
+    { x: 30, y: 50 }, { x: 50, y: 48 }, { x: 70, y: 50 },
+    { x: 20, y: 25 }, { x: 50, y: 22 }, { x: 80, y: 25 },
+  ]},
+  "3-5-2": { label: "3-5-2", positions: [
+    { x: 50, y: 92 },
+    { x: 25, y: 75 }, { x: 50, y: 77 }, { x: 75, y: 75 },
+    { x: 10, y: 50 }, { x: 30, y: 48 }, { x: 50, y: 45 }, { x: 70, y: 48 }, { x: 90, y: 50 },
+    { x: 35, y: 25 }, { x: 65, y: 25 },
+  ]},
+  "4-2-3-1": { label: "4-2-3-1", positions: [
+    { x: 50, y: 92 },
+    { x: 15, y: 72 }, { x: 37, y: 75 }, { x: 63, y: 75 }, { x: 85, y: 72 },
+    { x: 35, y: 55 }, { x: 65, y: 55 },
+    { x: 20, y: 38 }, { x: 50, y: 35 }, { x: 80, y: 38 },
+    { x: 50, y: 20 },
+  ]},
+  "5-3-2": { label: "5-3-2", positions: [
+    { x: 50, y: 92 },
+    { x: 10, y: 70 }, { x: 28, y: 75 }, { x: 50, y: 77 }, { x: 72, y: 75 }, { x: 90, y: 70 },
+    { x: 30, y: 50 }, { x: 50, y: 48 }, { x: 70, y: 50 },
+    { x: 35, y: 25 }, { x: 65, y: 25 },
+  ]},
+};
+
+const AnnotationCanvas = ({ width, height, annotations, setAnnotations, activeTool, activeColor, isDrawing, setIsDrawing, formations }) => {
   const canvasRef = useRef(null);
   const [startPos, setStartPos] = useState(null);
   const [currentPos, setCurrentPos] = useState(null);
+  const [draggingPlayer, setDraggingPlayer] = useState(null);
 
   const getPos = (e) => {
     const canvas = canvasRef.current;
@@ -546,9 +582,10 @@ const AnnotationCanvas = ({ width, height, annotations, setAnnotations, activeTo
   };
 
   const handleMouseDown = (e) => {
-    if (activeTool === ANNOTATION_TOOLS.NONE) return;
+    if (activeTool === ANNOTATION_TOOLS.NONE && !draggingPlayer) return;
     const pos = getPos(e);
     if (!pos) return;
+    if (activeTool === ANNOTATION_TOOLS.NONE) return;
     setIsDrawing(true);
     setStartPos(pos);
     setCurrentPos(pos);
@@ -559,11 +596,19 @@ const AnnotationCanvas = ({ width, height, annotations, setAnnotations, activeTo
   };
 
   const handleMouseMove = (e) => {
+    const pos = getPos(e);
+    if (!pos) return;
+    if (draggingPlayer !== null) {
+      // Drag formation player
+      setAnnotations(prev => prev.map(a => a.id === draggingPlayer ? { ...a, x: pos.x, y: pos.y } : a));
+      return;
+    }
     if (!isDrawing || !startPos) return;
-    setCurrentPos(getPos(e));
+    setCurrentPos(pos);
   };
 
   const handleMouseUp = () => {
+    if (draggingPlayer !== null) { setDraggingPlayer(null); return; }
     if (!isDrawing || !startPos || !currentPos) { setIsDrawing(false); return; }
     if (activeTool === ANNOTATION_TOOLS.LINE) {
       setAnnotations(prev => [...prev, { type: "line", x1: startPos.x, y1: startPos.y, x2: currentPos.x, y2: currentPos.y, color: activeColor, id: Date.now() }]);
@@ -577,18 +622,24 @@ const AnnotationCanvas = ({ width, height, annotations, setAnnotations, activeTo
     setCurrentPos(null);
   };
 
-  // Render to SVG overlay
+  const handlePlayerDragStart = (e, playerId) => {
+    e.stopPropagation();
+    setDraggingPlayer(playerId);
+  };
+
+  const isInteractive = activeTool !== ANNOTATION_TOOLS.NONE || draggingPlayer !== null || formations.length > 0;
+
   return (
     <svg
       ref={canvasRef}
       className="absolute inset-0 w-full h-full"
       viewBox="0 0 100 100"
       preserveAspectRatio="none"
-      style={{ cursor: activeTool !== ANNOTATION_TOOLS.NONE ? 'crosshair' : 'default', pointerEvents: activeTool !== ANNOTATION_TOOLS.NONE ? 'auto' : 'none', zIndex: 20 }}
+      style={{ cursor: activeTool !== ANNOTATION_TOOLS.NONE ? 'crosshair' : draggingPlayer ? 'grabbing' : 'default', pointerEvents: isInteractive ? 'auto' : 'none', zIndex: 20 }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      onMouseLeave={() => { if (isDrawing) handleMouseUp(); }}
+      onMouseLeave={() => { if (isDrawing) handleMouseUp(); if (draggingPlayer) setDraggingPlayer(null); }}
       data-testid="annotation-canvas"
     >
       {/* Saved annotations */}
@@ -599,6 +650,19 @@ const AnnotationCanvas = ({ width, height, annotations, setAnnotations, activeTo
           <g key={a.id}>
             <circle cx={a.x} cy={a.y} r="1.2" fill={a.color} opacity="0.8" />
             <circle cx={a.x} cy={a.y} r="2.5" stroke={a.color} strokeWidth="0.3" fill="none" opacity="0.5" />
+          </g>
+        );
+        if (a.type === "formation_player") return (
+          <g key={a.id} style={{ cursor: 'grab' }} onMouseDown={(e) => handlePlayerDragStart(e, a.id)}>
+            <circle cx={a.x} cy={a.y} r="2" fill={a.color} opacity="0.9" stroke={a.color === "#00E5FF" ? "#00E5FF" : "#FF2A2A"} strokeWidth="0.3" />
+            <circle cx={a.x} cy={a.y} r="3" stroke={a.color} strokeWidth="0.2" fill="none" opacity="0.3" />
+            {a.label && <text x={a.x} y={a.y + 4.5} textAnchor="middle" fill={a.color} fontSize="2.2" fontFamily="monospace" opacity="0.7">{a.label}</text>}
+          </g>
+        );
+        if (a.type === "offside_line") return (
+          <g key={a.id}>
+            <line x1={0} y1={a.y} x2={100} y2={a.y} stroke={a.color} strokeWidth="0.3" strokeDasharray="1.5 0.8" opacity="0.8" />
+            <text x={2} y={a.y - 1} fill={a.color} fontSize="2" fontFamily="monospace" opacity="0.7">OFFSIDE LINE</text>
           </g>
         );
         return null;
@@ -615,42 +679,98 @@ const AnnotationCanvas = ({ width, height, annotations, setAnnotations, activeTo
 };
 
 // ── Annotation Toolbar ────────────────────────────────────
-const AnnotationToolbar = ({ activeTool, setActiveTool, activeColor, setActiveColor, annotations, setAnnotations, onSave }) => (
-  <div className="flex items-center gap-1 bg-[#0A0A0A] border border-white/[0.08] p-1" data-testid="annotation-toolbar">
-    {/* Tool buttons */}
-    {[
-      { tool: ANNOTATION_TOOLS.LINE, icon: Minus, label: "Offside Line", testid: "tool-line" },
-      { tool: ANNOTATION_TOOLS.CIRCLE, icon: Circle, label: "Circle Marker", testid: "tool-circle" },
-      { tool: ANNOTATION_TOOLS.MARKER, icon: Crosshair, label: "Contact Point", testid: "tool-marker" },
-    ].map(({ tool, icon: Icon, label, testid }) => (
-      <button key={tool} onClick={() => setActiveTool(activeTool === tool ? ANNOTATION_TOOLS.NONE : tool)} title={label}
-        className={`h-7 w-7 flex items-center justify-center transition-all ${activeTool === tool ? 'bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/40' : 'text-gray-500 hover:text-white border border-transparent'}`}
-        data-testid={testid}>
-        <Icon className="w-3.5 h-3.5" />
-      </button>
-    ))}
+const AnnotationToolbar = ({ activeTool, setActiveTool, activeColor, setActiveColor, annotations, setAnnotations, onSave, onExport, activeFormations, setActiveFormations }) => {
+  const [showFormations, setShowFormations] = useState(false);
 
-    <div className="h-4 w-[1px] bg-white/[0.06] mx-1" />
+  const placeFormation = (formationKey, team) => {
+    const f = FORMATIONS[formationKey];
+    if (!f) return;
+    const teamColor = team === "home" ? "#00E5FF" : "#FF2A2A";
+    const offset = team === "away" ? { x: 0, y: -2 } : { x: 0, y: 2 };
+    const positions = ["GK", "DEF", "DEF", "DEF", "DEF", "DEF", "MID", "MID", "MID", "MID", "FWD", "FWD", "FWD"];
+    const newPlayers = f.positions.map((p, i) => ({
+      type: "formation_player", x: p.x + offset.x, y: p.y + offset.y,
+      color: teamColor, team, formation: formationKey,
+      label: (positions[i] || "").substring(0, 3), id: Date.now() + i,
+    }));
+    setAnnotations(prev => [...prev.filter(a => !(a.type === "formation_player" && a.team === team)), ...newPlayers]);
+    setActiveFormations(prev => ({ ...prev, [team]: formationKey }));
+  };
 
-    {/* Color picker */}
-    <div className="flex items-center gap-0.5" data-testid="color-picker">
-      {ANNOTATION_COLORS.map(c => (
-        <button key={c} onClick={() => setActiveColor(c)} className={`w-4 h-4 transition-all ${activeColor === c ? 'ring-1 ring-white ring-offset-1 ring-offset-[#050505] scale-125' : 'opacity-60 hover:opacity-100'}`} style={{ backgroundColor: c }} data-testid={`color-${c.replace('#','')}`} />
-      ))}
+  const addOffsideLine = () => {
+    setAnnotations(prev => [...prev, { type: "offside_line", y: 65, color: "#FFB800", id: Date.now() }]);
+  };
+
+  return (
+    <div className="bg-[#0A0A0A] border border-white/[0.08]" data-testid="annotation-toolbar">
+      <div className="flex items-center gap-1 p-1 flex-wrap">
+        {/* Drawing tools */}
+        {[
+          { tool: ANNOTATION_TOOLS.LINE, icon: Minus, label: "Draw Line", testid: "tool-line" },
+          { tool: ANNOTATION_TOOLS.CIRCLE, icon: Circle, label: "Circle", testid: "tool-circle" },
+          { tool: ANNOTATION_TOOLS.MARKER, icon: Crosshair, label: "Point Marker", testid: "tool-marker" },
+        ].map(({ tool, icon: Icon, label, testid }) => (
+          <button key={tool} onClick={() => setActiveTool(activeTool === tool ? ANNOTATION_TOOLS.NONE : tool)} title={label}
+            className={`h-7 w-7 flex items-center justify-center transition-all ${activeTool === tool ? 'bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/40' : 'text-gray-500 hover:text-white border border-transparent'}`}
+            data-testid={testid}><Icon className="w-3.5 h-3.5" /></button>
+        ))}
+
+        <div className="h-4 w-[1px] bg-white/[0.06] mx-0.5" />
+
+        {/* Formation + Offside */}
+        <button onClick={() => setShowFormations(!showFormations)} title="Team Formation Overlay"
+          className={`h-7 px-2 flex items-center gap-1 text-[9px] font-mono transition-all ${showFormations ? 'bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/40' : 'text-gray-500 hover:text-white border border-transparent'}`}
+          data-testid="tool-formation"><Users2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">FORMATION</span></button>
+        <button onClick={addOffsideLine} title="Add Offside Line" className="h-7 px-2 flex items-center gap-1 text-[9px] font-mono text-gray-500 hover:text-[#FFB800] border border-transparent transition-all" data-testid="tool-offside-line"><Layers className="w-3.5 h-3.5" /><span className="hidden sm:inline">OFFSIDE</span></button>
+
+        <div className="h-4 w-[1px] bg-white/[0.06] mx-0.5" />
+
+        {/* Colors */}
+        <div className="flex items-center gap-0.5" data-testid="color-picker">
+          {ANNOTATION_COLORS.map(c => (
+            <button key={c} onClick={() => setActiveColor(c)} className={`w-4 h-4 transition-all ${activeColor === c ? 'ring-1 ring-white ring-offset-1 ring-offset-[#050505] scale-125' : 'opacity-60 hover:opacity-100'}`} style={{ backgroundColor: c }} data-testid={`color-${c.replace('#','')}`} />
+          ))}
+        </div>
+
+        <div className="h-4 w-[1px] bg-white/[0.06] mx-0.5" />
+
+        {/* Actions */}
+        <button onClick={() => setAnnotations(prev => prev.slice(0, -1))} className="h-7 w-7 flex items-center justify-center text-gray-500 hover:text-[#FFB800] transition-all" title="Undo" data-testid="annotation-undo"><Undo2 className="w-3.5 h-3.5" /></button>
+        <button onClick={() => { setAnnotations([]); setActiveFormations({}); }} className="h-7 w-7 flex items-center justify-center text-gray-500 hover:text-[#FF2A2A] transition-all" title="Clear all" data-testid="annotation-clear"><Trash2 className="w-3.5 h-3.5" /></button>
+        {onSave && annotations.length > 0 && (
+          <button onClick={onSave} className="h-7 px-2 flex items-center gap-1 text-[#00FF88] text-[9px] font-mono border border-[#00FF88]/30 bg-[#00FF88]/10 hover:bg-[#00FF88]/20 transition-all" data-testid="annotation-save"><Save className="w-3 h-3" />SAVE</button>
+        )}
+        {onExport && (
+          <button onClick={onExport} className="h-7 px-2 flex items-center gap-1 text-[#FFB800] text-[9px] font-mono border border-[#FFB800]/30 bg-[#FFB800]/10 hover:bg-[#FFB800]/20 transition-all" title="Export to PNG" data-testid="annotation-export"><Download className="w-3 h-3" />PNG</button>
+        )}
+        {annotations.length > 0 && <span className="text-[9px] font-mono text-gray-600 ml-1">{annotations.length}</span>}
+      </div>
+
+      {/* Formation Selector Panel */}
+      {showFormations && (
+        <div className="border-t border-white/[0.06] p-2 flex flex-wrap gap-2" data-testid="formation-panel">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] font-mono text-[#00E5FF]">HOME</span>
+            {Object.keys(FORMATIONS).map(k => (
+              <button key={`h-${k}`} onClick={() => placeFormation(k, "home")}
+                className={`text-[9px] font-mono px-2 py-1 transition-all ${activeFormations.home === k ? 'bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/40' : 'text-gray-500 hover:text-white border border-white/[0.06]'}`}
+                data-testid={`formation-home-${k}`}>{k}</button>
+            ))}
+          </div>
+          <div className="h-4 w-[1px] bg-white/[0.06]" />
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] font-mono text-[#FF2A2A]">AWAY</span>
+            {Object.keys(FORMATIONS).map(k => (
+              <button key={`a-${k}`} onClick={() => placeFormation(k, "away")}
+                className={`text-[9px] font-mono px-2 py-1 transition-all ${activeFormations.away === k ? 'bg-[#FF2A2A]/20 text-[#FF2A2A] border border-[#FF2A2A]/40' : 'text-gray-500 hover:text-white border border-white/[0.06]'}`}
+                data-testid={`formation-away-${k}`}>{k}</button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
-
-    <div className="h-4 w-[1px] bg-white/[0.06] mx-1" />
-
-    {/* Actions */}
-    <button onClick={() => setAnnotations(prev => prev.slice(0, -1))} className="h-7 w-7 flex items-center justify-center text-gray-500 hover:text-[#FFB800] border border-transparent transition-all" title="Undo" data-testid="annotation-undo"><Undo2 className="w-3.5 h-3.5" /></button>
-    <button onClick={() => setAnnotations([])} className="h-7 w-7 flex items-center justify-center text-gray-500 hover:text-[#FF2A2A] border border-transparent transition-all" title="Clear all" data-testid="annotation-clear"><Trash2 className="w-3.5 h-3.5" /></button>
-    {onSave && annotations.length > 0 && (
-      <button onClick={onSave} className="h-7 px-2 flex items-center justify-center gap-1 text-[#00FF88] text-[9px] font-mono border border-[#00FF88]/30 bg-[#00FF88]/10 hover:bg-[#00FF88]/20 transition-all" title="Save annotations" data-testid="annotation-save"><Save className="w-3 h-3" />SAVE</button>
-    )}
-
-    {annotations.length > 0 && <span className="text-[9px] font-mono text-gray-600 ml-1">{annotations.length} marks</span>}
-  </div>
-);
+  );
+};
 
 // ── Video Stage with Match Replay Scrubber ────────────────
 const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, onSaveAnnotations }) => {
@@ -666,6 +786,8 @@ const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, onSaveAnn
   const [activeTool, setActiveTool] = useState(ANNOTATION_TOOLS.NONE);
   const [activeColor, setActiveColor] = useState("#00E5FF");
   const [isAnnotating, setIsAnnotating] = useState(false);
+  const [activeFormations, setActiveFormations] = useState({});
+  const stageRef = useRef(null);
   const imgSrc = previewImage || (incident?.has_image && incident?.storage_path ? `${API}/files/${incident.storage_path}` : null);
   const videoSrc = previewVideo || (incident?.has_video && incident?.video_storage_path ? `${API}/files/${incident.video_storage_path}` : null);
 
@@ -682,6 +804,82 @@ const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, onSaveAnn
       toast.success(`${annotations.length} annotations saved!`);
       if (onSaveAnnotations) onSaveAnnotations(annotations);
     } catch { toast.error("Failed to save annotations"); }
+  };
+
+  // PNG Export for referee reports
+  const handleExport = async () => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    try {
+      const canvas = document.createElement("canvas");
+      const w = 1920, h = 1080;
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+
+      // Draw background
+      ctx.fillStyle = "#050505";
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw the video frame / image
+      const mediaEl = stage.querySelector("video") || stage.querySelector("img");
+      if (mediaEl) {
+        try { ctx.drawImage(mediaEl, 0, 0, w, h - 120); } catch { /* cross-origin */ }
+      }
+
+      // Draw annotations
+      const mainH = h - 120;
+      annotations.forEach(a => {
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = a.color || "#00E5FF";
+        ctx.fillStyle = a.color || "#00E5FF";
+        if (a.type === "line") {
+          ctx.beginPath(); ctx.moveTo(a.x1/100*w, a.y1/100*mainH); ctx.lineTo(a.x2/100*w, a.y2/100*mainH); ctx.stroke();
+        } else if (a.type === "circle") {
+          ctx.beginPath(); ctx.arc(a.cx/100*w, a.cy/100*mainH, a.r/100*Math.min(w,mainH), 0, Math.PI*2); ctx.stroke();
+        } else if (a.type === "marker") {
+          ctx.beginPath(); ctx.arc(a.x/100*w, a.y/100*mainH, 8, 0, Math.PI*2); ctx.fill();
+          ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(a.x/100*w, a.y/100*mainH, 16, 0, Math.PI*2); ctx.stroke();
+        } else if (a.type === "formation_player") {
+          ctx.beginPath(); ctx.arc(a.x/100*w, a.y/100*mainH, 12, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "#000"; ctx.font = "bold 10px monospace"; ctx.textAlign = "center";
+          ctx.fillText(a.label || "", a.x/100*w, a.y/100*mainH + 3.5);
+          ctx.fillStyle = a.color;
+        } else if (a.type === "offside_line") {
+          ctx.setLineDash([12, 6]); ctx.beginPath(); ctx.moveTo(0, a.y/100*mainH); ctx.lineTo(w, a.y/100*mainH); ctx.stroke(); ctx.setLineDash([]);
+          ctx.font = "bold 14px monospace"; ctx.fillText("OFFSIDE LINE", 20, a.y/100*mainH - 8);
+        }
+      });
+
+      // Draw report footer
+      const fy = h - 110;
+      ctx.fillStyle = "#0A0A0A"; ctx.fillRect(0, fy, w, 110);
+      ctx.strokeStyle = "#00E5FF33"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, fy); ctx.lineTo(w, fy); ctx.stroke();
+
+      ctx.fillStyle = "#00E5FF"; ctx.font = "bold 18px monospace";
+      ctx.fillText("OCTON VAR - REFEREE REPORT", 20, fy + 28);
+      ctx.fillStyle = "#888"; ctx.font = "12px monospace";
+      ctx.fillText(`Dr Finnegan's Forensic AI | ${new Date().toISOString().split("T")[0]}`, 20, fy + 48);
+      if (incident) {
+        ctx.fillText(`Incident: ${incident.incident_type?.toUpperCase()} | Match Time: ${incident.timestamp_in_match || "N/A"} | ${incident.team_involved || ""} ${incident.player_involved || ""}`, 20, fy + 68);
+        const ai = incident.ai_analysis;
+        if (ai) {
+          ctx.fillStyle = "#00E5FF"; ctx.font = "bold 14px monospace";
+          ctx.fillText(`AI Confidence: ${ai.final_confidence?.toFixed(1) || 0}% | Decision: ${ai.suggested_decision || "N/A"}`, 20, fy + 92);
+        }
+      }
+      ctx.fillStyle = "#333"; ctx.font = "10px monospace";
+      ctx.fillText(`Frame: ${currentFrame}/${totalFrames} | ${timeStr} | Annotations: ${annotations.length}`, w - 400, fy + 92);
+
+      // Download
+      const link = document.createElement("a");
+      link.download = `OCTON_VAR_Report_${incident?.id?.substring(0,8) || "frame"}_${Date.now()}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      toast.success("Referee report exported as PNG!");
+    } catch (err) {
+      toast.error("Export failed: " + err.message);
+    }
   };
 
   // Sync video element with scrubber
@@ -760,7 +958,7 @@ const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, onSaveAnn
   const speeds = [0.25, 0.5, 1, 2, 4];
 
   return (
-    <div className="relative border border-white/[0.08] bg-black overflow-hidden" data-testid="video-player-container">
+    <div ref={stageRef} className="relative border border-white/[0.08] bg-black overflow-hidden" data-testid="video-player-container">
       <div className="aspect-video relative">
         {videoSrc ? (
           <video ref={videoRef} src={videoSrc} className="w-full h-full object-cover" onTimeUpdate={handleVideoTimeUpdate} onEnded={() => setIsPlaying(false)} onLoadedMetadata={() => { if (videoRef.current) videoRef.current.playbackRate = playbackSpeed; }} playsInline muted />
@@ -771,7 +969,7 @@ const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, onSaveAnn
         )}
         <div className="absolute inset-0 grid-overlay opacity-50" />
         {/* Annotation Canvas Overlay */}
-        <AnnotationCanvas width={100} height={100} annotations={annotations} setAnnotations={setAnnotations} activeTool={activeTool} activeColor={activeColor} isDrawing={isAnnotating} setIsDrawing={setIsAnnotating} />
+        <AnnotationCanvas width={100} height={100} annotations={annotations} setAnnotations={setAnnotations} activeTool={activeTool} activeColor={activeColor} isDrawing={isAnnotating} setIsDrawing={setIsAnnotating} formations={Object.values(activeFormations)} />
         <div className="absolute inset-0 pointer-events-none overflow-hidden"><div className="w-full h-[2px] bg-gradient-to-r from-transparent via-[#00E5FF]/60 to-transparent animate-scan" /></div>
         {incident?.ai_analysis && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
@@ -797,7 +995,7 @@ const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, onSaveAnn
       </div>
 
       {/* ANNOTATION TOOLBAR */}
-      <AnnotationToolbar activeTool={activeTool} setActiveTool={setActiveTool} activeColor={activeColor} setActiveColor={setActiveColor} annotations={annotations} setAnnotations={setAnnotations} onSave={incident?.id ? handleSaveAnnotations : null} />
+      <AnnotationToolbar activeTool={activeTool} setActiveTool={setActiveTool} activeColor={activeColor} setActiveColor={setActiveColor} annotations={annotations} setAnnotations={setAnnotations} onSave={incident?.id ? handleSaveAnnotations : null} onExport={handleExport} activeFormations={activeFormations} setActiveFormations={setActiveFormations} />
 
       {/* MATCH REPLAY SCRUBBER */}
       <div className="bg-[#050505] border-t border-white/[0.06]">
