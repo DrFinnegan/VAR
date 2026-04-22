@@ -285,15 +285,15 @@ const Sidebar = () => {
   };
 
   return (
-    <div className="w-64 flex-shrink-0 border-r border-white/10 h-screen sticky top-0 bg-[#050505] flex flex-col">
-      <div className="p-6 border-b border-white/10">
+    <div className="w-60 flex-shrink-0 border-r border-white/[0.06] h-screen sticky top-0 bg-[#050505] flex flex-col">
+      <div className="p-5 border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-sm bg-[#00E5FF] flex items-center justify-center">
-            <Shield className="w-6 h-6 text-black" />
+          <div className="w-9 h-9 bg-[#00E5FF] flex items-center justify-center">
+            <Shield className="w-5 h-5 text-black" />
           </div>
           <div>
-            <h1 className="font-heading font-black text-white text-lg tracking-tight">OCTON VAR</h1>
-            <p className="text-[10px] font-mono text-[#00E5FF] tracking-[0.12em]">DR FINNEGAN'S FORENSIC AI</p>
+            <h1 className="font-heading font-black text-white text-base tracking-tighter">OCTON VAR</h1>
+            <p className="text-[8px] font-mono text-[#00E5FF]/60 tracking-[0.15em]">DR FINNEGAN'S FORENSIC AI</p>
           </div>
         </div>
       </div>
@@ -323,26 +323,26 @@ const Sidebar = () => {
       </nav>
 
       {user && (
-        <div className="p-4 border-t border-white/10 space-y-3">
+        <div className="p-4 border-t border-white/[0.06] space-y-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-[#00E5FF]/20 flex items-center justify-center">
-              <Users className="w-4 h-4 text-[#00E5FF]" />
+            <div className="w-7 h-7 bg-[#00E5FF]/10 flex items-center justify-center border border-[#00E5FF]/20">
+              <Users className="w-3.5 h-3.5 text-[#00E5FF]" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-white truncate">{user.name}</p>
-              <p className="text-[10px] font-mono text-gray-400 uppercase">{user.role?.replace("_", " ")}</p>
+              <p className="text-[11px] text-white truncate">{user.name}</p>
+              <p className="text-[9px] font-mono text-gray-600 uppercase tracking-wider">{user.role?.replace("_", " ")}</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="w-full text-gray-400 hover:text-white justify-start" data-testid="logout-button">
-            <LogOut className="w-4 h-4 mr-2" />Sign Out
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="w-full text-gray-500 hover:text-white justify-start h-7 text-[10px] font-mono tracking-wider" data-testid="logout-button">
+            <LogOut className="w-3 h-3 mr-2" />SIGN OUT
           </Button>
         </div>
       )}
 
-      <div className="p-4 border-t border-white/10">
+      <div className="p-4 border-t border-white/[0.06]">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[#00FF66] animate-pulse" />
-          <span className="text-xs font-mono text-gray-400">SYSTEM ONLINE</span>
+          <div className="w-1.5 h-1.5 bg-[#00FF88] animate-pulse" />
+          <span className="text-[9px] font-mono text-gray-600 tracking-wider">SYSTEM ONLINE</span>
         </div>
       </div>
     </div>
@@ -357,53 +357,100 @@ const BrainPathway = ({ analysis }) => {
   if (!hippo || !neo) return null;
 
   return (
-    <div className="border border-white/10 bg-[#0A0A0A] rounded-sm p-4 space-y-3" data-testid="brain-pathway-viz">
-      <div className="flex items-center gap-2 mb-2">
-        <Brain className="w-4 h-4 text-[#00E5FF]" />
-        <span className="text-xs font-mono uppercase tracking-[0.15em] text-gray-400">NEURAL PATHWAY</span>
-        <span className="text-[10px] font-mono text-gray-500 ml-auto">{analysis.engine_version}</span>
-      </div>
-
-      <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
-        {/* Hippocampus */}
-        <div className="border border-[#00FF66]/30 bg-[#00FF66]/5 rounded-sm p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <Zap className="w-3 h-3 text-[#00FF66]" />
-            <span className="text-[10px] font-mono uppercase tracking-[0.1em] text-[#00FF66]">HIPPOCAMPUS</span>
+    <div className="relative border border-white/[0.08] bg-black/60 backdrop-blur-xl overflow-hidden corner-brackets" data-testid="brain-pathway-viz"
+      style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1737505599159-5ffc1dcbc08f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MjJ8MHwxfHNlYXJjaHwxfHxuZXVyYWwlMjBuZXR3b3JrJTIwYWJzdHJhY3QlMjBkYXRhfGVufDB8fHx8MTc3Njg2Nzk2NHww&ixlib=rb-4.1.0&q=85)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
+      {/* Dark overlay */}
+      <div className="absolute inset-0 bg-black/85" />
+      
+      <div className="relative z-10 p-5">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Brain className="w-4 h-4 text-[#00E5FF] glow-cyan" />
+            <span className="text-xs font-heading font-bold uppercase tracking-[0.2em] text-[#00E5FF]">OCTON NEURAL PATHWAY</span>
           </div>
-          <p className="text-[10px] font-mono text-gray-400 mb-1">Lightning speed analysis</p>
-          <p className="text-xl font-mono font-medium text-[#00FF66]">{hippo.initial_confidence}%</p>
-          <p className="text-[10px] font-mono text-gray-400 mt-1">{hippo.processing_time_ms}ms</p>
-          <p className="text-[10px] text-gray-400 mt-1 truncate">{hippo.initial_decision}</p>
-        </div>
-
-        {/* Arrow */}
-        <div className="flex flex-col items-center gap-1">
-          <ArrowRight className="w-5 h-5 text-[#00E5FF] animate-pulse" />
-          <span className="text-[8px] font-mono text-gray-500">SIGNAL</span>
-        </div>
-
-        {/* Neo Cortex */}
-        <div className="border border-[#00E5FF]/30 bg-[#00E5FF]/5 rounded-sm p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <Brain className="w-3 h-3 text-[#00E5FF]" />
-            <span className="text-[10px] font-mono uppercase tracking-[0.1em] text-[#00E5FF]">NEO CORTEX</span>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-mono text-gray-500">{analysis.engine_version}</span>
+            {analysis.divergence_flag && (
+              <span className="text-[10px] font-mono text-[#FF2A2A] animate-pulse glow-text-red flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" />DIVERGENCE {analysis.pathway_divergence}pt
+              </span>
+            )}
           </div>
-          <p className="text-[10px] font-mono text-gray-400 mb-1">Deep cognitive analysis</p>
-          <p className="text-xl font-mono font-medium text-[#00E5FF]">{neo.confidence_score}%</p>
-          <p className="text-[10px] font-mono text-gray-400 mt-1">{neo.processing_time_ms}ms</p>
-          <p className="text-[10px] text-gray-400 mt-1 truncate">{neo.suggested_decision}</p>
         </div>
-      </div>
 
-      <div className="flex items-center justify-between text-[10px] font-mono text-gray-500 pt-1 border-t border-white/5">
-        <span>TOTAL: {analysis.total_processing_time_ms}ms</span>
-        <span style={{ color: riskColors[analysis.risk_level] || "#FFB800" }}>RISK: {(analysis.risk_level || "medium").toUpperCase()}</span>
-        <span>SIMILAR: {analysis.similar_historical_cases}</span>
-      </div>
-      <div className="flex items-center justify-between text-[10px] font-mono text-gray-500 pt-1">
-        <span>WEIGHT: Neo Cortex 80% / Hippo 20%</span>
-        {analysis.divergence_flag && <span className="text-[#FF3333] animate-pulse">PATHWAY DIVERGENCE: {analysis.pathway_divergence}pt</span>}
+        {/* Neural Pathway Grid */}
+        <div className="grid grid-cols-[1fr_80px_1fr] gap-0 items-stretch">
+          {/* Hippocampus */}
+          <div className="border border-[#00FF88]/20 bg-[#00FF88]/[0.03] p-4 relative border-glow-green">
+            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-[#00FF88]/60 via-[#00FF88]/20 to-transparent" />
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="w-4 h-4 text-[#00FF88] glow-green" />
+              <span className="text-[11px] font-heading font-bold uppercase tracking-[0.15em] text-[#00FF88]">HIPPOCAMPUS</span>
+            </div>
+            <p className="text-[10px] font-mono text-gray-500 mb-2 tracking-wide">RAPID PATTERN SCAN</p>
+            <div className="flex items-baseline gap-1">
+              <span className="text-3xl font-mono font-bold text-[#00FF88] glow-text-green">{hippo.initial_confidence}</span>
+              <span className="text-sm font-mono text-[#00FF88]/60">%</span>
+            </div>
+            <p className="text-[10px] font-mono text-gray-500 mt-2">{hippo.processing_time_ms}ms</p>
+            <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">{hippo.initial_decision}</p>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {hippo.matched_keywords?.slice(0, 3).map((kw, i) => (
+                <span key={i} className="text-[9px] font-mono px-1.5 py-0.5 bg-[#00FF88]/10 text-[#00FF88]/70 border border-[#00FF88]/10">{kw}</span>
+              ))}
+            </div>
+            <div className="text-[9px] font-mono text-gray-600 mt-2">WEIGHT: 20%</div>
+          </div>
+
+          {/* Signal Bridge */}
+          <div className="flex flex-col items-center justify-center relative">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-full h-[2px] bg-gradient-to-r from-[#00FF88]/40 via-[#00E5FF] to-[#00E5FF]/40 animate-neural-pulse" />
+            </div>
+            <div className="relative z-10 flex flex-col items-center gap-1 bg-[#050505] px-2 py-3 border border-white/[0.08]">
+              <ArrowRight className="w-4 h-4 text-[#00E5FF] glow-cyan" />
+              <span className="text-[7px] font-mono text-[#00E5FF]/60 tracking-[0.15em]">SIGNAL</span>
+              <div className="w-1 h-6 bg-gradient-to-b from-[#00FF88] to-[#00E5FF] opacity-50 animate-data-flow" />
+              <ArrowRight className="w-4 h-4 text-[#00E5FF] glow-cyan" />
+            </div>
+          </div>
+
+          {/* Neo Cortex */}
+          <div className="border border-[#00E5FF]/20 bg-[#00E5FF]/[0.03] p-4 relative border-glow-cyan">
+            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-[#00E5FF]/60 via-[#00E5FF]/20 to-transparent" />
+            <div className="flex items-center gap-2 mb-3">
+              <Brain className="w-4 h-4 text-[#00E5FF] glow-cyan" />
+              <span className="text-[11px] font-heading font-bold uppercase tracking-[0.15em] text-[#00E5FF]">NEO CORTEX</span>
+            </div>
+            <p className="text-[10px] font-mono text-gray-500 mb-2 tracking-wide">DEEP COGNITIVE ANALYSIS</p>
+            <div className="flex items-baseline gap-1">
+              <span className="text-3xl font-mono font-bold text-[#00E5FF] glow-text-cyan">{neo.confidence_score}</span>
+              <span className="text-sm font-mono text-[#00E5FF]/60">%</span>
+            </div>
+            <p className="text-[10px] font-mono text-gray-500 mt-2">{neo.processing_time_ms}ms</p>
+            <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">{neo.suggested_decision}</p>
+            <div className="mt-2">
+              <span className="text-[9px] font-mono px-1.5 py-0.5 border" style={{ color: riskColors[neo.risk_level] || "#FFB800", borderColor: (riskColors[neo.risk_level] || "#FFB800") + "30" }}>
+                RISK: {(neo.risk_level || "medium").toUpperCase()}
+              </span>
+            </div>
+            <div className="text-[9px] font-mono text-gray-600 mt-2">WEIGHT: 80%</div>
+          </div>
+        </div>
+
+        {/* Footer Stats */}
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/[0.06]">
+          <div className="flex items-center gap-4 text-[10px] font-mono text-gray-500">
+            <span>TOTAL: <span className="text-white">{analysis.total_processing_time_ms}ms</span></span>
+            <span>PRECEDENTS: <span className="text-white">{analysis.similar_historical_cases}</span></span>
+            <span>ACCURACY: <span className="text-[#00FF88]">{analysis.historical_accuracy?.toFixed(0)}%</span></span>
+          </div>
+          <div className="text-[10px] font-mono">
+            <span className="text-gray-500">FINAL: </span>
+            <span className="text-white font-bold glow-text-cyan">{analysis.final_confidence}%</span>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -411,12 +458,16 @@ const BrainPathway = ({ analysis }) => {
 
 // ── Reusable Components ───────────────────────────────────
 const ConfidenceScore = ({ score, size = "default" }) => {
-  const getColor = (s) => s >= 90 ? "#00FF66" : s >= 70 ? "#00E5FF" : s >= 50 ? "#FFB800" : "#FF3333";
-  const sizes = { small: "text-2xl", default: "text-4xl", large: "text-6xl" };
+  const getColor = (s) => s >= 90 ? "#00FF88" : s >= 70 ? "#00E5FF" : s >= 50 ? "#FFB800" : "#FF2A2A";
+  const getGlow = (s) => s >= 90 ? "glow-text-green" : s >= 70 ? "glow-text-cyan" : "";
+  const sizes = { small: "text-2xl", default: "text-5xl", large: "text-6xl" };
   return (
     <div className="flex flex-col items-center" data-testid="ai-confidence-score">
-      <span className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400 mb-1">FINAL CONFIDENCE</span>
-      <span className={`font-mono font-medium tracking-tighter ${sizes[size]}`} style={{ color: getColor(score) }}>{score?.toFixed(1)}%</span>
+      <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-gray-500 mb-2">FINAL CONFIDENCE</span>
+      <div className="flex items-baseline gap-0.5">
+        <span className={`font-mono font-bold tracking-tighter ${sizes[size]} ${getGlow(score)}`} style={{ color: getColor(score) }}>{score?.toFixed(1)}</span>
+        <span className="text-lg font-mono" style={{ color: getColor(score), opacity: 0.5 }}>%</span>
+      </div>
     </div>
   );
 };
@@ -438,35 +489,70 @@ const VideoStage = ({ incident, onAnalyze, previewImage }) => {
   const imgSrc = previewImage || (incident?.has_image && incident?.storage_path ? `${API}/files/${incident.storage_path}` : null);
 
   return (
-    <div className="relative border border-white/10 bg-[#0A0A0A] rounded-sm overflow-hidden" data-testid="video-player-container">
+    <div className="relative border border-white/[0.08] bg-black overflow-hidden" data-testid="video-player-container">
       <div className="aspect-video relative">
         {imgSrc ? (
           <img src={imgSrc} alt="Incident frame" className="w-full h-full object-cover" />
         ) : (
-          <img src="https://images.pexels.com/photos/33911793/pexels-photo-33911793.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940" alt="Stadium" className="w-full h-full object-cover opacity-50" />
+          <img src="https://images.pexels.com/photos/12201296/pexels-photo-12201296.jpeg" alt="Stadium" className="w-full h-full object-cover opacity-40" />
         )}
+        
+        {/* Grid overlay */}
+        <div className="absolute inset-0 grid-overlay opacity-50" />
+        
+        {/* Scan line */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="w-full h-[2px] bg-gradient-to-r from-transparent via-[#00E5FF]/60 to-transparent animate-scan" />
+        </div>
+        
+        {/* Targeting reticle */}
         {incident?.ai_analysis && (
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[#00E5FF] to-transparent animate-pulse" />
-            <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 border-2 border-[#00E5FF] bg-[#00E5FF]/10 rounded-sm">
-              <div className="absolute -top-6 left-0 px-2 py-1 bg-[#00E5FF] text-black text-xs font-mono">OCTON ANALYSIS</div>
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+            {/* Outer reticle */}
+            <div className="w-48 h-48 border-2 border-[#00E5FF]/30 relative reticle-spin" style={{ borderRadius: '50%' }}>
+              <div className="absolute top-1/2 left-0 w-3 h-[1px] bg-[#00E5FF]/60 -translate-y-1/2" />
+              <div className="absolute top-1/2 right-0 w-3 h-[1px] bg-[#00E5FF]/60 -translate-y-1/2" />
+              <div className="absolute left-1/2 top-0 h-3 w-[1px] bg-[#00E5FF]/60 -translate-x-1/2" />
+              <div className="absolute left-1/2 bottom-0 h-3 w-[1px] bg-[#00E5FF]/60 -translate-x-1/2" />
+            </div>
+            {/* Inner crosshair */}
+            <div className="absolute w-24 h-24 border border-[#00E5FF]/20">
+              <div className="absolute top-1/2 left-0 w-full h-[1px] bg-[#00E5FF]/10" />
+              <div className="absolute left-1/2 top-0 h-full w-[1px] bg-[#00E5FF]/10" />
+            </div>
+            {/* Analysis zone label */}
+            <div className="absolute top-[20%] left-1/2 -translate-x-1/2 px-3 py-1 bg-[#00E5FF]/90 text-black text-[10px] font-mono font-bold tracking-wider">
+              OCTON ANALYSIS ZONE
             </div>
           </div>
         )}
-        <div className="absolute top-4 left-4 flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-[#FF3333]' : 'bg-[#00FF66]'}`} />
-          <span className="text-xs font-mono text-white uppercase">{isPlaying ? 'LIVE' : 'PLAYBACK'}</span>
+        
+        {/* Top HUD */}
+        <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-3">
+          <div className="flex items-center gap-2 bg-black/70 backdrop-blur-sm px-2 py-1">
+            <div className={`w-2 h-2 ${isPlaying ? 'bg-[#FF2A2A]' : 'bg-[#00FF88]'} animate-pulse`} />
+            <span className="text-[10px] font-mono text-white uppercase tracking-wider">{isPlaying ? 'LIVE' : 'PLAYBACK'}</span>
+          </div>
+          {incident?.timestamp_in_match && (
+            <div className="bg-black/70 backdrop-blur-sm px-3 py-1">
+              <span className="text-sm font-mono text-white font-bold">{incident.timestamp_in_match}</span>
+            </div>
+          )}
         </div>
-        {incident?.timestamp_in_match && <div className="absolute top-4 right-4 px-2 py-1 bg-black/80 text-white text-sm font-mono">{incident.timestamp_in_match}</div>}
+        
+        {/* Bottom edge glow */}
+        <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#00E5FF]/40 to-transparent" />
       </div>
-      <div className="p-4 border-t border-white/10 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white" onClick={() => setIsPlaying(!isPlaying)} data-testid="play-pause-button"><Play className="w-4 h-4" /></Button>
-          <span className="text-xs font-mono text-gray-400">FRAME: 1847/3200</span>
+      
+      {/* Controls */}
+      <div className="p-3 border-t border-white/[0.06] flex items-center justify-between bg-[#050505]">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white h-8 w-8 p-0" onClick={() => setIsPlaying(!isPlaying)} data-testid="play-pause-button"><Play className="w-4 h-4" /></Button>
+          <span className="text-[10px] font-mono text-gray-500 tracking-wider">FRM 1847/3200</span>
         </div>
         {onAnalyze && (
-          <Button size="sm" className="bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 rounded-sm font-semibold" onClick={onAnalyze} data-testid="analyze-frame-button">
-            <Brain className="w-4 h-4 mr-2" />REANALYZE
+          <Button size="sm" className="bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 h-8 px-4 font-heading font-bold text-[11px] tracking-wider uppercase" onClick={onAnalyze} data-testid="analyze-frame-button">
+            <Brain className="w-3.5 h-3.5 mr-1.5" />REANALYZE
           </Button>
         )}
       </div>
@@ -568,20 +654,25 @@ const LiveVARPage = () => {
   const analysis = selectedIncident?.ai_analysis;
 
   return (
-    <div className="flex-1 min-w-0 p-6 space-y-6 bg-[#050505]" data-testid="live-var-dashboard">
+    <div className="flex-1 min-w-0 p-4 space-y-4 bg-[#050505] grid-overlay overflow-y-auto h-screen" data-testid="live-var-dashboard">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-heading font-black text-white tracking-tight">LIVE VAR ANALYSIS</h1>
-          <p className="text-sm font-body text-gray-400 mt-1">Dr Finnegan's lightning speed incident analysis</p>
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="text-4xl font-heading font-black text-white tracking-tighter uppercase">LIVE VAR</h1>
+            <div className="h-5 w-[1px] bg-white/10" />
+            <span className="text-xs font-mono text-[#00E5FF]/60 tracking-[0.2em]">DR FINNEGAN</span>
+          </div>
+          <p className="text-[11px] font-mono text-gray-500 tracking-wide">OCTON Neocortex forensic incident analysis</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-sm border border-white/10 bg-[#0A0A0A]">
-            {wsConnected ? <Wifi className="w-3 h-3 text-[#00FF66]" /> : <WifiOff className="w-3 h-3 text-[#FF3333]" />}
-            <span className="text-xs font-mono text-gray-400">{wsConnected ? "LIVE FEED" : "OFFLINE"}</span>
+          <div className="flex items-center gap-2 px-3 py-1.5 border border-white/[0.08] bg-[#0A0A0A]">
+            {wsConnected ? <Wifi className="w-3 h-3 text-[#00FF88] glow-green" /> : <WifiOff className="w-3 h-3 text-[#FF2A2A]" />}
+            <span className="text-[10px] font-mono tracking-wider" style={{ color: wsConnected ? '#00FF88' : '#FF2A2A' }}>{wsConnected ? "LIVE SYNC" : "OFFLINE"}</span>
           </div>
           <Dialog open={showNewIncident} onOpenChange={setShowNewIncident}>
             <DialogTrigger asChild>
-              <Button className="bg-white text-black hover:bg-gray-200 rounded-sm font-semibold" data-testid="new-incident-button"><Upload className="w-4 h-4 mr-2" />NEW INCIDENT</Button>
+              <Button className="bg-white text-black hover:bg-gray-200 rounded-none font-heading font-bold text-xs tracking-[0.1em] h-9 px-5 active:scale-[0.98] transition-all" data-testid="new-incident-button"><Upload className="w-3.5 h-3.5 mr-2" />NEW INCIDENT</Button>
             </DialogTrigger>
             <DialogContent className="bg-[#121212] border-white/10 text-white max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader>
@@ -633,21 +724,23 @@ const LiveVARPage = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-[1px] bg-white/[0.04]">
         {[
           { label: "TOTAL INCIDENTS", value: analytics?.total_incidents || 0, icon: AlertTriangle, color: "#FFB800" },
           { label: "AVG CONFIDENCE", value: `${analytics?.average_confidence_score?.toFixed(1) || 0}%`, icon: Brain, color: "#00E5FF" },
-          { label: "AVG DECISION TIME", value: `${analytics?.average_decision_time_seconds?.toFixed(1) || 0}s`, icon: Clock, color: "#00FF66" },
-          { label: "ACCURACY RATE", value: `${analytics?.decision_accuracy_rate?.toFixed(1) || 0}%`, icon: Target, color: "#00FF66" },
+          { label: "AVG DECISION TIME", value: `${analytics?.average_decision_time_seconds?.toFixed(1) || 0}s`, icon: Clock, color: "#00FF88" },
+          { label: "ACCURACY RATE", value: `${analytics?.decision_accuracy_rate?.toFixed(1) || 0}%`, icon: Target, color: "#00FF88" },
         ].map(({ label, value, icon: Icon, color }) => (
-          <Card key={label} className="bg-[#121212] border-white/10 rounded-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">{label}</p><p className="text-3xl font-mono font-medium mt-1" style={{ color }}>{value}</p></div>
-                <Icon className="w-8 h-8" style={{ color }} />
+          <div key={label} className="bg-[#0A0A0A] p-4 relative">
+            <div className="absolute top-0 left-0 w-8 h-[1px]" style={{ backgroundColor: color, opacity: 0.5 }} />
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">{label}</p>
+                <p className="text-2xl font-mono font-bold mt-1" style={{ color }}>{value}</p>
               </div>
-            </CardContent>
-          </Card>
+              <Icon className="w-6 h-6 opacity-30" style={{ color }} />
+            </div>
+          </div>
         ))}
       </div>
 
@@ -658,17 +751,17 @@ const LiveVARPage = () => {
           {/* Brain Pathway */}
           {analysis && <BrainPathway analysis={analysis} />}
           {/* Timeline */}
-          <div className="border border-white/10 bg-[#0A0A0A] rounded-sm p-4" data-testid="timeline-scrubber">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-mono text-gray-400 uppercase">INCIDENT TIMELINE</span>
-              <span className="text-xs font-mono text-gray-400">{incidents.length} EVENTS</span>
+          <div className="border border-white/[0.08] bg-[#0A0A0A] p-4" data-testid="timeline-scrubber">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10px] font-heading font-bold uppercase tracking-[0.2em] text-gray-500">INCIDENT TIMELINE</span>
+              <span className="text-[10px] font-mono text-gray-600">{incidents.length} EVENTS</span>
             </div>
-            <div className="h-2 bg-white/10 rounded-full relative">
+            <div className="h-1 bg-white/[0.06] relative">
               {incidents.slice(0, 10).map((inc, i) => {
-                const sc = inc.decision_status === 'confirmed' ? '#00FF66' : inc.decision_status === 'overturned' ? '#FF3333' : '#FFB800';
-                return <div key={inc.id} className="absolute w-3 h-3 rounded-full -top-0.5 cursor-pointer hover:scale-125 transition-transform" style={{ left: `${(i+1)*9}%`, backgroundColor: sc }} onClick={() => setSelectedIncident(inc)} title={inc.incident_type} />;
+                const sc = inc.decision_status === 'confirmed' ? '#00FF88' : inc.decision_status === 'overturned' ? '#FF2A2A' : '#FFB800';
+                return <div key={inc.id} className="absolute w-2.5 h-2.5 -top-[3px] cursor-pointer hover:scale-150 transition-transform" style={{ left: `${(i+1)*9}%`, backgroundColor: sc }} onClick={() => setSelectedIncident(inc)} title={inc.incident_type} />;
               })}
-              <div className="absolute h-full bg-[#00E5FF]/30 rounded-full" style={{ width: '45%' }} />
+              <div className="absolute h-full bg-[#00E5FF]/20" style={{ width: '45%' }} />
             </div>
           </div>
         </div>
@@ -676,70 +769,67 @@ const LiveVARPage = () => {
         {/* Right Panel */}
         <div className="col-span-1 md:col-span-4 lg:col-span-3 space-y-4">
           {selectedIncident && analysis && (
-            <Card className="bg-[#121212] border-white/10 rounded-sm">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-mono uppercase text-gray-400">OCTON ANALYSIS</CardTitle>
-                  <Button variant="ghost" size="sm" onClick={handleReanalyze} className="text-[#00E5FF] hover:text-[#00E5FF]/80" data-testid="reanalyze-button"><RefreshCw className="w-4 h-4" /></Button>
+            <div className="border border-white/[0.08] bg-[#0A0A0A] relative">
+              <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-[#00E5FF]/40 via-[#00E5FF]/10 to-transparent" />
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-[10px] font-heading font-bold uppercase tracking-[0.2em] text-[#00E5FF]">OCTON ANALYSIS</span>
+                  <Button variant="ghost" size="sm" onClick={handleReanalyze} className="text-[#00E5FF] hover:text-[#00E5FF]/80 h-7 w-7 p-0" data-testid="reanalyze-button"><RefreshCw className="w-3.5 h-3.5" /></Button>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <ConfidenceScore score={analysis.final_confidence || analysis.confidence_score || 0} />
-                <Separator className="bg-white/10" />
-                <div><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400 mb-2">DECISION</p><p className="text-sm font-body text-white">{analysis.suggested_decision}</p></div>
-                <div><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400 mb-2">REASONING</p><p className="text-sm font-body text-gray-300">{analysis.reasoning}</p></div>
-                {analysis.neo_cortex_notes && <div><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400 mb-2">NEO CORTEX NOTES</p><p className="text-xs font-body text-gray-400 italic">{analysis.neo_cortex_notes}</p></div>}
-                <div><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400 mb-2">KEY FACTORS</p>
-                  <div className="flex flex-wrap gap-2">{analysis.key_factors?.map((f, i) => <span key={i} className="text-xs bg-white/10 text-gray-300 px-2 py-1 rounded-sm">{f}</span>)}</div>
+                <div className="space-y-4">
+                  <ConfidenceScore score={analysis.final_confidence || analysis.confidence_score || 0} />
+                  <div className="h-[1px] bg-white/[0.06]" />
+                  <div><p className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500 mb-1.5">DECISION</p><p className="text-sm font-body text-white leading-relaxed">{analysis.suggested_decision}</p></div>
+                  <div><p className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500 mb-1.5">REASONING</p><p className="text-xs font-body text-gray-400 leading-relaxed">{analysis.reasoning}</p></div>
+                  {analysis.neo_cortex_notes && <div><p className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500 mb-1.5">NEO CORTEX</p><p className="text-[11px] font-body text-[#00E5FF]/60 italic">{analysis.neo_cortex_notes}</p></div>}
+                  <div><p className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500 mb-2">KEY FACTORS</p>
+                    <div className="flex flex-wrap gap-1">{analysis.key_factors?.map((f, i) => <span key={i} className="text-[10px] bg-white/[0.04] text-gray-400 px-2 py-1 border border-white/[0.06] font-mono">{f}</span>)}</div>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] font-mono text-gray-600 pt-2 border-t border-white/[0.06]">
+                    <span>HISTORY: {analysis.similar_historical_cases}</span>
+                    <span>{analysis.total_processing_time_ms}ms</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-xs font-mono text-gray-400">
-                  <span>HISTORY: {analysis.similar_historical_cases}</span>
-                  <span>{analysis.total_processing_time_ms}ms</span>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
 
           {selectedIncident?.decision_status === 'pending' && (
-            <Card className="bg-[#121212] border-white/10 rounded-sm">
-              <CardHeader className="pb-2"><CardTitle className="text-sm font-mono uppercase text-gray-400">DECISION</CardTitle></CardHeader>
-              <CardContent className="space-y-2">
-                <Button className="w-full bg-[#00FF66]/10 text-[#00FF66] border border-[#00FF66]/20 hover:bg-[#00FF66]/20 rounded-sm" onClick={() => handleDecision('confirmed', analysis?.suggested_decision || 'Confirmed')} data-testid="confirm-decision-button"><CheckCircle2 className="w-4 h-4 mr-2" />CONFIRM</Button>
-                <Button className="w-full bg-[#FF3333]/10 text-[#FF3333] border border-[#FF3333]/20 hover:bg-[#FF3333]/20 rounded-sm" onClick={() => handleDecision('overturned', 'Decision Overturned')} data-testid="override-decision-button"><XCircle className="w-4 h-4 mr-2" />OVERTURN</Button>
-              </CardContent>
-            </Card>
+            <div className="border border-white/[0.08] bg-[#0A0A0A]">
+              <div className="p-3 border-b border-white/[0.06]"><span className="text-[10px] font-heading font-bold uppercase tracking-[0.2em] text-gray-500">DECISION</span></div>
+              <div className="p-3 space-y-2">
+                <Button className="w-full h-12 bg-[#00FF88]/[0.06] text-[#00FF88] border border-[#00FF88]/20 hover:bg-[#00FF88]/15 hover:border-[#00FF88]/40 rounded-none font-heading font-bold text-xs tracking-[0.15em] uppercase transition-all active:scale-[0.98]" onClick={() => handleDecision('confirmed', analysis?.suggested_decision || 'Confirmed')} data-testid="confirm-decision-button"><CheckCircle2 className="w-4 h-4 mr-2" />CONFIRM</Button>
+                <Button className="w-full h-12 bg-[#FF2A2A]/[0.06] text-[#FF2A2A] border border-[#FF2A2A]/20 hover:bg-[#FF2A2A]/15 hover:border-[#FF2A2A]/40 rounded-none font-heading font-bold text-xs tracking-[0.15em] uppercase transition-all active:scale-[0.98]" onClick={() => handleDecision('overturned', 'Decision Overturned')} data-testid="override-decision-button"><XCircle className="w-4 h-4 mr-2" />OVERTURN</Button>
+              </div>
+            </div>
           )}
 
           {selectedIncident && (
-            <Card className="bg-[#121212] border-white/10 rounded-sm">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between"><IncidentBadge type={selectedIncident.incident_type} /><DecisionBadge status={selectedIncident.decision_status} /></div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm font-body text-gray-300">{selectedIncident.description}</p>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {selectedIncident.timestamp_in_match && <div><span className="font-mono text-gray-400">TIME:</span><span className="text-white ml-1">{selectedIncident.timestamp_in_match}</span></div>}
-                  {selectedIncident.team_involved && <div><span className="font-mono text-gray-400">TEAM:</span><span className="text-white ml-1">{selectedIncident.team_involved}</span></div>}
-                  {selectedIncident.player_involved && <div className="col-span-2"><span className="font-mono text-gray-400">PLAYER:</span><span className="text-white ml-1">{selectedIncident.player_involved}</span></div>}
+            <div className="border border-white/[0.08] bg-[#0A0A0A]">
+              <div className="p-3 border-b border-white/[0.06] flex items-center justify-between"><IncidentBadge type={selectedIncident.incident_type} /><DecisionBadge status={selectedIncident.decision_status} /></div>
+              <div className="p-3 space-y-3">
+                <p className="text-xs font-body text-gray-400 leading-relaxed">{selectedIncident.description}</p>
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  {selectedIncident.timestamp_in_match && <div><span className="font-mono text-gray-600">TIME</span><span className="text-white ml-1.5">{selectedIncident.timestamp_in_match}</span></div>}
+                  {selectedIncident.team_involved && <div><span className="font-mono text-gray-600">TEAM</span><span className="text-white ml-1.5">{selectedIncident.team_involved}</span></div>}
+                  {selectedIncident.player_involved && <div className="col-span-2"><span className="font-mono text-gray-600">PLAYER</span><span className="text-white ml-1.5">{selectedIncident.player_involved}</span></div>}
                 </div>
-                {selectedIncident.final_decision && <div className="pt-2 border-t border-white/10"><span className="text-xs font-mono text-gray-400">FINAL:</span><p className="text-sm text-white mt-1">{selectedIncident.final_decision}</p></div>}
-              </CardContent>
-            </Card>
+                {selectedIncident.final_decision && <div className="pt-2 border-t border-white/[0.06]"><span className="text-[10px] font-mono text-gray-600">FINAL</span><p className="text-xs text-white mt-1">{selectedIncident.final_decision}</p></div>}
+              </div>
+            </div>
           )}
 
-          <Card className="bg-[#121212] border-white/10 rounded-sm">
-            <CardHeader className="pb-2"><CardTitle className="text-sm font-mono uppercase text-gray-400">RECENT INCIDENTS</CardTitle></CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="h-[200px]">
-                {incidents.slice(0, 10).map(inc => (
-                  <div key={inc.id} onClick={() => setSelectedIncident(inc)} className={`px-4 py-3 cursor-pointer border-b border-white/5 hover:bg-white/5 transition-colors ${selectedIncident?.id === inc.id ? 'bg-white/10' : ''}`} data-testid={`incident-item-${inc.id}`}>
-                    <div className="flex items-center justify-between"><IncidentBadge type={inc.incident_type} /><span className="text-xs font-mono text-gray-400">{inc.timestamp_in_match || '--:--'}</span></div>
-                    <p className="text-xs text-gray-400 mt-1 truncate">{inc.description}</p>
-                  </div>
-                ))}
-              </ScrollArea>
-            </CardContent>
-          </Card>
+          <div className="border border-white/[0.08] bg-[#0A0A0A]">
+            <div className="p-3 border-b border-white/[0.06]"><span className="text-[10px] font-heading font-bold uppercase tracking-[0.2em] text-gray-500">RECENT INCIDENTS</span></div>
+            <ScrollArea className="h-[200px]">
+              {incidents.slice(0, 10).map(inc => (
+                <div key={inc.id} onClick={() => setSelectedIncident(inc)} className={`px-3 py-2.5 cursor-pointer border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors ${selectedIncident?.id === inc.id ? 'bg-white/[0.06] border-l-2 border-l-[#00E5FF]' : ''}`} data-testid={`incident-item-${inc.id}`}>
+                  <div className="flex items-center justify-between"><IncidentBadge type={inc.incident_type} /><span className="text-[10px] font-mono text-gray-600">{inc.timestamp_in_match || '--:--'}</span></div>
+                  <p className="text-[10px] text-gray-500 mt-1 truncate">{inc.description}</p>
+                </div>
+              ))}
+            </ScrollArea>
+          </div>
         </div>
       </div>
     </div>
