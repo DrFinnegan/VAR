@@ -83,6 +83,56 @@ const AuthProvider = ({ children }) => {
 
 const useAuth = () => useContext(AuthContext);
 
+// ── OCTON Neocortex Brain Logo ────────────────────────────
+const OctonBrainLogo = ({ size = 36 }) => (
+  <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="glow-cyan">
+    {/* Brain outline */}
+    <path d="M20 4C12 4 6 10 6 18c0 5 2.5 9 6 12l2 2h12l2-2c3.5-3 6-7 6-12 0-8-6-14-14-14z" stroke="#00E5FF" strokeWidth="1.5" fill="#00E5FF08" />
+    {/* Neocortex folds - left */}
+    <path d="M10 14c2-2 4-1 5 1s-1 4-3 4" stroke="#00E5FF" strokeWidth="0.8" opacity="0.6" />
+    <path d="M9 20c3-1 5 0 5 2s-2 3-4 3" stroke="#00E5FF" strokeWidth="0.8" opacity="0.6" />
+    {/* Neocortex folds - right */}
+    <path d="M30 14c-2-2-4-1-5 1s1 4 3 4" stroke="#00E5FF" strokeWidth="0.8" opacity="0.6" />
+    <path d="M31 20c-3-1-5 0-5 2s2 3 4 3" stroke="#00E5FF" strokeWidth="0.8" opacity="0.6" />
+    {/* Central fissure */}
+    <line x1="20" y1="6" x2="20" y2="30" stroke="#00E5FF" strokeWidth="0.5" opacity="0.3" />
+    {/* Neural connections */}
+    <line x1="12" y1="12" x2="18" y2="16" stroke="#00FF88" strokeWidth="0.5" opacity="0.5" />
+    <line x1="22" y1="16" x2="28" y2="12" stroke="#00FF88" strokeWidth="0.5" opacity="0.5" />
+    <line x1="14" y1="22" x2="20" y2="20" stroke="#00FF88" strokeWidth="0.5" opacity="0.5" />
+    <line x1="20" y1="20" x2="26" y2="22" stroke="#00FF88" strokeWidth="0.5" opacity="0.5" />
+    {/* Glowing synaptic nodes */}
+    <circle cx="12" cy="12" r="2" fill="#00E5FF">
+      <animate attributeName="opacity" values="0.4;1;0.4" dur="2s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="28" cy="12" r="2" fill="#00E5FF">
+      <animate attributeName="opacity" values="0.6;1;0.6" dur="1.8s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="20" cy="10" r="1.5" fill="#00FF88">
+      <animate attributeName="opacity" values="0.3;1;0.3" dur="2.5s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="14" cy="22" r="1.5" fill="#00E5FF">
+      <animate attributeName="opacity" values="0.5;1;0.5" dur="1.5s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="26" cy="22" r="1.5" fill="#00E5FF">
+      <animate attributeName="opacity" values="0.4;1;0.4" dur="2.2s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="20" cy="20" r="2.5" fill="#00FF88">
+      <animate attributeName="opacity" values="0.5;1;0.5" dur="1.2s" repeatCount="indefinite" />
+      <animate attributeName="r" values="2;3;2" dur="1.2s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="16" cy="16" r="1" fill="#00E5FF">
+      <animate attributeName="opacity" values="0.3;0.9;0.3" dur="3s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="24" cy="16" r="1" fill="#00E5FF">
+      <animate attributeName="opacity" values="0.5;1;0.5" dur="2.8s" repeatCount="indefinite" />
+    </circle>
+    {/* Hippocampus (inner) */}
+    <ellipse cx="15" cy="24" rx="3" ry="2" stroke="#00FF88" strokeWidth="0.6" fill="none" opacity="0.4" />
+    <ellipse cx="25" cy="24" rx="3" ry="2" stroke="#00FF88" strokeWidth="0.6" fill="none" opacity="0.4" />
+  </svg>
+);
+
 // ── Config Maps ───────────────────────────────────────────
 const incidentTypeConfig = {
   offside: { label: "OFFSIDE", color: "bg-[#FFB800]/20 text-[#FFB800] border-[#FFB800]/30" },
@@ -154,10 +204,8 @@ const LoginPage = () => {
     <div className="min-h-screen bg-[#050505] flex items-center justify-center p-4" data-testid="login-page">
       <Card className="w-full max-w-md bg-[#121212] border-white/10 rounded-none">
         <CardHeader className="text-center space-y-4 pb-2">
-          <div className="flex items-center justify-center gap-3">
-            <div className="w-12 h-12 rounded-none bg-[#00E5FF] flex items-center justify-center">
-              <Shield className="w-7 h-7 text-black" />
-            </div>
+          <div className="flex items-center justify-center">
+            <OctonBrainLogo size={48} />
           </div>
           <div>
             <CardTitle className="text-2xl font-heading font-black text-white tracking-tight">OCTON VAR</CardTitle>
@@ -216,10 +264,8 @@ const RegisterPage = () => {
     <div className="min-h-screen bg-[#050505] flex items-center justify-center p-4" data-testid="register-page">
       <Card className="w-full max-w-md bg-[#121212] border-white/10 rounded-none">
         <CardHeader className="text-center space-y-4 pb-2">
-          <div className="flex items-center justify-center gap-3">
-            <div className="w-12 h-12 rounded-none bg-[#00E5FF] flex items-center justify-center">
-              <Shield className="w-7 h-7 text-black" />
-            </div>
+          <div className="flex items-center justify-center">
+            <OctonBrainLogo size={48} />
           </div>
           <CardTitle className="text-2xl font-heading font-black text-white">JOIN OCTON VAR</CardTitle>
           <CardDescription className="text-gray-400 text-sm">Register for Dr Finnegan's Forensic AI system</CardDescription>
@@ -289,9 +335,7 @@ const Sidebar = () => {
     <div className="w-60 flex-shrink-0 border-r border-white/[0.06] h-screen sticky top-0 bg-[#050505] flex flex-col">
       <div className="p-5 border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-[#00E5FF] flex items-center justify-center">
-            <Shield className="w-5 h-5 text-black" />
-          </div>
+          <OctonBrainLogo size={36} />
           <div>
             <h1 className="font-heading font-black text-white text-base tracking-tighter">OCTON VAR</h1>
             <p className="text-[8px] font-mono text-[#00E5FF]/60 tracking-[0.15em]">DR FINNEGAN'S FORENSIC AI</p>
@@ -485,7 +529,7 @@ const DecisionBadge = ({ status }) => {
 };
 
 // ── Video Stage with Match Replay Scrubber ────────────────
-const VideoStage = ({ incident, onAnalyze, previewImage }) => {
+const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(1847);
   const [totalFrames] = useState(3200);
@@ -493,7 +537,44 @@ const VideoStage = ({ incident, onAnalyze, previewImage }) => {
   const [matchTime, setMatchTime] = useState({ min: 67, sec: 12, ms: 450 });
   const [scrubberHover, setScrubberHover] = useState(null);
   const scrubberRef = useRef(null);
+  const videoRef = useRef(null);
   const imgSrc = previewImage || (incident?.has_image && incident?.storage_path ? `${API}/files/${incident.storage_path}` : null);
+  const videoSrc = previewVideo || (incident?.has_video && incident?.video_storage_path ? `${API}/files/${incident.video_storage_path}` : null);
+
+  // Sync video element with scrubber
+  useEffect(() => {
+    if (videoRef.current && videoSrc) {
+      videoRef.current.playbackRate = playbackSpeed;
+    }
+  }, [playbackSpeed, videoSrc]);
+
+  const handleVideoPlay = () => {
+    if (videoRef.current) {
+      if (isPlaying) { videoRef.current.pause(); } else { videoRef.current.play(); }
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleVideoTimeUpdate = () => {
+    if (!videoRef.current) return;
+    const v = videoRef.current;
+    const pct = v.currentTime / (v.duration || 1);
+    setCurrentFrame(Math.floor(pct * totalFrames));
+    const totalSec = v.currentTime;
+    setMatchTime({ min: Math.floor(totalSec / 60), sec: Math.floor(totalSec % 60), ms: Math.floor((totalSec % 1) * 1000) });
+  };
+
+  const handleVideoScrub = (pct) => {
+    if (videoRef.current && videoRef.current.duration) {
+      videoRef.current.currentTime = pct * videoRef.current.duration;
+    }
+  };
+
+  const stepVideoFrame = (delta) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime + (delta * 0.033));
+    }
+  };
 
   useEffect(() => {
     if (incident?.timestamp_in_match) {
@@ -538,7 +619,13 @@ const VideoStage = ({ incident, onAnalyze, previewImage }) => {
   return (
     <div className="relative border border-white/[0.08] bg-black overflow-hidden" data-testid="video-player-container">
       <div className="aspect-video relative">
-        {imgSrc ? <img src={imgSrc} alt="Incident" className="w-full h-full object-cover" /> : <img src="https://images.pexels.com/photos/12201296/pexels-photo-12201296.jpeg" alt="Stadium" className="w-full h-full object-cover opacity-40" />}
+        {videoSrc ? (
+          <video ref={videoRef} src={videoSrc} className="w-full h-full object-cover" onTimeUpdate={handleVideoTimeUpdate} onEnded={() => setIsPlaying(false)} onLoadedMetadata={() => { if (videoRef.current) videoRef.current.playbackRate = playbackSpeed; }} playsInline muted />
+        ) : imgSrc ? (
+          <img src={imgSrc} alt="Incident" className="w-full h-full object-cover" />
+        ) : (
+          <img src="https://images.pexels.com/photos/12201296/pexels-photo-12201296.jpeg" alt="Stadium" className="w-full h-full object-cover opacity-40" />
+        )}
         <div className="absolute inset-0 grid-overlay opacity-50" />
         <div className="absolute inset-0 pointer-events-none overflow-hidden"><div className="w-full h-[2px] bg-gradient-to-r from-transparent via-[#00E5FF]/60 to-transparent animate-scan" /></div>
         {incident?.ai_analysis && (
@@ -567,7 +654,7 @@ const VideoStage = ({ incident, onAnalyze, previewImage }) => {
       {/* MATCH REPLAY SCRUBBER */}
       <div className="bg-[#050505] border-t border-white/[0.06]">
         <div className="px-3 pt-2 pb-1">
-          <div ref={scrubberRef} className="relative h-3 bg-white/[0.04] cursor-pointer group" onClick={handleScrub}
+          <div ref={scrubberRef} className="relative h-3 bg-white/[0.04] cursor-pointer group" onClick={(e) => { handleScrub(e); if (videoSrc && scrubberRef.current) { const r=scrubberRef.current.getBoundingClientRect(); handleVideoScrub(Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))); } }}
             onMouseMove={(e) => { if (!scrubberRef.current) return; const r=scrubberRef.current.getBoundingClientRect(); const p=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)); setScrubberHover({pct:p*100,frame:Math.floor(p*totalFrames)}); }}
             onMouseLeave={() => setScrubberHover(null)} data-testid="replay-scrubber-track">
             <div className="absolute top-0 left-0 h-full bg-gradient-to-r from-[#00E5FF]/60 to-[#00E5FF]/30 transition-all duration-75" style={{ width: `${progressPct}%` }} />
@@ -578,13 +665,13 @@ const VideoStage = ({ incident, onAnalyze, previewImage }) => {
         </div>
         <div className="px-3 pb-2 flex items-center justify-between">
           <div className="flex items-center gap-0.5">
-            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-white h-7 w-7 p-0" onClick={() => stepFrame(-10)} data-testid="step-back-10" title="-10 frames"><SkipBack className="w-3.5 h-3.5" /></Button>
-            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-white h-7 w-7 p-0" onClick={() => stepFrame(-1)} data-testid="step-back-1" title="-1 frame"><ChevronLeft className="w-3.5 h-3.5" /></Button>
-            <Button variant="ghost" size="sm" className="text-white hover:text-[#00E5FF] h-8 w-8 p-0 border border-white/10 hover:border-[#00E5FF]/40 mx-0.5 transition-all" onClick={() => setIsPlaying(!isPlaying)} data-testid="play-pause-button">
+            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-white h-7 w-7 p-0" onClick={() => { if (videoSrc) stepVideoFrame(-10); else stepFrame(-10); }} data-testid="step-back-10" title="-10 frames"><SkipBack className="w-3.5 h-3.5" /></Button>
+            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-white h-7 w-7 p-0" onClick={() => { if (videoSrc) stepVideoFrame(-1); else stepFrame(-1); }} data-testid="step-back-1" title="-1 frame"><ChevronLeft className="w-3.5 h-3.5" /></Button>
+            <Button variant="ghost" size="sm" className="text-white hover:text-[#00E5FF] h-8 w-8 p-0 border border-white/10 hover:border-[#00E5FF]/40 mx-0.5 transition-all" onClick={() => { if (videoSrc) handleVideoPlay(); else setIsPlaying(!isPlaying); }} data-testid="play-pause-button">
               {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
             </Button>
-            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-white h-7 w-7 p-0" onClick={() => stepFrame(1)} data-testid="step-forward-1" title="+1 frame"><ChevronRight className="w-3.5 h-3.5" /></Button>
-            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-white h-7 w-7 p-0" onClick={() => stepFrame(10)} data-testid="step-forward-10" title="+10 frames"><SkipForward className="w-3.5 h-3.5" /></Button>
+            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-white h-7 w-7 p-0" onClick={() => { if (videoSrc) stepVideoFrame(1); else stepFrame(1); }} data-testid="step-forward-1" title="+1 frame"><ChevronRight className="w-3.5 h-3.5" /></Button>
+            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-white h-7 w-7 p-0" onClick={() => { if (videoSrc) stepVideoFrame(10); else stepFrame(10); }} data-testid="step-forward-10" title="+10 frames"><SkipForward className="w-3.5 h-3.5" /></Button>
             <div className="h-4 w-[1px] bg-white/[0.06] mx-1.5" />
             <div className="flex items-center gap-0.5" data-testid="speed-selector">
               {speeds.map(s => (
@@ -611,8 +698,9 @@ const LiveVARPage = () => {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showNewIncident, setShowNewIncident] = useState(false);
-  const [newIncident, setNewIncident] = useState({ incident_type: "foul", description: "", timestamp_in_match: "", team_involved: "", player_involved: "", image_base64: null });
+  const [newIncident, setNewIncident] = useState({ incident_type: "foul", description: "", timestamp_in_match: "", team_involved: "", player_involved: "", image_base64: null, video_base64: null });
   const [previewImage, setPreviewImage] = useState(null);
+  const [previewVideo, setPreviewVideo] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   const wsConnected = useWebSocket(useCallback((msg) => {
@@ -649,6 +737,18 @@ const LiveVARPage = () => {
     reader.readAsDataURL(file);
   };
 
+  const handleVideoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const b64 = reader.result.split(",")[1];
+      setNewIncident(prev => ({ ...prev, video_base64: b64 }));
+      setPreviewVideo(URL.createObjectURL(file));
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleCreateIncident = async () => {
     if (!newIncident.description) { toast.error("Provide a description"); return; }
     setSubmitting(true);
@@ -657,7 +757,7 @@ const LiveVARPage = () => {
       toast.success("OCTON analysis complete!");
       setSelectedIncident(res.data);
       setShowNewIncident(false);
-      setNewIncident({ incident_type: "foul", description: "", timestamp_in_match: "", team_involved: "", player_involved: "", image_base64: null });
+      setNewIncident({ incident_type: "foul", description: "", timestamp_in_match: "", team_involved: "", player_involved: "", image_base64: null, video_base64: null });
       setPreviewImage(null);
       fetchData();
     } catch { toast.error("Failed to create incident"); }
@@ -754,9 +854,22 @@ const LiveVARPage = () => {
                     </label>
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <Label className="text-gray-300">Video Clip (optional)</Label>
+                  <div className="border border-dashed border-white/20 p-4 text-center hover:border-[#00E5FF]/50 transition-colors">
+                    <input type="file" accept="video/mp4,video/webm" onChange={handleVideoChange} className="hidden" id="video-upload" data-testid="video-upload-input" />
+                    <label htmlFor="video-upload" className="cursor-pointer">
+                      {previewVideo ? (
+                        <video src={previewVideo} className="max-h-24 mx-auto" muted />
+                      ) : (
+                        <div className="space-y-2"><Video className="w-8 h-8 text-gray-400 mx-auto" /><p className="text-xs text-gray-400">Upload MP4 or WebM video clip</p></div>
+                      )}
+                    </label>
+                  </div>
+                </div>
               </div>
               <DialogFooter>
-                <Button variant="ghost" onClick={() => { setShowNewIncident(false); setPreviewImage(null); }} className="text-gray-400 hover:text-white">Cancel</Button>
+                <Button variant="ghost" onClick={() => { setShowNewIncident(false); setPreviewImage(null); setPreviewVideo(null); }} className="text-gray-400 hover:text-white">Cancel</Button>
                 <Button onClick={handleCreateIncident} disabled={submitting} className="bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 rounded-none" data-testid="submit-incident-button">
                   {submitting ? "ANALYZING..." : "SUBMIT & ANALYZE"}
                 </Button>
@@ -790,7 +903,7 @@ const LiveVARPage = () => {
       {/* Main Grid */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
         <div className="col-span-1 md:col-span-8 lg:col-span-9 space-y-4">
-          <VideoStage incident={selectedIncident} onAnalyze={handleReanalyze} />
+          <VideoStage incident={selectedIncident} onAnalyze={handleReanalyze} previewVideo={previewVideo} />
           {/* Brain Pathway */}
           {analysis && <BrainPathway analysis={analysis} />}
           {/* Timeline */}

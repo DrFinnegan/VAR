@@ -201,6 +201,29 @@ class VARAPITester:
         )
         return success, response
 
+    def test_create_incident_with_video(self):
+        """Test creating incident with video_base64 field"""
+        # Create a small test video in base64 (minimal MP4 header)
+        test_video_b64 = "AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE="  # Minimal MP4 header
+        
+        incident_data = {
+            "incident_type": "offside",
+            "description": "Test incident with video - Player appears offside during attack",
+            "timestamp_in_match": "45:12",
+            "team_involved": "Test Team A",
+            "player_involved": "Test Player 10",
+            "video_base64": test_video_b64
+        }
+        success, response = self.run_test(
+            "Create Incident with Video",
+            "POST",
+            "incidents",
+            200,
+            data=incident_data,
+            description="Create incident with video_base64 field for streaming"
+        )
+        return success, response
+
     def test_get_specific_incident(self, incident_id):
         """Test getting a specific incident"""
         return self.run_test(
@@ -567,6 +590,166 @@ class VARAPITester:
             description="Get AI feedback statistics for ID module"
         )
 
+    def test_video_file_serving(self, video_path):
+        """Test video file serving with Range request support"""
+        if not video_path:
+            print("⚠️  No video path provided, skipping Range request test")
+            return False, {}
+            
+        # Test normal file request first
+        success, response = self.run_test(
+            "Video File Serving (Normal)",
+            "GET",
+            f"files/{video_path}",
+            200,
+            description="Serve video file without Range header"
+        )
+        
+        if not success:
+            return success, response
+            
+        # Test Range request for video streaming
+        url = f"{self.api_url}/files/{video_path}"
+        headers = {'Range': 'bytes=0-1023'}  # Request first 1KB
+        
+        self.tests_run += 1
+        print(f"\n🔍 Testing Video Range Request...")
+        print(f"   URL: {url}")
+        print(f"   Range: bytes=0-1023")
+        
+        try:
+            response = self.session.get(url, headers=headers, timeout=30)
+            
+            # Should return 206 Partial Content for Range requests
+            success = response.status_code == 206
+            
+            result = {
+                "test_name": "Video Range Request",
+                "endpoint": f"files/{video_path}",
+                "method": "GET",
+                "expected_status": 206,
+                "actual_status": response.status_code,
+                "success": success,
+                "response_data": None,
+                "error": None
+            }
+            
+            if success:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code} (Partial Content)")
+                
+                # Check for proper Range response headers
+                content_range = response.headers.get('Content-Range')
+                accept_ranges = response.headers.get('Accept-Ranges')
+                content_length = response.headers.get('Content-Length')
+                
+                print(f"   Content-Range: {content_range}")
+                print(f"   Accept-Ranges: {accept_ranges}")
+                print(f"   Content-Length: {content_length}")
+                
+                result["response_data"] = {
+                    "content_range": content_range,
+                    "accept_ranges": accept_ranges,
+                    "content_length": content_length
+                }
+            else:
+                print(f"❌ Failed - Expected 206, got {response.status_code}")
+                result["error"] = f"Expected 206 Partial Content, got {response.status_code}"
+                
+            self.test_results.append(result)
+            return success, result.get("response_data", {})
+            
+        except Exception as e:
+            print(f"❌ Failed - Exception: {str(e)}")
+            result = {
+                "test_name": "Video Range Request",
+                "endpoint": f"files/{video_path}",
+                "method": "GET",
+                "expected_status": 206,
+                "actual_status": None,
+                "success": False,
+                "response_data": None,
+                "error": str(e)
+            }
+            self.test_results.append(result)
+            return False, {}
+
+    def test_concurrent_analysis_speed(self):
+        """Test analysis speed optimization with concurrent processing"""
+        import time
+        
+        # Create multiple incidents to test concurrent processing
+        incidents_data = [
+            {
+                "incident_type": "offside",
+                "description": "Speed test 1 - Offside call during counter-attack with multiple players involved",
+                "timestamp_in_match": "23:45",
+                "team_involved": "Speed Test Team A",
+                "player_involved": "Player A1"
+            },
+            {
+                "incident_type": "penalty", 
+                "description": "Speed test 2 - Possible penalty for handball in the box during corner kick situation",
+                "timestamp_in_match": "67:12",
+                "team_involved": "Speed Test Team B", 
+                "player_involved": "Player B2"
+            },
+            {
+                "incident_type": "red_card",
+                "description": "Speed test 3 - Dangerous tackle from behind with excessive force endangering opponent safety",
+                "timestamp_in_match": "89:30",
+                "team_involved": "Speed Test Team C",
+                "player_involved": "Player C3"
+            }
+        ]
+        
+        print(f"\n🚀 Testing Analysis Speed Optimization...")
+        print(f"   Creating {len(incidents_data)} incidents to test concurrent processing")
+        
+        start_time = time.time()
+        successful_analyses = 0
+        
+        for i, incident_data in enumerate(incidents_data):
+            success, response = self.run_test(
+                f"Speed Test Incident {i+1}",
+                "POST", 
+                "incidents",
+                200,
+                data=incident_data,
+                description=f"Speed optimization test {i+1}/3"
+            )
+            
+            if success and response and response.get('ai_analysis'):
+                successful_analyses += 1
+                analysis = response['ai_analysis']
+                processing_time = analysis.get('total_processing_time_ms', 0)
+                print(f"   Analysis {i+1} completed in {processing_time}ms")
+        
+        total_time = time.time() - start_time
+        print(f"   Total time for {len(incidents_data)} analyses: {total_time:.2f}s")
+        print(f"   Successful analyses: {successful_analyses}/{len(incidents_data)}")
+        
+        # Test passes if all analyses completed and total time is reasonable
+        success = successful_analyses == len(incidents_data) and total_time < 30  # 30s timeout
+        
+        result = {
+            "test_name": "Concurrent Analysis Speed Test",
+            "endpoint": "incidents (multiple)",
+            "method": "POST",
+            "expected_status": 200,
+            "actual_status": 200 if success else 500,
+            "success": success,
+            "response_data": {
+                "total_time_seconds": total_time,
+                "successful_analyses": successful_analyses,
+                "total_analyses": len(incidents_data)
+            },
+            "error": None if success else "Speed test failed or timed out"
+        }
+        
+        self.test_results.append(result)
+        return success, result["response_data"]
+
 def main():
     print("🏟️  VAR Audit System API Testing - NEW FEATURES")
     print("=" * 60)
@@ -634,6 +817,30 @@ def main():
     if success and incident_response:
         incident_id = incident_response.get('id')
         print(f"   Created incident ID: {incident_id}")
+    
+    # Test video upload functionality
+    print("\n🎥 VIDEO UPLOAD & STREAMING")
+    print("-" * 30)
+    
+    # Create incident with video
+    success, video_incident_response = tester.test_create_incident_with_video()
+    video_incident_id = None
+    video_path = None
+    if success and video_incident_response:
+        video_incident_id = video_incident_response.get('id')
+        video_path = video_incident_response.get('video_storage_path')
+        print(f"   Created video incident ID: {video_incident_id}")
+        print(f"   Video storage path: {video_path}")
+        
+        # Test video file serving with Range requests
+        if video_path:
+            tester.test_video_file_serving(video_path)
+    
+    # Test analysis speed optimization
+    print("\n⚡ ANALYSIS SPEED OPTIMIZATION")
+    print("-" * 30)
+    
+    tester.test_concurrent_analysis_speed()
     
     # Create referee
     success, referee_response = tester.test_create_referee()

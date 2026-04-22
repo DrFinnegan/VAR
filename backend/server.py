@@ -112,6 +112,7 @@ class IncidentCreate(BaseModel):
     team_involved: Optional[str] = None
     player_involved: Optional[str] = None
     image_base64: Optional[str] = None
+    video_base64: Optional[str] = None
 
 
 class DecisionUpdate(BaseModel):
@@ -303,9 +304,20 @@ async def create_incident(data: IncidentCreate, request: Request):
             image_bytes = base64.b64decode(image_b64)
             put_object(path, image_bytes, "image/jpeg")
             storage_path = path
-            logger.info(f"Image uploaded to storage: {path}")
         except Exception as e:
-            logger.warning(f"Storage upload failed, keeping base64 reference: {e}")
+            logger.warning(f"Image upload failed: {e}")
+
+    # Handle video upload to storage
+    video_storage_path = None
+    if data.video_base64:
+        try:
+            user_id = user.get("_id", "anonymous") if user else "anonymous"
+            vpath = generate_upload_path(user_id, f"{incident_id}.mp4")
+            video_bytes = base64.b64decode(data.video_base64)
+            put_object(vpath, video_bytes, "video/mp4")
+            video_storage_path = vpath
+        except Exception as e:
+            logger.warning(f"Video upload failed: {e}")
 
     # Run OCTON Brain analysis (Hippocampus -> Neo Cortex)
     analysis_result = await brain_engine.analyze_incident(
@@ -324,7 +336,9 @@ async def create_incident(data: IncidentCreate, request: Request):
         "team_involved": data.team_involved,
         "player_involved": data.player_involved,
         "storage_path": storage_path,
+        "video_storage_path": video_storage_path,
         "has_image": bool(image_b64),
+        "has_video": bool(data.video_base64),
         "ai_analysis": analysis_result,
         "decision_status": "pending",
         "final_decision": None,
@@ -492,9 +506,30 @@ async def analyze_text(req: TextAnalysisRequest):
 
 # ── File serving ──────────────────────────────────────────
 @api_router.get("/files/{path:path}")
-async def serve_file(path: str):
+async def serve_file(path: str, request: Request):
     try:
         data, content_type = get_object(path)
+
+        # Support Range requests for video streaming
+        range_header = request.headers.get("Range")
+        if range_header and content_type.startswith("video/"):
+            total = len(data)
+            ranges = range_header.replace("bytes=", "").split("-")
+            start = int(ranges[0]) if ranges[0] else 0
+            end = int(ranges[1]) if ranges[1] else total - 1
+            end = min(end, total - 1)
+            chunk = data[start:end + 1]
+            return Response(
+                content=chunk,
+                status_code=206,
+                media_type=content_type,
+                headers={
+                    "Content-Range": f"bytes {start}-{end}/{total}",
+                    "Accept-Ranges": "bytes",
+                    "Content-Length": str(len(chunk)),
+                },
+            )
+
         return Response(content=data, media_type=content_type)
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"File not found: {e}")

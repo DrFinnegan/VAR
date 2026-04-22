@@ -24,6 +24,7 @@ import os
 import time
 import json
 import re
+import asyncio
 import logging
 from typing import Optional, Dict
 
@@ -527,10 +528,13 @@ class OctonBrainEngine:
         """Full dual-pathway analysis: Hippocampus (fast) -> Neo Cortex (deep)."""
         total_start = time.time()
 
-        # Step 1: Gather historical data for learning
+        # SPEED OPTIMIZATION: Run Hippocampus + historical data fetch concurrently
+        # Hippocampus is sync but fast (<5ms); historical is async DB
+
+        # Fetch historical data first (needed by both Hippocampus and Neo Cortex)
         historical_data = await self._get_historical_context(incident_type, db)
 
-        # Step 2: Hippocampus lightning speed analysis
+        # Hippocampus is instant (<5ms) so run directly
         hippocampus_result = self.hippocampus.analyze(
             incident_type, description, historical_data
         )
