@@ -711,7 +711,7 @@ const CurtainSection = ({ icon: Icon, title, accent = "#00E5FF", defaultOpen = f
       </button>
       <div
         className="overflow-hidden transition-all duration-300 ease-out"
-        style={{ maxHeight: open ? 2000 : 0, opacity: open ? 1 : 0 }}
+        style={{ maxHeight: open ? 500 : 0, opacity: open ? 1 : 0 }}
       >
         <div className="px-3 pb-3 pt-1 border-t border-white/[0.05]">
           {children}
@@ -1940,11 +1940,11 @@ const LiveVARPage = () => {
                     accent="#00E5FF"
                     testId="reasoning-curtain"
                   >
-                    <ScrollArea className="max-h-[280px]">
-                      <p className="text-xs font-body text-gray-300 leading-relaxed whitespace-pre-wrap pr-2">
+                    <div className="max-h-[320px] overflow-y-auto pr-2 octon-scrollbar" data-testid="reasoning-scroll">
+                      <p className="text-xs font-body text-gray-300 leading-relaxed whitespace-pre-wrap">
                         {analysis.reasoning}
                       </p>
-                    </ScrollArea>
+                    </div>
                   </CurtainSection>
 
                   {analysis.neo_cortex_notes && (
@@ -1954,11 +1954,11 @@ const LiveVARPage = () => {
                       accent="#B366FF"
                       testId="neocortex-curtain"
                     >
-                      <ScrollArea className="max-h-[240px]">
-                        <p className="text-xs font-body text-[#CFA8FF] leading-relaxed italic whitespace-pre-wrap pr-2">
+                      <div className="max-h-[260px] overflow-y-auto pr-2 octon-scrollbar" data-testid="neocortex-scroll">
+                        <p className="text-xs font-body text-[#CFA8FF] leading-relaxed italic whitespace-pre-wrap">
                           {analysis.neo_cortex_notes}
                         </p>
-                      </ScrollArea>
+                      </div>
                     </CurtainSection>
                   )}
 
@@ -1992,7 +1992,7 @@ const LiveVARPage = () => {
                       defaultOpen={analysis.confidence_uplift > 0}
                       testId="precedents-curtain"
                     >
-                      <div className="space-y-2">
+                      <div className="max-h-[360px] overflow-y-auto pr-2 octon-scrollbar space-y-2" data-testid="precedents-scroll">
                         {analysis.precedents_used.map((p, i) => (
                           <div
                             key={p.id || i}
