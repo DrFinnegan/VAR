@@ -27,3 +27,4 @@ Pure football VAR audit system. ID PROTECTION module has been separated into its
 
 ## Changelog
 - 2026-02: Player Tracking Trail added to Decision Comparison Mode — SVG overlay draws dashed cyan arrows with Δ distance labels between matching BEFORE/AFTER player positions (formation players matched by team+id order; markers matched by color+index). Toggle (TRAIL ON/OFF) with moved-count badge; trail also rendered in PNG export for referee report.
+- 2026-02: Dashboard professional polish — (a) right-side OCTON ANALYSIS panel redesigned with radial confidence ring, HUD corner brackets, always-visible Decision tile, and collapsible "curtain" sections (Reasoning / Neo Cortex / Key Factors) instead of always-visible long text. (b) LIVE VAR page header got a glowing cyan accent bar, version chip, and live-sync pulse indicator. (c) Stat tiles got radial hover glow, corner tick marks, and contextual hint labels.

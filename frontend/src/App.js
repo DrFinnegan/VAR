@@ -9,7 +9,8 @@ import {
   Target, Eye, LogOut, LogIn, UserPlus, Zap, Activity, Image,
   ArrowRight, Radio, Wifi, WifiOff, Trophy, Calendar, ThumbsUp, ThumbsDown, Lock,
   Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Maximize2, Volume2,
-  Pen, Circle, Minus, Undo2, Trash2, Save, Crosshair, Download, Users2, Layers, Columns
+  Pen, Circle, Minus, Undo2, Trash2, Save, Crosshair, Download, Users2, Layers, Columns,
+  ChevronDown, FileText, Sparkles, BookOpen, GitBranch
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./components/ui/card";
@@ -504,15 +505,107 @@ const BrainPathway = ({ analysis }) => {
 
 // ── Reusable Components ───────────────────────────────────
 const ConfidenceScore = ({ score, size = "default" }) => {
+  const s = Number(score) || 0;
   const getColor = (s) => s >= 90 ? "#00FF88" : s >= 70 ? "#00E5FF" : s >= 50 ? "#FFB800" : "#FF2A2A";
-  const getGlow = (s) => s >= 90 ? "glow-text-green" : s >= 70 ? "glow-text-cyan" : "";
-  const sizes = { small: "text-2xl", default: "text-5xl", large: "text-6xl" };
+  const getTier = (s) => s >= 90 ? "HIGH" : s >= 70 ? "STRONG" : s >= 50 ? "MODERATE" : "LOW";
+  const color = getColor(s);
+
+  if (size === "small") {
+    return (
+      <div className="flex items-baseline gap-0.5" data-testid="ai-confidence-score">
+        <span className="font-mono font-bold tracking-tighter text-2xl" style={{ color }}>{s.toFixed(1)}</span>
+        <span className="text-sm font-mono" style={{ color, opacity: 0.5 }}>%</span>
+      </div>
+    );
+  }
+
+  // Radial ring for default/large sizes
+  const dim = size === "large" ? 140 : 120;
+  const stroke = 6;
+  const r = (dim - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const progress = Math.max(0, Math.min(100, s));
+  const dash = (progress / 100) * c;
+
   return (
     <div className="flex flex-col items-center" data-testid="ai-confidence-score">
-      <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-gray-500 mb-2">FINAL CONFIDENCE</span>
-      <div className="flex items-baseline gap-0.5">
-        <span className={`font-mono font-bold tracking-tighter ${sizes[size]} ${getGlow(score)}`} style={{ color: getColor(score) }}>{score?.toFixed(1)}</span>
-        <span className="text-lg font-mono" style={{ color: getColor(score), opacity: 0.5 }}>%</span>
+      <span className="text-[10px] font-mono uppercase tracking-[0.3em] text-gray-500 mb-2">FINAL CONFIDENCE</span>
+      <div className="relative" style={{ width: dim, height: dim }}>
+        <svg width={dim} height={dim} className="-rotate-90">
+          {/* Track */}
+          <circle cx={dim / 2} cy={dim / 2} r={r} fill="none" stroke="#ffffff0d" strokeWidth={stroke} />
+          {/* Progress */}
+          <circle
+            cx={dim / 2} cy={dim / 2} r={r} fill="none"
+            stroke={color} strokeWidth={stroke} strokeLinecap="round"
+            strokeDasharray={`${dash} ${c - dash}`}
+            style={{ transition: "stroke-dasharray 600ms ease, stroke 300ms ease", filter: `drop-shadow(0 0 6px ${color}80)` }}
+          />
+          {/* Tick marks */}
+          {Array.from({ length: 36 }).map((_, i) => {
+            const ang = (i / 36) * 2 * Math.PI;
+            const x1 = dim / 2 + (r - stroke - 3) * Math.cos(ang);
+            const y1 = dim / 2 + (r - stroke - 3) * Math.sin(ang);
+            const x2 = dim / 2 + (r - stroke) * Math.cos(ang);
+            const y2 = dim / 2 + (r - stroke) * Math.sin(ang);
+            return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#ffffff14" strokeWidth="1" />;
+          })}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <div className="flex items-baseline gap-0.5">
+            <span className="font-mono font-bold tracking-tighter text-4xl" style={{ color, textShadow: `0 0 10px ${color}80` }}>
+              {s.toFixed(1)}
+            </span>
+            <span className="text-base font-mono" style={{ color, opacity: 0.5 }}>%</span>
+          </div>
+          <span className="text-[8px] font-mono uppercase tracking-[0.25em] mt-0.5" style={{ color, opacity: 0.7 }}>
+            {getTier(s)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Curtain / Accordion Section for analysis details ───────
+const CurtainSection = ({ icon: Icon, title, accent = "#00E5FF", defaultOpen = false, count, children, testId }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border border-white/[0.06] bg-black/30 hover:border-white/[0.12] transition-colors" data-testid={testId}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-3 py-2.5 text-left group focus:outline-none"
+        data-testid={testId ? `${testId}-toggle` : undefined}
+        aria-expanded={open}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <div
+            className="h-4 w-[2px] flex-none"
+            style={{ backgroundColor: accent, boxShadow: `0 0 6px ${accent}cc` }}
+          />
+          {Icon && <Icon className="w-3.5 h-3.5 flex-none" style={{ color: accent }} />}
+          <span className="text-[10px] font-heading font-bold uppercase tracking-[0.22em] text-gray-300 truncate">
+            {title}
+          </span>
+          {typeof count === "number" && (
+            <span className="text-[9px] font-mono px-1.5 py-0.5 border" style={{ color: accent, borderColor: `${accent}40`, backgroundColor: `${accent}0d` }}>
+              {count}
+            </span>
+          )}
+        </div>
+        <ChevronDown
+          className="w-3.5 h-3.5 text-gray-500 group-hover:text-white transition-all duration-300"
+          style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+        />
+      </button>
+      <div
+        className="overflow-hidden transition-all duration-300 ease-out"
+        style={{ maxHeight: open ? 2000 : 0, opacity: open ? 1 : 0 }}
+      >
+        <div className="px-3 pb-3 pt-1 border-t border-white/[0.05]">
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -1528,21 +1621,31 @@ const LiveVARPage = () => {
   return (
     <div className="flex-1 min-w-0 p-4 space-y-4 bg-[#050505] grid-overlay overflow-y-auto h-screen" data-testid="live-var-dashboard">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-4xl font-heading font-black text-white tracking-tighter uppercase">LIVE VAR</h1>
+            <div className="relative flex items-center">
+              {/* Accent bar */}
+              <div className="w-[3px] h-9 bg-[#00E5FF] mr-3" style={{ boxShadow: "0 0 8px #00E5FFaa" }} />
+              <h1 className="text-4xl font-heading font-black text-white tracking-tighter uppercase leading-none">LIVE <span className="text-[#00E5FF]" style={{ textShadow: "0 0 14px #00E5FF66" }}>VAR</span></h1>
+            </div>
             <div className="h-5 w-[1px] bg-white/10" />
-            <span className="text-xs font-mono text-[#00E5FF]/60 tracking-[0.2em]">DR FINNEGAN</span>
+            <span className="text-[10px] font-mono text-[#00E5FF]/70 tracking-[0.25em]">DR FINNEGAN</span>
+            <span className="px-1.5 py-0.5 border border-[#00E5FF]/30 text-[8px] font-mono tracking-[0.2em] text-[#00E5FF]/80 bg-[#00E5FF]/[0.05]">v2.0</span>
           </div>
-          <p className="text-[11px] font-mono text-gray-500 tracking-wide">OCTON Neocortex forensic incident analysis</p>
+          <div className="flex items-center gap-2 mt-1 ml-[15px]">
+            <div className="w-1 h-1 bg-[#00E5FF]/60 animate-pulse" />
+            <p className="text-[10px] font-mono text-gray-500 tracking-[0.15em] uppercase">OCTON Neocortex · forensic incident analysis</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 border border-white/[0.08] bg-[#0A0A0A]">
+          <div className="flex items-center gap-2 px-3 py-1.5 border border-white/[0.08] bg-[#0A0A0A] relative">
+            <div className="absolute top-0 left-0 w-full h-[1px]" style={{ backgroundColor: wsConnected ? "#00FF88" : "#FF2A2A", opacity: 0.5 }} />
             {wsConnected ? <Wifi className="w-3 h-3 text-[#00FF88] glow-green" /> : <WifiOff className="w-3 h-3 text-[#FF2A2A]" />}
-            <span className="text-[10px] font-mono tracking-wider" style={{ color: wsConnected ? '#00FF88' : '#FF2A2A' }}>{wsConnected ? "LIVE SYNC" : "OFFLINE"}</span>
+            <span className="text-[10px] font-mono tracking-[0.2em]" style={{ color: wsConnected ? '#00FF88' : '#FF2A2A' }}>{wsConnected ? "LIVE SYNC" : "OFFLINE"}</span>
+            {wsConnected && <span className="w-1.5 h-1.5 bg-[#00FF88] animate-pulse rounded-full" />}
           </div>
-          <Button onClick={() => setShowComparison(!showComparison)} className={`rounded-none font-heading font-bold text-xs tracking-[0.1em] h-9 px-4 active:scale-[0.98] transition-all ${showComparison ? 'bg-[#00E5FF] text-black' : 'bg-transparent text-[#00E5FF] border border-[#00E5FF]/30 hover:bg-[#00E5FF]/10'}`} data-testid="comparison-mode-toggle"><Columns className="w-3.5 h-3.5 mr-2" />COMPARE</Button>
+          <Button onClick={() => setShowComparison(!showComparison)} className={`rounded-none font-heading font-bold text-xs tracking-[0.1em] h-9 px-4 active:scale-[0.98] transition-all ${showComparison ? 'bg-[#00E5FF] text-black hover:bg-[#00E5FF]/90' : 'bg-transparent text-[#00E5FF] border border-[#00E5FF]/30 hover:bg-[#00E5FF]/10 hover:border-[#00E5FF]/60'}`} data-testid="comparison-mode-toggle"><Columns className="w-3.5 h-3.5 mr-2" />COMPARE</Button>
           <Dialog open={showNewIncident} onOpenChange={setShowNewIncident}>
             <DialogTrigger asChild>
               <Button className="bg-white text-black hover:bg-gray-200 rounded-none font-heading font-bold text-xs tracking-[0.1em] h-9 px-5 active:scale-[0.98] transition-all" data-testid="new-incident-button"><Upload className="w-3.5 h-3.5 mr-2" />NEW INCIDENT</Button>
@@ -1612,19 +1715,32 @@ const LiveVARPage = () => {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-[1px] bg-white/[0.04]">
         {[
-          { label: "TOTAL INCIDENTS", value: analytics?.total_incidents || 0, icon: AlertTriangle, color: "#FFB800" },
-          { label: "AVG CONFIDENCE", value: `${analytics?.average_confidence_score?.toFixed(1) || 0}%`, icon: Brain, color: "#00E5FF" },
-          { label: "AVG DECISION TIME", value: `${analytics?.average_decision_time_seconds?.toFixed(1) || 0}s`, icon: Clock, color: "#00FF88" },
-          { label: "ACCURACY RATE", value: `${analytics?.decision_accuracy_rate?.toFixed(1) || 0}%`, icon: Target, color: "#00FF88" },
-        ].map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="bg-[#0A0A0A] p-4 relative">
-            <div className="absolute top-0 left-0 w-8 h-[1px]" style={{ backgroundColor: color, opacity: 0.5 }} />
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500">{label}</p>
-                <p className="text-2xl font-mono font-bold mt-1" style={{ color }}>{value}</p>
+          { label: "TOTAL INCIDENTS", value: analytics?.total_incidents || 0, icon: AlertTriangle, color: "#FFB800", hint: "ingested" },
+          { label: "AVG CONFIDENCE", value: `${analytics?.average_confidence_score?.toFixed(1) || 0}%`, icon: Brain, color: "#00E5FF", hint: "neocortex" },
+          { label: "AVG DECISION TIME", value: `${analytics?.average_decision_time_seconds?.toFixed(1) || 0}s`, icon: Clock, color: "#00FF88", hint: "per call" },
+          { label: "ACCURACY RATE", value: `${analytics?.decision_accuracy_rate?.toFixed(1) || 0}%`, icon: Target, color: "#00FF88", hint: "vs ref panel" },
+        ].map(({ label, value, icon: Icon, color, hint }) => (
+          <div key={label} className="group bg-gradient-to-br from-[#0A0A0A] to-[#070707] p-4 relative overflow-hidden hover:from-[#0C0C0C] transition-colors" data-testid={`stat-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+            {/* Top accent */}
+            <div className="absolute top-0 left-0 w-12 h-[2px]" style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }} />
+            {/* Corner ticks */}
+            <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 border-r border-t" style={{ borderColor: `${color}66` }} />
+            <div className="absolute bottom-1.5 left-1.5 w-1.5 h-1.5 border-l border-b" style={{ borderColor: `${color}66` }} />
+            {/* Radial glow on hover */}
+            <div className="absolute -top-8 -right-8 w-24 h-24 rounded-full opacity-0 group-hover:opacity-20 transition-opacity" style={{ backgroundColor: color, filter: "blur(30px)" }} />
+
+            <div className="flex items-start justify-between relative">
+              <div className="min-w-0">
+                <p className="text-[9px] font-mono uppercase tracking-[0.25em] text-gray-500">{label}</p>
+                <p className="text-[26px] font-mono font-bold mt-1 leading-none tracking-tight" style={{ color, textShadow: `0 0 12px ${color}44` }}>{value}</p>
+                <p className="text-[8px] font-mono uppercase tracking-[0.2em] text-gray-600 mt-2">// {hint}</p>
               </div>
-              <Icon className="w-6 h-6 opacity-30" style={{ color }} />
+              <div className="flex-none relative">
+                <Icon className="w-5 h-5 opacity-40 group-hover:opacity-80 transition-opacity" style={{ color }} />
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-60 transition-opacity" style={{ filter: `drop-shadow(0 0 4px ${color})` }}>
+                  <Icon className="w-5 h-5" style={{ color }} />
+                </div>
+              </div>
             </div>
           </div>
         ))}
@@ -1659,25 +1775,107 @@ const LiveVARPage = () => {
         {/* Right Panel */}
         <div className="col-span-1 md:col-span-4 lg:col-span-3 space-y-4">
           {selectedIncident && analysis && (
-            <div className="border border-white/[0.08] bg-[#0A0A0A] relative">
-              <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-[#00E5FF]/40 via-[#00E5FF]/10 to-transparent" />
+            <div className="border border-white/[0.08] bg-gradient-to-b from-[#0A0A0A] to-[#050505] relative overflow-hidden" data-testid="octon-analysis-panel">
+              {/* Top accent scan line */}
+              <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-[#00E5FF] to-transparent opacity-60" />
+              {/* Corner brackets for professional HUD aesthetic */}
+              <div className="absolute top-2 left-2 w-3 h-3 border-l border-t border-[#00E5FF]/40 pointer-events-none" />
+              <div className="absolute top-2 right-2 w-3 h-3 border-r border-t border-[#00E5FF]/40 pointer-events-none" />
+              <div className="absolute bottom-2 left-2 w-3 h-3 border-l border-b border-[#00E5FF]/40 pointer-events-none" />
+              <div className="absolute bottom-2 right-2 w-3 h-3 border-r border-b border-[#00E5FF]/40 pointer-events-none" />
+
               <div className="p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-[10px] font-heading font-bold uppercase tracking-[0.2em] text-[#00E5FF]">OCTON ANALYSIS</span>
-                  <Button variant="ghost" size="sm" onClick={handleReanalyze} className="text-[#00E5FF] hover:text-[#00E5FF]/80 h-7 w-7 p-0" data-testid="reanalyze-button"><RefreshCw className="w-3.5 h-3.5" /></Button>
-                </div>
-                <div className="space-y-4">
-                  <ConfidenceScore score={analysis.final_confidence || analysis.confidence_score || 0} />
-                  <div className="h-[1px] bg-white/[0.06]" />
-                  <div><p className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500 mb-1.5">DECISION</p><p className="text-sm font-body text-white leading-relaxed">{analysis.suggested_decision}</p></div>
-                  <div><p className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500 mb-1.5">REASONING</p><p className="text-xs font-body text-gray-400 leading-relaxed">{analysis.reasoning}</p></div>
-                  {analysis.neo_cortex_notes && <div><p className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500 mb-1.5">NEO CORTEX</p><p className="text-[11px] font-body text-[#00E5FF]/60 italic">{analysis.neo_cortex_notes}</p></div>}
-                  <div><p className="text-[10px] font-mono uppercase tracking-[0.2em] text-gray-500 mb-2">KEY FACTORS</p>
-                    <div className="flex flex-wrap gap-1">{analysis.key_factors?.map((f, i) => <span key={i} className="text-[10px] bg-white/[0.04] text-gray-400 px-2 py-1 border border-white/[0.06] font-mono">{f}</span>)}</div>
+                {/* Header */}
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.06]">
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <Brain className="w-4 h-4 text-[#00E5FF]" />
+                      <div className="absolute inset-0 w-4 h-4 bg-[#00E5FF]/30 blur-md" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-heading font-bold uppercase tracking-[0.22em] text-[#00E5FF]">OCTON ANALYSIS</span>
+                      <span className="text-[8px] font-mono uppercase tracking-[0.2em] text-gray-600">Neocortex · v2.0</span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-[10px] font-mono text-gray-600 pt-2 border-t border-white/[0.06]">
-                    <span>HISTORY: {analysis.similar_historical_cases}</span>
-                    <span>{analysis.total_processing_time_ms}ms</span>
+                  <Button variant="ghost" size="sm" onClick={handleReanalyze} className="text-[#00E5FF] hover:text-[#00E5FF] hover:bg-[#00E5FF]/10 h-7 w-7 p-0 border border-[#00E5FF]/20 hover:border-[#00E5FF]/50 rounded-none transition-all" data-testid="reanalyze-button" title="Re-run analysis"><RefreshCw className="w-3.5 h-3.5" /></Button>
+                </div>
+
+                {/* Confidence Ring */}
+                <div className="py-3">
+                  <ConfidenceScore score={analysis.final_confidence || analysis.confidence_score || 0} />
+                </div>
+
+                {/* Always-visible Decision tile */}
+                <div className="mt-4 border border-[#00E5FF]/20 bg-[#00E5FF]/[0.04] p-3 relative">
+                  <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-[#00E5FF]/60 to-transparent" />
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Target className="w-3 h-3 text-[#00E5FF]" />
+                    <span className="text-[9px] font-mono uppercase tracking-[0.25em] text-[#00E5FF]/80">SUGGESTED DECISION</span>
+                  </div>
+                  <p className="text-sm font-body text-white leading-relaxed" data-testid="suggested-decision">{analysis.suggested_decision}</p>
+                </div>
+
+                {/* Collapsible detail sections */}
+                <div className="mt-3 space-y-2">
+                  <CurtainSection
+                    icon={BookOpen}
+                    title="Reasoning"
+                    accent="#00E5FF"
+                    testId="reasoning-curtain"
+                  >
+                    <ScrollArea className="max-h-[280px]">
+                      <p className="text-xs font-body text-gray-300 leading-relaxed whitespace-pre-wrap pr-2">
+                        {analysis.reasoning}
+                      </p>
+                    </ScrollArea>
+                  </CurtainSection>
+
+                  {analysis.neo_cortex_notes && (
+                    <CurtainSection
+                      icon={Sparkles}
+                      title="Neo Cortex"
+                      accent="#B366FF"
+                      testId="neocortex-curtain"
+                    >
+                      <ScrollArea className="max-h-[240px]">
+                        <p className="text-xs font-body text-[#CFA8FF] leading-relaxed italic whitespace-pre-wrap pr-2">
+                          {analysis.neo_cortex_notes}
+                        </p>
+                      </ScrollArea>
+                    </CurtainSection>
+                  )}
+
+                  {Array.isArray(analysis.key_factors) && analysis.key_factors.length > 0 && (
+                    <CurtainSection
+                      icon={GitBranch}
+                      title="Key Factors"
+                      accent="#FFB800"
+                      count={analysis.key_factors.length}
+                      testId="keyfactors-curtain"
+                    >
+                      <div className="flex flex-wrap gap-1.5">
+                        {analysis.key_factors.map((f, i) => (
+                          <span
+                            key={i}
+                            className="text-[10px] font-mono text-[#FFB800] bg-[#FFB800]/[0.06] px-2 py-1 border border-[#FFB800]/20 hover:border-[#FFB800]/50 hover:bg-[#FFB800]/10 transition-colors"
+                          >
+                            {f}
+                          </span>
+                        ))}
+                      </div>
+                    </CurtainSection>
+                  )}
+                </div>
+
+                {/* Footer telemetry */}
+                <div className="flex items-center justify-between text-[9px] font-mono text-gray-600 pt-3 mt-3 border-t border-white/[0.06]">
+                  <div className="flex items-center gap-1.5">
+                    <History className="w-3 h-3" />
+                    <span>HISTORY: <span className="text-gray-400">{analysis.similar_historical_cases}</span></span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-3 h-3" />
+                    <span className="text-gray-400">{analysis.total_processing_time_ms}ms</span>
                   </div>
                 </div>
               </div>
