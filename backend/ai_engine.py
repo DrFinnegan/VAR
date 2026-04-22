@@ -335,6 +335,22 @@ class NeoCortexAnalyzer:
                     "- For RED CARDS: distinguish serious foul play (excessive force) from normal fouls. "
                     "Not every bad tackle is a red card. Studs up + excessive force + endangered safety = red.\n"
                     "- For GOAL LINE: the WHOLE ball must cross the WHOLE line. Any doubt = no goal.\n\n"
+                    "BIAS FIREWALL (CRITICAL):\n"
+                    "- You are provided game history and player/team data for CONTEXT ONLY\n"
+                    "- NEVER let a player's reputation, team status, or past incidents influence THIS decision\n"
+                    "- A foul by a star player is the same as a foul by any other player\n"
+                    "- Historical data informs PATTERNS (e.g., how similar incidents were resolved) but "
+                    "must NOT create prejudice against specific players or teams\n"
+                    "- Judge ONLY the facts of THIS specific incident as described\n"
+                    "- If the description mentions a player's name, evaluate the ACTION not the PERSON\n"
+                    "- Use precedents to understand how the laws are typically applied, not to assume guilt\n\n"
+                    "DEPTH OF ANALYSIS:\n"
+                    "- Use historical precedents to calibrate your confidence (if 80% of similar cases "
+                    "resulted in X, that's informative but not deterministic)\n"
+                    "- When corrections show the AI was previously wrong in similar situations, "
+                    "actively adjust your reasoning to avoid repeating the same error\n"
+                    "- Explain your reasoning step-by-step, citing the specific law and how it applies\n"
+                    "- If evidence is ambiguous, say so clearly and lower confidence accordingly\n\n"
                     "ALWAYS respond in this exact JSON format:\n"
                     "{\n"
                     '  "confidence_score": number (0-100, calibrated accurately),\n'
@@ -519,29 +535,42 @@ class OctonBrainEngine:
             incident_type, description, historical_data
         )
 
-        # Step 3: Build historical context string for Neo Cortex
+        # Step 3: Build deep historical context for Neo Cortex
         historical_context = ""
         if historical_data["total_similar"] > 0:
             historical_context = (
-                f"Historical data: {historical_data['total_similar']} similar {incident_type} incidents analyzed. "
-                f"Most common outcome: {historical_data.get('most_common_decision', 'Unknown')}. "
-                f"Confirmed rate: {historical_data.get('confirmed_count', 0)}, "
-                f"Overturned rate: {historical_data.get('overturned_count', 0)}. "
-                f"Historical accuracy: {historical_data.get('accuracy_rate', 0):.1f}%."
+                f"GAME HISTORY DATABASE ({historical_data['total_similar']} similar {incident_type} incidents):\n"
+                f"- Most common outcome: {historical_data.get('most_common_decision', 'Unknown')}\n"
+                f"- Decision distribution: {historical_data.get('decision_distribution', [])}\n"
+                f"- Confirmed: {historical_data.get('confirmed_count', 0)}, "
+                f"Overturned: {historical_data.get('overturned_count', 0)} "
+                f"(accuracy: {historical_data.get('accuracy_rate', 0):.1f}%)\n"
             )
+
+        # Recent precedents for contextual learning
+        recent = historical_data.get("recent_decided", [])
+        if recent:
+            historical_context += "RECENT PRECEDENTS (for pattern awareness, NOT to copy blindly):\n"
+            for r in recent[:5]:
+                historical_context += (
+                    f"  - \"{r.get('description', '')[:80]}\" → {r.get('final_decision', 'N/A')} "
+                    f"({r.get('decision_status', '')})\n"
+                )
+
         # Feedback loop context
         if historical_data.get("feedback_total", 0) > 0:
             historical_context += (
-                f" AI Feedback: {historical_data['feedback_total']} operator reviews, "
-                f"{historical_data.get('feedback_accuracy', 0):.1f}% AI accuracy."
+                f"\nOPERATOR FEEDBACK LOOP: {historical_data['feedback_total']} reviews, "
+                f"{historical_data.get('feedback_accuracy', 0):.1f}% AI accuracy for this type.\n"
             )
         corrections = historical_data.get("recent_corrections", [])
         if corrections:
-            correction_text = "; ".join(
-                [f"AI said '{c.get('ai_suggestion','')}' but operator chose '{c.get('operator_decision','')}''"
-                 for c in corrections[:3]]
-            )
-            historical_context += f" Recent corrections: {correction_text}"
+            historical_context += "RECENT CORRECTIONS (learn from these mistakes):\n"
+            for c in corrections[:3]:
+                historical_context += (
+                    f"  - AI suggested: \"{c.get('ai_suggestion', '')}\" "
+                    f"but correct answer was: \"{c.get('operator_decision', '')}\"\n"
+                )
 
         # Step 4: Neo Cortex deep analysis (receives Hippocampus findings)
         neo_cortex_result = await self.neo_cortex.analyze(
@@ -555,10 +584,21 @@ class OctonBrainEngine:
 
         total_time_ms = int((time.time() - total_start) * 1000)
 
+        # ── Weighted merge: Neo Cortex 80%, Hippocampus 20% ──
+        # Neo Cortex carries more weight as it leverages game history and deep reasoning.
+        # Hippocampus provides directional signal only, not final authority.
+        neo_conf = neo_cortex_result["confidence_score"]
+        hip_conf = hippocampus_result["initial_confidence"]
+        weighted_confidence = round(neo_conf * 0.80 + hip_conf * 0.20, 1)
+
+        # Divergence detection: if the two pathways disagree significantly, flag it
+        divergence = abs(neo_conf - hip_conf)
+        divergence_flag = divergence > 25
+
         return {
             "hippocampus": hippocampus_result,
             "neo_cortex": neo_cortex_result,
-            "final_confidence": neo_cortex_result["confidence_score"],
+            "final_confidence": weighted_confidence,
             "suggested_decision": neo_cortex_result["suggested_decision"],
             "reasoning": neo_cortex_result["reasoning"],
             "key_factors": neo_cortex_result["key_factors"],
@@ -566,15 +606,18 @@ class OctonBrainEngine:
             "neo_cortex_notes": neo_cortex_result.get("neo_cortex_notes", ""),
             "similar_historical_cases": historical_data["total_similar"],
             "historical_accuracy": historical_data.get("accuracy_rate", 0),
+            "weighting": {"neo_cortex": 0.80, "hippocampus": 0.20},
+            "pathway_divergence": round(divergence, 1),
+            "divergence_flag": divergence_flag,
             "total_processing_time_ms": total_time_ms,
-            "pathway": "hippocampus -> neo_cortex",
-            "engine_version": "OCTON v1.0 - Dr Finnegan",
+            "pathway": "hippocampus -> neo_cortex (weighted 20:80)",
+            "engine_version": "OCTON v2.0 - Dr Finnegan",
         }
 
     async def _get_historical_context(
         self, incident_type: str, db
     ) -> Dict:
-        """Pull historical decision patterns and AI feedback for self-learning."""
+        """Pull deep historical decision patterns, player/team trends, and AI feedback for self-learning."""
         try:
             total_similar = await db.incidents.count_documents(
                 {"incident_type": incident_type, "decision_status": {"$ne": "pending"}}
@@ -589,12 +632,15 @@ class OctonBrainEngine:
                 },
                 {"$group": {"_id": "$final_decision", "count": {"$sum": 1}}},
                 {"$sort": {"count": -1}},
-                {"$limit": 1},
+                {"$limit": 3},
             ]
-            common_decisions = await db.incidents.aggregate(pipeline).to_list(1)
+            common_decisions = await db.incidents.aggregate(pipeline).to_list(3)
             most_common = (
                 common_decisions[0]["_id"] if common_decisions else "No historical data"
             )
+            decision_distribution = [
+                {"decision": d["_id"], "count": d["count"]} for d in common_decisions
+            ]
 
             confirmed_count = await db.incidents.count_documents(
                 {"incident_type": incident_type, "decision_status": "confirmed"}
@@ -609,6 +655,30 @@ class OctonBrainEngine:
                 (confirmed_count / total_decided * 100) if total_decided > 0 else 0
             )
 
+            # ── Deep history: recent decided incidents of same type for learning ──
+            recent_decided = await db.incidents.find(
+                {"incident_type": incident_type, "decision_status": {"$ne": "pending"}},
+                {"_id": 0, "description": 1, "final_decision": 1, "decision_status": 1,
+                 "team_involved": 1, "player_involved": 1},
+            ).sort("created_at", -1).to_list(8)
+
+            # ── Team/player patterns (factual, not biased) ──
+            team_pipeline = [
+                {"$match": {"incident_type": incident_type, "team_involved": {"$ne": None}}},
+                {"$group": {"_id": "$team_involved", "count": {"$sum": 1}}},
+                {"$sort": {"count": -1}},
+                {"$limit": 5},
+            ]
+            team_freq = await db.incidents.aggregate(team_pipeline).to_list(5)
+
+            player_pipeline = [
+                {"$match": {"incident_type": incident_type, "player_involved": {"$ne": None}}},
+                {"$group": {"_id": "$player_involved", "count": {"$sum": 1}}},
+                {"$sort": {"count": -1}},
+                {"$limit": 5},
+            ]
+            player_freq = await db.incidents.aggregate(player_pipeline).to_list(5)
+
             # ── AI Feedback Loop: pull operator corrections ──
             feedback_total = await db.ai_feedback.count_documents(
                 {"incident_type": incident_type}
@@ -620,7 +690,6 @@ class OctonBrainEngine:
                 (feedback_correct / feedback_total * 100) if feedback_total > 0 else 0
             )
 
-            # Get recent corrections to learn from
             recent_corrections = await db.ai_feedback.find(
                 {"incident_type": incident_type, "was_ai_correct": False},
                 {"_id": 0, "ai_suggestion": 1, "operator_decision": 1},
@@ -629,9 +698,13 @@ class OctonBrainEngine:
             return {
                 "total_similar": total_similar,
                 "most_common_decision": most_common,
+                "decision_distribution": decision_distribution,
                 "accuracy_rate": accuracy_rate,
                 "confirmed_count": confirmed_count,
                 "overturned_count": total_decided - confirmed_count,
+                "recent_decided": recent_decided,
+                "team_frequency": {t["_id"]: t["count"] for t in team_freq},
+                "player_frequency": {p["_id"]: p["count"] for p in player_freq},
                 "feedback_total": feedback_total,
                 "feedback_accuracy": feedback_accuracy,
                 "recent_corrections": recent_corrections,
@@ -641,9 +714,13 @@ class OctonBrainEngine:
             return {
                 "total_similar": 0,
                 "most_common_decision": "N/A",
+                "decision_distribution": [],
                 "accuracy_rate": 0,
                 "confirmed_count": 0,
                 "overturned_count": 0,
+                "recent_decided": [],
+                "team_frequency": {},
+                "player_frequency": {},
                 "feedback_total": 0,
                 "feedback_accuracy": 0,
                 "recent_corrections": [],

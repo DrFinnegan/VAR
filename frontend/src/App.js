@@ -401,6 +401,10 @@ const BrainPathway = ({ analysis }) => {
         <span style={{ color: riskColors[analysis.risk_level] || "#FFB800" }}>RISK: {(analysis.risk_level || "medium").toUpperCase()}</span>
         <span>SIMILAR: {analysis.similar_historical_cases}</span>
       </div>
+      <div className="flex items-center justify-between text-[10px] font-mono text-gray-500 pt-1">
+        <span>WEIGHT: Neo Cortex 80% / Hippo 20%</span>
+        {analysis.divergence_flag && <span className="text-[#FF3333] animate-pulse">PATHWAY DIVERGENCE: {analysis.pathway_divergence}pt</span>}
+      </div>
     </div>
   );
 };
