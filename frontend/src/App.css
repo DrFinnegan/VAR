@@ -98,6 +98,18 @@ body {
 }
 .reticle-spin { animation: reticle-rotate 8s linear infinite; }
 
+/* Decision Ticker marquee */
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.ticker-track {
+  animation: ticker-scroll 60s linear infinite;
+  will-change: transform;
+}
+.ticker-track:hover { animation-play-state: paused; }
+
+
 /* Grid line overlay */
 .grid-overlay {
   background-image:
