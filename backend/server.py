@@ -906,6 +906,213 @@ async def list_users(request: Request):
     return users
 
 
+# ── Training Library (Ground-Truth Precedent RAG) ─────────
+class TrainingCaseCreate(BaseModel):
+    title: str
+    incident_type: IncidentType
+    correct_decision: str
+    rationale: str
+    keywords: List[str] = []
+    tags: List[str] = []
+    match_context: Optional[Dict] = None
+    law_references: List[str] = []
+    outcome: Optional[str] = None
+
+
+class TrainingCaseUpdate(BaseModel):
+    title: Optional[str] = None
+    correct_decision: Optional[str] = None
+    rationale: Optional[str] = None
+    keywords: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+    match_context: Optional[Dict] = None
+    law_references: Optional[List[str]] = None
+    outcome: Optional[str] = None
+    visual_tags: Optional[List[str]] = None
+
+
+def _format_case(doc: dict) -> dict:
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.post("/training/cases")
+async def create_training_case(data: TrainingCaseCreate, request: Request):
+    """Create a ground-truth VAR precedent (admin only)."""
+    user = await require_role(request, db, ["admin"])
+    now = datetime.now(timezone.utc).isoformat()
+    case = {
+        "id": str(uuid.uuid4()),
+        "title": data.title,
+        "incident_type": data.incident_type.value,
+        "correct_decision": data.correct_decision,
+        "rationale": data.rationale,
+        "keywords": [k.strip() for k in data.keywords if k and k.strip()],
+        "tags": [t.strip() for t in data.tags if t and t.strip()],
+        "match_context": data.match_context or {},
+        "law_references": data.law_references or [],
+        "outcome": data.outcome,
+        "visual_tags": [],
+        "media_storage_path": None,
+        "thumbnail_storage_path": None,
+        "created_by": user["id"],
+        "created_by_name": user.get("name"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.training_cases.insert_one(case.copy())
+    return _format_case(case)
+
+
+@api_router.get("/training/cases")
+async def list_training_cases(
+    incident_type: Optional[str] = None,
+    q: Optional[str] = None,
+    limit: int = Query(100, ge=1, le=500),
+):
+    query: Dict = {}
+    if incident_type:
+        query["incident_type"] = incident_type
+    if q:
+        rx = {"$regex": q, "$options": "i"}
+        query["$or"] = [{"title": rx}, {"rationale": rx}, {"correct_decision": rx}]
+    docs = await db.training_cases.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    return docs
+
+
+@api_router.get("/training/cases/{case_id}")
+async def get_training_case(case_id: str):
+    doc = await db.training_cases.find_one({"id": case_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Training case not found")
+    return doc
+
+
+@api_router.put("/training/cases/{case_id}")
+async def update_training_case(case_id: str, data: TrainingCaseUpdate, request: Request):
+    await require_role(request, db, ["admin"])
+    update = {k: v for k, v in data.model_dump(exclude_unset=True).items() if v is not None}
+    if not update:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await db.training_cases.find_one_and_update(
+        {"id": case_id}, {"$set": update}, return_document=True, projection={"_id": 0}
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Training case not found")
+    return result
+
+
+@api_router.delete("/training/cases/{case_id}")
+async def delete_training_case(case_id: str, request: Request):
+    await require_role(request, db, ["admin"])
+    res = await db.training_cases.delete_one({"id": case_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Training case not found")
+    return {"message": "Training case deleted"}
+
+
+@api_router.post("/training/cases/{case_id}/media")
+async def upload_training_media(case_id: str, file: UploadFile = File(...), request: Request = None):
+    """Upload image/video for a training case and optionally auto-tag via vision AI."""
+    await require_role(request, db, ["admin"])
+    case = await db.training_cases.find_one({"id": case_id}, {"_id": 0})
+    if not case:
+        raise HTTPException(status_code=404, detail="Training case not found")
+
+    ext = (file.filename or "bin").split(".")[-1].lower()
+    from storage import MIME_TYPES
+    content_type = MIME_TYPES.get(ext, file.content_type or "application/octet-stream")
+    path = f"octon-var/training/{case_id}/{uuid.uuid4()}.{ext}"
+    data_bytes = await file.read()
+    if len(data_bytes) > 200 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (200 MB max)")
+    try:
+        put_object(path, data_bytes, content_type)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Storage upload failed: {e}")
+
+    is_image = content_type.startswith("image/")
+    update: Dict = {
+        "media_storage_path": path,
+        "media_content_type": content_type,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if is_image:
+        update["thumbnail_storage_path"] = path
+
+    # Auto-tag images via GPT-5.2 vision
+    auto_tags: List[str] = []
+    if is_image:
+        try:
+            from training import auto_tag_image
+            b64 = base64.b64encode(data_bytes).decode("utf-8")
+            auto_tags = await auto_tag_image(b64)
+            if auto_tags:
+                update["visual_tags"] = list(set((case.get("visual_tags") or []) + auto_tags))
+        except Exception as e:
+            logger.warning(f"Auto-tag failed: {e}")
+
+    result = await db.training_cases.find_one_and_update(
+        {"id": case_id}, {"$set": update}, return_document=True, projection={"_id": 0}
+    )
+    return {"case": result, "auto_tags": auto_tags, "is_image": is_image}
+
+
+@api_router.post("/training/seed")
+async def seed_training_cases(request: Request):
+    """Bulk-import the 20 canonical VAR precedents (idempotent by title)."""
+    await require_role(request, db, ["admin"])
+    from training_seed import CANONICAL_CASES
+    now = datetime.now(timezone.utc).isoformat()
+    inserted, skipped = 0, 0
+    for tpl in CANONICAL_CASES:
+        existing = await db.training_cases.find_one({"title": tpl["title"]}, {"_id": 0})
+        if existing:
+            skipped += 1
+            continue
+        case = {
+            "id": str(uuid.uuid4()),
+            **tpl,
+            "visual_tags": [],
+            "media_storage_path": None,
+            "thumbnail_storage_path": None,
+            "created_by": "seed",
+            "created_by_name": "OCTON Seed",
+            "created_at": now,
+            "updated_at": now,
+        }
+        await db.training_cases.insert_one(case.copy())
+        inserted += 1
+    total = await db.training_cases.count_documents({})
+    return {"inserted": inserted, "skipped": skipped, "total_cases": total}
+
+
+@api_router.get("/training/stats")
+async def training_stats():
+    total = await db.training_cases.count_documents({})
+    pipeline = [
+        {"$group": {"_id": "$incident_type", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ]
+    by_type = await db.training_cases.aggregate(pipeline).to_list(20)
+    with_media = await db.training_cases.count_documents({"media_storage_path": {"$ne": None}})
+    return {
+        "total_cases": total,
+        "by_type": [{"incident_type": b["_id"], "count": b["count"]} for b in by_type],
+        "with_media": with_media,
+    }
+
+
+@api_router.post("/training/retrieve")
+async def preview_precedents(req: TextAnalysisRequest):
+    """Preview which precedents would be retrieved for a given description (debug / UI)."""
+    from training import retrieve_precedents, compute_confidence_uplift
+    precedents = await retrieve_precedents(db, req.incident_type.value, req.description)
+    uplift_info = compute_confidence_uplift(precedents)
+    return {"precedents": precedents, **uplift_info}
+
+
 # ── WebSocket ─────────────────────────────────────────────
 @api_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

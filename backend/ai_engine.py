@@ -293,6 +293,7 @@ class NeoCortexAnalyzer:
         description: str,
         hippocampus_result: Dict,
         historical_context: str = "",
+        precedent_block: str = "",
         has_image: bool = False,
         image_base64: Optional[str] = None,
     ) -> Dict:
@@ -377,10 +378,14 @@ class NeoCortexAnalyzer:
             )
             if historical_context:
                 prompt += f"\nSELF-LEARNING CONTEXT:\n{historical_context}\n"
+            if precedent_block:
+                prompt += f"\n{precedent_block}\n"
             prompt += (
                 "\nINSTRUCTIONS: Apply the law above to the incident description. "
                 "Do NOT blindly agree with the Hippocampus - make your own independent assessment. "
                 "If the description lacks critical details, lower your confidence and note what's missing. "
+                "When ground-truth precedents match closely, defer to their rulings and cite them "
+                "(e.g. 'per precedent #2') inside your reasoning. "
                 "Respond in JSON format only."
             )
 
@@ -531,13 +536,27 @@ class OctonBrainEngine:
         # SPEED OPTIMIZATION: Run Hippocampus + historical data fetch concurrently
         # Hippocampus is sync but fast (<5ms); historical is async DB
 
-        # Fetch historical data first (needed by both Hippocampus and Neo Cortex)
-        historical_data = await self._get_historical_context(incident_type, db)
+        # Fetch historical data and ground-truth precedents concurrently.
+        from training import retrieve_precedents, compute_confidence_uplift, build_precedent_prompt
+
+        historical_data, precedents = await asyncio.gather(
+            self._get_historical_context(incident_type, db),
+            retrieve_precedents(db, incident_type, description),
+        )
+        uplift_info = compute_confidence_uplift(precedents)
+        precedent_block = build_precedent_prompt(precedents)
 
         # Hippocampus is instant (<5ms) so run directly
         hippocampus_result = self.hippocampus.analyze(
             incident_type, description, historical_data
         )
+        # Hippocampus boost when strong precedents match (cap +10)
+        hip_boost = min(10.0, uplift_info["strong_matches"] * 3.0)
+        if hip_boost > 0:
+            hippocampus_result["initial_confidence"] = round(
+                min(95.0, hippocampus_result["initial_confidence"] + hip_boost), 1
+            )
+            hippocampus_result["precedent_boost"] = hip_boost
 
         # Step 3: Build deep historical context for Neo Cortex
         historical_context = ""
@@ -576,12 +595,13 @@ class OctonBrainEngine:
                     f"but correct answer was: \"{c.get('operator_decision', '')}\"\n"
                 )
 
-        # Step 4: Neo Cortex deep analysis (receives Hippocampus findings)
+        # Step 4: Neo Cortex deep analysis (receives Hippocampus findings + precedents)
         neo_cortex_result = await self.neo_cortex.analyze(
             incident_type=incident_type,
             description=description,
             hippocampus_result=hippocampus_result,
             historical_context=historical_context,
+            precedent_block=precedent_block,
             has_image=bool(image_base64),
             image_base64=image_base64,
         )
@@ -589,20 +609,23 @@ class OctonBrainEngine:
         total_time_ms = int((time.time() - total_start) * 1000)
 
         # ── Weighted merge: Neo Cortex 80%, Hippocampus 20% ──
-        # Neo Cortex carries more weight as it leverages game history and deep reasoning.
-        # Hippocampus provides directional signal only, not final authority.
         neo_conf = neo_cortex_result["confidence_score"]
         hip_conf = hippocampus_result["initial_confidence"]
         weighted_confidence = round(neo_conf * 0.80 + hip_conf * 0.20, 1)
 
-        # Divergence detection: if the two pathways disagree significantly, flag it
+        # Apply transparent precedent uplift (capped at +20%)
+        base_confidence = weighted_confidence
+        final_confidence = round(min(99.0, base_confidence + uplift_info["uplift"]), 1)
+
+        # Divergence detection
         divergence = abs(neo_conf - hip_conf)
         divergence_flag = divergence > 25
 
         return {
             "hippocampus": hippocampus_result,
             "neo_cortex": neo_cortex_result,
-            "final_confidence": weighted_confidence,
+            "base_confidence": base_confidence,
+            "final_confidence": final_confidence,
             "suggested_decision": neo_cortex_result["suggested_decision"],
             "reasoning": neo_cortex_result["reasoning"],
             "key_factors": neo_cortex_result["key_factors"],
@@ -613,9 +636,14 @@ class OctonBrainEngine:
             "weighting": {"neo_cortex": 0.80, "hippocampus": 0.20},
             "pathway_divergence": round(divergence, 1),
             "divergence_flag": divergence_flag,
+            "precedents_used": precedents,
+            "precedents_count": len(precedents),
+            "confidence_uplift": uplift_info["uplift"],
+            "precedent_strong_matches": uplift_info["strong_matches"],
+            "precedent_avg_similarity": uplift_info["avg_similarity"],
             "total_processing_time_ms": total_time_ms,
-            "pathway": "hippocampus -> neo_cortex (weighted 20:80)",
-            "engine_version": "OCTON v2.0 - Dr Finnegan",
+            "pathway": "hippocampus -> neo_cortex (weighted 20:80) + precedent-RAG uplift",
+            "engine_version": "OCTON v2.1 - Dr Finnegan",
         }
 
     async def _get_historical_context(

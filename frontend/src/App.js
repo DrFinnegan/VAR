@@ -24,6 +24,7 @@ import { Label } from "./components/ui/label";
 import { ScrollArea } from "./components/ui/scroll-area";
 import { Separator } from "./components/ui/separator";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
+import TrainingLibraryPage from "./TrainingLibraryPage";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -323,6 +324,7 @@ const Sidebar = () => {
     { path: "/", icon: Video, label: "Live VAR", roles: null, section: "var" },
     { path: "/history", icon: History, label: "Incident History", roles: null, section: "var" },
     { path: "/matches", icon: Trophy, label: "Matches", roles: ["admin"], section: "var" },
+    { path: "/training", icon: BookOpen, label: "Training Library", roles: ["admin"], section: "var" },
     { path: "/analytics", icon: BarChart3, label: "VAR Analytics", roles: null, section: "system" },
     { path: "/feedback", icon: Brain, label: "AI Feedback", roles: ["admin", "var_operator"], section: "system" },
     { path: "/settings", icon: Settings, label: "Settings", roles: null, section: "system" },
@@ -604,7 +606,7 @@ const DecisionTicker = ({ incidents, onSelect }) => {
   );
 };
 
-const ConfidenceScore = ({ score, size = "default" }) => {
+const ConfidenceScore = ({ score, size = "default", uplift = 0, precedentCount = 0 }) => {
   const s = Number(score) || 0;
   const getColor = (s) => s >= 90 ? "#00FF88" : s >= 70 ? "#00E5FF" : s >= 50 ? "#FFB800" : "#FF2A2A";
   const getTier = (s) => s >= 90 ? "HIGH" : s >= 70 ? "STRONG" : s >= 50 ? "MODERATE" : "LOW";
@@ -663,6 +665,14 @@ const ConfidenceScore = ({ score, size = "default" }) => {
           </span>
         </div>
       </div>
+      {uplift > 0 && (
+        <div className="mt-2 flex items-center gap-1.5 px-2 py-1 border border-[#B366FF]/30 bg-[#B366FF]/[0.08]" data-testid="uplift-badge">
+          <Sparkles className="w-3 h-3 text-[#B366FF]" />
+          <span className="text-[9px] font-mono text-[#B366FF] tracking-wider">
+            +{uplift.toFixed(1)}% <span className="text-[#B366FF]/70">from {precedentCount} precedent{precedentCount === 1 ? "" : "s"}</span>
+          </span>
+        </div>
+      )}
     </div>
   );
 };
@@ -1905,7 +1915,11 @@ const LiveVARPage = () => {
 
                 {/* Confidence Ring */}
                 <div className="py-3">
-                  <ConfidenceScore score={analysis.final_confidence || analysis.confidence_score || 0} />
+                  <ConfidenceScore
+                    score={analysis.final_confidence || analysis.confidence_score || 0}
+                    uplift={analysis.confidence_uplift || 0}
+                    precedentCount={analysis.precedent_strong_matches || 0}
+                  />
                 </div>
 
                 {/* Always-visible Decision tile */}
@@ -1964,6 +1978,43 @@ const LiveVARPage = () => {
                           >
                             {f}
                           </span>
+                        ))}
+                      </div>
+                    </CurtainSection>
+                  )}
+
+                  {Array.isArray(analysis.precedents_used) && analysis.precedents_used.length > 0 && (
+                    <CurtainSection
+                      icon={BookOpen}
+                      title="Precedents"
+                      accent="#B366FF"
+                      count={analysis.precedents_used.length}
+                      defaultOpen={analysis.confidence_uplift > 0}
+                      testId="precedents-curtain"
+                    >
+                      <div className="space-y-2">
+                        {analysis.precedents_used.map((p, i) => (
+                          <div
+                            key={p.id || i}
+                            className="border border-[#B366FF]/20 bg-[#B366FF]/[0.04] p-2 hover:border-[#B366FF]/40 transition-colors"
+                            data-testid={`precedent-${i}`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-[9px] font-mono text-[#B366FF] font-bold">#{i + 1}</span>
+                                <span className="text-[11px] font-body text-white font-semibold truncate">{p.title}</span>
+                              </div>
+                              <span className="text-[9px] font-mono text-[#B366FF] flex-none px-1 border border-[#B366FF]/30" style={{ backgroundColor: "#B366FF10" }}>
+                                {(p.similarity * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                            <p className="text-[10px] font-mono text-[#00FF88]/80 mt-1">→ {p.correct_decision}</p>
+                            {p.match_context && (p.match_context.teams || p.match_context.year) && (
+                              <p className="text-[9px] font-mono text-gray-600 mt-0.5">
+                                {p.match_context.teams} {p.match_context.competition ? `· ${p.match_context.competition}` : ""} {p.match_context.year ? `· ${p.match_context.year}` : ""}
+                              </p>
+                            )}
+                          </div>
                         ))}
                       </div>
                     </CurtainSection>
@@ -2562,6 +2613,7 @@ function App() {
                     <Route path="/" element={<LiveVARPage />} />
                     <Route path="/history" element={<HistoryPage />} />
                     <Route path="/matches" element={<ProtectedRoute roles={["admin"]}><MatchesPage /></ProtectedRoute>} />
+                    <Route path="/training" element={<ProtectedRoute roles={["admin"]}><TrainingLibraryPage /></ProtectedRoute>} />
                     <Route path="/analytics" element={<AnalyticsPage />} />
                     <Route path="/feedback" element={<ProtectedRoute roles={["admin", "var_operator"]}><FeedbackPage /></ProtectedRoute>} />
                     <Route path="/settings" element={<SettingsPage />} />
