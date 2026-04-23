@@ -1420,7 +1420,7 @@ async def audit_chain_for_incident(incident_id: str):
 
 
 # ── OCTON Voice Bot ───────────────────────────────────────
-from voice import transcribe_audio, generate_reply, speak, build_context, classify_intent  # noqa: E402
+from voice import transcribe_audio, generate_reply, speak, build_context, classify_intent, fast_intent  # noqa: E402
 
 
 @api_router.post("/voice/transcribe")
@@ -1454,35 +1454,65 @@ async def voice_chat(req: VoiceChatRequest):
         raise HTTPException(status_code=400, detail="Empty text")
     session_id = req.session_id or f"octon-voice-{uuid.uuid4()}"
     user_text = req.text.strip()
+    import asyncio as _asyncio
     try:
-        # Run intent classification + context build concurrently
-        import asyncio as _asyncio
-        intent_task = _asyncio.create_task(classify_intent(user_text, bool(req.selected_incident_id)))
-        context_task = _asyncio.create_task(build_context(db, req.selected_incident_id))
-        intent = await intent_task
-        context = await context_task
+        # ── Fast path: regex intent (near-zero latency) ──
+        fast = fast_intent(user_text)
+        action_lines = {
+            "confirm_decision": "Confirming the on-field decision.",
+            "overturn_decision": "Overturning the on-field decision.",
+            "reanalyze": "Re-running the analysis.",
+            "open_precedents": "Opening matched precedents.",
+            "export_pdf": "Generating the signed forensic report.",
+            "promote_training": "Promoting this decision into the Training Library.",
+            "open_incident": "Opening the requested incident.",
+            "summarize_match": "Summarising the match so far.",
+        }
 
-        # For pure chat or when intent is low-confidence, get a full AI reply
-        if intent.get("action") == "chat" or intent.get("confidence", 0) < 0.6:
-            reply_text = await generate_reply(user_text, session_id, context)
-            intent["action"] = "chat"
-        else:
-            # Crisp acknowledgement reply tied to the action
+        if fast and fast["action"] != "chat":
+            # Pure command — skip the context build, intent LLM, and reply LLM.
+            # Return the canned action line + TTS in parallel for minimal latency.
+            intent = fast
             action = intent["action"]
-            action_lines = {
-                "confirm_decision": "Confirming the on-field decision.",
-                "overturn_decision": "Overturning the on-field decision — please specify the correct ruling if needed.",
-                "reanalyze": "Re-running the analysis. Stand by.",
-                "open_precedents": "Opening matched precedents.",
-                "export_pdf": "Generating the signed forensic report.",
-                "promote_training": "Promoting this decision into the Training Library.",
-                "open_incident": f"Opening incident {intent.get('args',{}).get('index','?')}.",
-                "summarize_match": "Summarising the match so far.",
-            }
-            reply_text = action_lines.get(action, "")
             if action == "summarize_match":
-                # Generate a real summary as the reply
-                reply_text = await generate_reply("Give me a 2-sentence summary of the match so far based on the recent incidents.", session_id, context)
+                # Summary needs real content, run the full context + reply path
+                context = await build_context(db, req.selected_incident_id)
+                reply_text = await generate_reply(
+                    "Give me a 1-2 sentence recap of the match so far.",
+                    session_id, context,
+                )
+            elif action == "open_incident":
+                idx = int((intent.get("args") or {}).get("index") or 0)
+                reply_text = f"Opening incident {idx}." if idx else action_lines[action]
+            else:
+                reply_text = action_lines.get(action, "Acknowledged.")
+        else:
+            # Ambiguous / chat path — kick off context + reply in parallel with
+            # the LLM intent classifier so we don't block on intent.
+            intent_task = _asyncio.create_task(classify_intent(user_text, bool(req.selected_incident_id)))
+            context_task = _asyncio.create_task(build_context(db, req.selected_incident_id))
+            context = await context_task
+            reply_task = _asyncio.create_task(generate_reply(user_text, session_id, context))
+            intent = await intent_task
+            if intent.get("action") == "chat" or intent.get("confidence", 0) < 0.6:
+                reply_text = await reply_task
+                intent["action"] = "chat"
+            else:
+                # Command intent won — use the canned line; let reply_task
+                # finish in the background (fire-and-forget, no await).
+                action = intent["action"]
+                if action == "summarize_match":
+                    reply_text = await reply_task
+                elif action == "open_incident":
+                    idx = int((intent.get("args") or {}).get("index") or 0)
+                    reply_text = f"Opening incident {idx}." if idx else action_lines[action]
+                else:
+                    reply_text = action_lines.get(action, "Acknowledged.")
+                # Clean up the unused reply task
+                try:
+                    reply_task.cancel()
+                except Exception:
+                    pass
     except Exception as e:
         logger.exception(f"voice chat failed: {e}")
         raise HTTPException(status_code=500, detail=f"Reply failed: {e}")

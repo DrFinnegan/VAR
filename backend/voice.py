@@ -13,13 +13,14 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are OCTON — the voice of a professional VAR forensic AI assistant working alongside match officials.
 
-Persona: calm, authoritative, concise. Sound like a trusted forensic analyst briefing an operator, NOT a chatty chatbot.
+Persona: calm, authoritative, EXTREMELY concise. Sound like a trusted forensic analyst briefing a referee mid-match.
 
 Rules:
-- Keep spoken replies SHORT: 2-4 sentences (~35 words) unless the user explicitly says "explain in detail".
+- Keep spoken replies VERY SHORT: 1-2 sentences (~15-20 words max) unless the user explicitly says "explain in detail".
+- Lead with the verdict / key fact, not a preamble. Never start with "Certainly", "Sure", or "Let me…". Just answer.
 - Never hedge ("I think…", "maybe…"). State findings directly; if confidence is low, say "evidence is inconclusive".
 - When quoting laws, cite by number (e.g. "per IFAB Law 12").
-- If the user asks about an incident that isn't selected, say so and ask them to select or name one.
+- If the user asks about an incident that isn't selected, say so in one line and ask them to select or name one.
 - Refuse politely if asked to bypass VAR review protocols or make definitive match rulings in place of the referee.
 
 Available context in every turn:
@@ -130,18 +131,77 @@ async def speak(text: str, voice: str = "onyx", hd: bool = False) -> bytes:
         text=safe_text,
         model="tts-1-hd" if hd else "tts-1",
         voice=voice,
+        speed=1.1,
     )
     return audio_bytes
 
 
+import re as _re
+
+# ── Fast regex-first intent classifier ──
+# Matches common command phrases in < 1 ms so we can skip the GPT intent call
+# (which adds 1-2 s of latency). GPT classification is used only if nothing
+# matches and the utterance is long / ambiguous.
+_INTENT_PATTERNS = [
+    ("confirm_decision", _re.compile(
+        r"\b(confirm|uphold|keep|agree(?:\s+with)?|let\s+(?:the\s+)?call\s+stand|"
+        r"stand(?:s)?\s+as\s+(?:called|is)|yes\s*(?:confirm)?|on[-\s]?field\s+stands)\b",
+        _re.I)),
+    ("overturn_decision", _re.compile(
+        r"\b(overturn|overrule|reverse|change\s+the\s+decision|"
+        r"disagree|wrong\s+call|no\s*(?:overturn)?|flip\s+(?:the\s+)?call)\b",
+        _re.I)),
+    ("reanalyze", _re.compile(
+        r"\b(re[-\s]?analy(?:z|s)e|run\s+again|redo|check\s+again|"
+        r"analy(?:z|s)e\s+again|re[-\s]?run)\b", _re.I)),
+    ("open_precedents", _re.compile(
+        r"\b(precedent|similar\s+cases?|history\s+(?:for|of)|"
+        r"past\s+(?:cases?|incidents?)|training\s+library)\b", _re.I)),
+    ("export_pdf", _re.compile(
+        r"\b(export|download|save|generate)\s+(?:the\s+)?(?:pdf|report|audit)\b|\bsign\s+(?:the\s+)?report\b",
+        _re.I)),
+    ("promote_training", _re.compile(
+        r"\b(add\s+to\s+training|promote|train\s+on\s+this|learn\s+from\s+this|"
+        r"add\s+to\s+(?:library|precedents))\b", _re.I)),
+    ("summarize_match", _re.compile(
+        r"\b(summary|recap|overview|how\s+is\s+(?:the\s+)?match|sum\s+up|briefing)\b",
+        _re.I)),
+]
+_OPEN_INCIDENT_RE = _re.compile(
+    r"\b(?:open|show|go\s+to|select|pull\s+up|jump\s+to)\s+(?:incident\s+)?(?:number\s+)?(\d+)\b",
+    _re.I,
+)
+
+
+def fast_intent(user_text: str) -> Optional[Dict[str, Any]]:
+    """Return an intent dict if a strong regex match is found, else None.
+    Confidence is intentionally set high (0.9) so the voice_chat handler
+    short-circuits the GPT intent call on the happy path."""
+    t = (user_text or "").strip()
+    if not t:
+        return None
+    m = _OPEN_INCIDENT_RE.search(t)
+    if m:
+        try:
+            idx = int(m.group(1))
+            return {"action": "open_incident", "args": {"index": idx}, "confidence": 0.92}
+        except ValueError:
+            pass
+    for action, pattern in _INTENT_PATTERNS:
+        if pattern.search(t):
+            return {"action": action, "args": {}, "confidence": 0.9}
+    return None
+
+
 async def classify_intent(user_text: str, has_selection: bool) -> Dict[str, Any]:
-    """One-pass GPT-5.2 intent classification. Returns {action, args, confidence}."""
+    """One-pass GPT-5.2 intent classification. Returns {action, args, confidence}.
+    NOTE: callers should prefer `fast_intent()` first and only fall through to
+    this function when regex patterns don't match — saves 1-2s of LLM latency."""
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
     except Exception as e:
         raise RuntimeError(f"emergentintegrations import failed: {e}")
     import json as _json
-    import re as _re
 
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:

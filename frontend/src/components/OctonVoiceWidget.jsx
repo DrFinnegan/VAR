@@ -172,6 +172,9 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
 
   const processAudio = useCallback(async (blob, fileExt = "webm") => {
     setThinking(true);
+    // Insert a placeholder "thinking" bubble right away so the user never
+    // stares at a frozen UI between transcribe → chat → TTS.
+    const thinkingId = `thinking-${Date.now()}`;
     try {
       // 1) Transcribe
       const fd = new FormData();
@@ -182,7 +185,11 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
         toast.info("Didn't catch that — try again");
         return;
       }
-      setMessages(m => [...m, { role: "user", text: userText }]);
+      setMessages(m => [
+        ...m,
+        { role: "user", text: userText },
+        { id: thinkingId, role: "octon", text: "…", placeholder: true },
+      ]);
 
       // 2) Chat + TTS
       const chat = await axios.post(
@@ -198,7 +205,14 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
       );
       const { reply_text, audio_base64, audio_mime, session_id: sid, action, action_args, action_confidence } = chat.data || {};
       if (sid) setSessionId(sid);
-      if (reply_text) setMessages(m => [...m, { role: "octon", text: reply_text, action }]);
+      if (reply_text) {
+        // Replace the placeholder bubble with the real reply
+        setMessages(m => m.map(x => x.id === thinkingId
+          ? { role: "octon", text: reply_text, action }
+          : x));
+      } else {
+        setMessages(m => m.filter(x => x.id !== thinkingId));
+      }
 
       // Dispatch voice action (if any)
       if (action && action !== "chat" && action_confidence >= 0.6 && onVoiceAction) {
@@ -251,6 +265,8 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
         }
       }
     } catch (err) {
+      // Remove the thinking placeholder on error so the UI isn't left stuck
+      setMessages(m => m.filter(x => x.id !== thinkingId));
       const detail = err?.response?.data?.detail || err?.message || "unknown";
       // Highlight a specific, common root cause so users can act on it fast
       if (/budget|quota|insufficient|401|402|429/i.test(String(detail))) {
@@ -506,7 +522,7 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
               </div>
             ) : (
               messages.map((m, i) => (
-                <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`} data-testid={`voice-msg-${m.role}-${i}`}>
+                <div key={m.id || i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`} data-testid={`voice-msg-${m.role}-${i}`}>
                   <div
                     className={`max-w-[85%] px-3 py-2 border text-xs leading-relaxed ${
                       m.role === "user"
@@ -518,6 +534,9 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
                       <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                         <div className="w-1 h-1 bg-[#00E5FF]" />
                         <span className="text-[8px] font-mono text-[#00E5FF] tracking-[0.25em]">OCTON</span>
+                        {m.placeholder && (
+                          <span className="text-[8px] font-mono text-[#FFB800] tracking-[0.25em] animate-pulse">THINKING…</span>
+                        )}
                         {m.action && m.action !== "chat" && (
                           <span className="text-[8px] font-mono text-[#00FF88] tracking-[0.2em] px-1 py-0.5 border border-[#00FF88]/30 bg-[#00FF88]/[0.05] uppercase">
                             → {m.action.replace(/_/g, " ")}
@@ -525,7 +544,13 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
                         )}
                       </div>
                     )}
-                    {m.text}
+                    {m.placeholder ? (
+                      <span className="inline-flex gap-1 items-center">
+                        <span className="w-1.5 h-1.5 bg-[#00E5FF] animate-bounce" style={{ animationDelay: "0ms" }} />
+                        <span className="w-1.5 h-1.5 bg-[#00E5FF] animate-bounce" style={{ animationDelay: "120ms" }} />
+                        <span className="w-1.5 h-1.5 bg-[#00E5FF] animate-bounce" style={{ animationDelay: "240ms" }} />
+                      </span>
+                    ) : m.text}
                   </div>
                 </div>
               ))
