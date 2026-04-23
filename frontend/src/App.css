@@ -156,5 +156,13 @@ body {
 .octon-pulse-red { animation: octonPulseRed 1.8s ease-in-out infinite; }
 
 
+/* Amber pulse for Play-Reply unlock button */
+@keyframes octonPulseAmber {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,184,0,0.55), 0 0 8px rgba(255,184,0,0.25); }
+  50%      { box-shadow: 0 0 0 6px rgba(255,184,0,0),    0 0 14px rgba(255,184,0,0.55); }
+}
+.octon-pulse-amber { animation: octonPulseAmber 1.6s ease-in-out infinite; }
+
+
 
 *:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }

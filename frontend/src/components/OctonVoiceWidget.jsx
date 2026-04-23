@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { Mic, X, Loader2, Waves, MessageSquareText, Ear, EarOff } from "lucide-react";
+import { Mic, X, Loader2, Waves, MessageSquareText, Ear, EarOff, Volume2 } from "lucide-react";
 import { OctonBrainLogo } from "./OctonBrainLogo";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -21,6 +21,7 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
   const [levels, setLevels] = useState([0, 0, 0, 0, 0]); // audio bars
   const [wakeOn, setWakeOn] = useState(false);
   const [wakeSupported, setWakeSupported] = useState(true);
+  const [pendingAudioUrl, setPendingAudioUrl] = useState(null);
 
   const wakeRecRef = useRef(null);
   const wakeRestartTimerRef = useRef(null);
@@ -206,9 +207,48 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
 
       // 3) Play audio
       if (audio_base64 && audioElRef.current) {
-        audioElRef.current.src = `data:${audio_mime || "audio/mpeg"};base64,${audio_base64}`;
-        audioElRef.current.play().catch(() => {});
-        setSpeaking(true);
+        try {
+          // Convert base64 → Blob → object URL. Chrome handles large Blob
+          // URLs far better than very long data: URLs, and Safari sometimes
+          // refuses data: URLs for <audio> entirely.
+          const mime = audio_mime || "audio/mpeg";
+          const bin = atob(audio_base64);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          const blob = new Blob([bytes], { type: mime });
+          const url = URL.createObjectURL(blob);
+          const audioEl = audioElRef.current;
+          // Clean up a previous object URL if present
+          if (audioEl._octonPrevUrl) {
+            try { URL.revokeObjectURL(audioEl._octonPrevUrl); } catch {/* noop */}
+          }
+          audioEl._octonPrevUrl = url;
+          audioEl.src = url;
+          audioEl.onended = () => setSpeaking(false);
+          audioEl.onerror = () => {
+            setSpeaking(false);
+            toast.error("Could not play OCTON audio");
+          };
+          setSpeaking(true);
+          const playPromise = audioEl.play();
+          if (playPromise && typeof playPromise.then === "function") {
+            playPromise.catch((err) => {
+              setSpeaking(false);
+              if (err?.name === "NotAllowedError") {
+                // Chrome blocked autoplay (the await broke the user-gesture chain).
+                // Offer a one-tap unlock: clicking the mic (or any button in the
+                // panel) will play the stored audio.
+                setPendingAudioUrl(url);
+                toast.info("Browser blocked audio autoplay — tap the speaker button to hear OCTON.", { duration: 6000 });
+              } else {
+                toast.error(`Playback failed: ${err?.message || err?.name || "unknown"}`);
+              }
+            });
+          }
+        } catch (e) {
+          setSpeaking(false);
+          toast.error(`Audio decode failed: ${e?.message || "unknown"}`);
+        }
       }
     } catch (err) {
       const detail = err?.response?.data?.detail || err?.message || "unknown";
@@ -229,6 +269,30 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
     if (recording) stopRecording();
     else startRecording();
   };
+
+  // Once the panel is opened (a user gesture), prime the <audio> element so
+  // subsequent .play() calls that happen after an async await chain aren't
+  // blocked by Chrome's autoplay policy. We load and pause on a 1x1 silent
+  // MP3 data URL — that counts as "user-initiated audio playback" from then on.
+  useEffect(() => {
+    if (!open || !audioElRef.current) return;
+    const el = audioElRef.current;
+    // Tiny silent MP3 (~1ms, base64). Safe to load once per mount.
+    const SILENT_MP3 =
+      "data:audio/mpeg;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA" +
+      "gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIA==";
+    try {
+      el.muted = true;
+      el.src = SILENT_MP3;
+      const p = el.play();
+      if (p && typeof p.then === "function") {
+        p.then(() => { el.pause(); el.currentTime = 0; el.muted = false; })
+         .catch(() => { el.muted = false; /* still ok, nothing to do */ });
+      } else {
+        el.muted = false;
+      }
+    } catch { /* best effort */ }
+  }, [open]);
 
   const clearConversation = () => {
     setMessages([]);
@@ -487,7 +551,7 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
             </div>
 
             {/* Mic button */}
-            <div className="flex items-center justify-center">
+            <div className="flex items-center justify-center gap-3">
               <button
                 onClick={toggleRecording}
                 disabled={thinking}
@@ -517,6 +581,30 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
                   <Mic className={`w-6 h-6 ${recording ? "text-[#FF2A2A]" : "text-[#00E5FF]"}`} />
                 )}
               </button>
+              {/* Manual-play unlock button (appears when browser blocked autoplay) */}
+              {pendingAudioUrl && !speaking && (
+                <button
+                  onClick={() => {
+                    const el = audioElRef.current;
+                    if (!el) return;
+                    // This click IS a user gesture, so play() will succeed
+                    el.play().then(() => {
+                      setSpeaking(true);
+                      setPendingAudioUrl(null);
+                    }).catch(() => {
+                      toast.error("Still blocked — check your tab's audio permission");
+                    });
+                  }}
+                  className="h-12 px-3 flex items-center gap-2 border-2 border-[#FFB800]/60 bg-[#FFB800]/10 hover:bg-[#FFB800]/25 transition-all octon-pulse-amber"
+                  data-testid="octon-voice-unlock"
+                  title="Tap to hear OCTON's reply (autoplay blocked)"
+                >
+                  <Volume2 className="w-5 h-5 text-[#FFB800]" />
+                  <span className="text-[9px] font-mono font-bold tracking-[0.15em] uppercase text-[#FFB800]">
+                    Play Reply
+                  </span>
+                </button>
+              )}
             </div>
             <p className="text-center text-[9px] font-mono text-gray-500 tracking-[0.2em] uppercase mt-2">
               {recording ? "TAP TO STOP" : thinking ? "TRANSCRIBING…" : speaking ? "OCTON SPEAKING" : "TAP TO TALK"}
