@@ -627,12 +627,12 @@ class OctonBrainEngine:
 
         # ── Hippocampus agreement bonus ──
         # Separate transparent additive boost up to +6 % when the fast pathway
-        # both (a) has high confidence AND (b) agrees with the Neo Cortex verdict.
-        # Scales quadratically with Hippocampus confidence above 60 %.
-        if divergence <= 15 and hip_conf >= 60:
-            hip_bonus = round(((hip_conf - 60) / 40.0) ** 1.2 * 6.0, 1)  # 0..6
-        elif divergence <= 25 and hip_conf >= 70:
-            hip_bonus = round(((hip_conf - 70) / 30.0) ** 1.2 * 4.0, 1)  # 0..4
+        # both (a) has reasonable confidence AND (b) agrees with the Neo Cortex verdict.
+        # Scales quadratically with Hippocampus confidence above 50 %.
+        if divergence <= 20 and hip_conf >= 55:
+            hip_bonus = round(((hip_conf - 50) / 40.0) ** 1.1 * 6.0, 1)  # 0..6
+        elif divergence <= 30 and hip_conf >= 50:
+            hip_bonus = round(((hip_conf - 50) / 40.0) ** 1.1 * 3.5, 1)  # 0..3.5
         else:
             hip_bonus = 0.0
         hip_bonus = max(0.0, min(6.0, hip_bonus))

@@ -1881,6 +1881,7 @@ const LiveVARPage = () => {
                     score={analysis.final_confidence || analysis.confidence_score || 0}
                     uplift={analysis.confidence_uplift || 0}
                     precedentCount={analysis.precedent_strong_matches || 0}
+                    hipBonus={analysis.hippocampus_bonus || 0}
                   />
                 </div>
 

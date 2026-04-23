@@ -3,10 +3,10 @@
  * Used by the OCTON Analysis right panel.
  */
 import { useState } from "react";
-import { ChevronDown, Copy, Check, Sparkles } from "lucide-react";
+import { ChevronDown, Copy, Check, Sparkles, Zap } from "lucide-react";
 import { toast } from "sonner";
 
-export const ConfidenceScore = ({ score, size = "default", uplift = 0, precedentCount = 0 }) => {
+export const ConfidenceScore = ({ score, size = "default", uplift = 0, precedentCount = 0, hipBonus = 0 }) => {
   const s = Number(score) || 0;
   const getColor = (x) => (x >= 90 ? "#00FF88" : x >= 70 ? "#00E5FF" : x >= 50 ? "#FFB800" : "#FF2A2A");
   const getTier = (x) => (x >= 90 ? "HIGH" : x >= 70 ? "STRONG" : x >= 50 ? "MODERATE" : "LOW");
@@ -61,12 +61,24 @@ export const ConfidenceScore = ({ score, size = "default", uplift = 0, precedent
           </span>
         </div>
       </div>
-      {uplift > 0 && (
-        <div className="mt-2 flex items-center gap-1.5 px-2 py-1 border border-[#B366FF]/30 bg-[#B366FF]/[0.08]" data-testid="uplift-badge">
-          <Sparkles className="w-3 h-3 text-[#B366FF]" />
-          <span className="text-[9px] font-mono text-[#B366FF] tracking-wider">
-            +{uplift.toFixed(1)}% <span className="text-[#B366FF]/70">from {precedentCount} precedent{precedentCount === 1 ? "" : "s"}</span>
-          </span>
+      {(uplift > 0 || hipBonus > 0) && (
+        <div className="mt-2 flex items-center gap-1.5 flex-wrap justify-center">
+          {uplift > 0 && (
+            <div className="flex items-center gap-1.5 px-2 py-1 border border-[#B366FF]/30 bg-[#B366FF]/[0.08]" data-testid="uplift-badge">
+              <Sparkles className="w-3 h-3 text-[#B366FF]" />
+              <span className="text-[9px] font-mono text-[#B366FF] tracking-wider">
+                +{uplift.toFixed(1)}% <span className="text-[#B366FF]/70">{precedentCount} precedent{precedentCount === 1 ? "" : "s"}</span>
+              </span>
+            </div>
+          )}
+          {hipBonus > 0 && (
+            <div className="flex items-center gap-1.5 px-2 py-1 border border-[#00FF88]/30 bg-[#00FF88]/[0.08]" data-testid="hippocampus-agreement-badge" title="Hippocampus and Neo Cortex agree — added agreement bonus">
+              <Zap className="w-3 h-3 text-[#00FF88]" />
+              <span className="text-[9px] font-mono text-[#00FF88] tracking-wider">
+                +{hipBonus.toFixed(1)}% <span className="text-[#00FF88]/70">agreement</span>
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>
