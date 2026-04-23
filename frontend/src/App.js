@@ -1882,6 +1882,11 @@ const LiveVARPage = () => {
                     uplift={analysis.confidence_uplift || 0}
                     precedentCount={analysis.precedent_strong_matches || 0}
                     hipBonus={analysis.hippocampus_bonus || 0}
+                    base={analysis.base_confidence || 0}
+                    hip={analysis.hippocampus?.initial_confidence || 0}
+                    neo={analysis.neo_cortex?.confidence_score || 0}
+                    divergence={analysis.pathway_divergence || 0}
+                    weighting={analysis.weighting || null}
                   />
                 </div>
 
