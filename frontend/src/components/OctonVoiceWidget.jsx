@@ -76,23 +76,77 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
 
   const startRecording = useCallback(async () => {
     if (recording || thinking) return;
+    // ── Pre-flight checks so users get an actionable error, not a blank fail ──
+    if (typeof window === "undefined" || !window.isSecureContext) {
+      toast.error("Microphone needs HTTPS. Open the app on its https:// URL.");
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.error("This browser does not support microphone capture. Try Chrome / Edge / Firefox.");
+      return;
+    }
+    if (typeof window.MediaRecorder === "undefined") {
+      toast.error("This browser does not support MediaRecorder. Try a Chromium-based browser.");
+      return;
+    }
+
+    // Pick the best MIME type the browser can actually encode.
+    const pickMime = () => {
+      const candidates = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus",
+        "audio/mp4",
+        "audio/mpeg",
+      ];
+      for (const m of candidates) {
+        try { if (window.MediaRecorder.isTypeSupported(m)) return m; } catch {/* noop */}
+      }
+      return ""; // let browser pick default
+    };
+    const mimeType = pickMime();
+    const fileExt = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : mimeType.includes("mpeg") ? "mp3" : "webm";
+
+    let stream;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      // Surface the ACTUAL reason so the user can fix it instead of seeing a generic toast.
+      const name = err?.name || "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        toast.error("Microphone permission was denied. Click the 🔒 icon in the URL bar → Allow microphone → reload.");
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        toast.error("No microphone was detected on this device.");
+      } else if (name === "NotReadableError" || name === "TrackStartError") {
+        toast.error("Microphone is in use by another app. Close Zoom/Meet/Teams and try again.");
+      } else if (name === "OverconstrainedError") {
+        toast.error("Microphone does not support the required settings.");
+      } else if (name === "SecurityError") {
+        toast.error("Browser blocked the microphone for security reasons. Ensure you are on HTTPS.");
+      } else {
+        toast.error(`Microphone error: ${err?.message || name || "unknown"}`);
+      }
+      return;
+    }
+
+    try {
       streamRef.current = stream;
       startAudioAnalysis(stream);
       audioChunksRef.current = [];
-      // Prefer webm/opus — best browser support for MediaRecorder
-      const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      const mr = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
       mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
       mr.onstop = async () => {
         stopAudioAnalysis();
         try { stream.getTracks().forEach(t => t.stop()); } catch { /* ignore */ }
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const blobType = mr.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(audioChunksRef.current, { type: blobType });
         if (blob.size < 1500) {
-          toast.error("Recording too short — hold the mic a bit longer");
+          toast.error("Recording too short — hold the mic for ~1 second");
           return;
         }
-        await processAudio(blob);
+        await processAudio(blob, fileExt);
       };
       mediaRecorderRef.current = mr;
       mr.start();
@@ -102,7 +156,8 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
         if (mr.state === "recording") mr.stop();
       }, 25000);
     } catch (err) {
-      toast.error("Microphone access denied");
+      try { stream.getTracks().forEach(t => t.stop()); } catch {/* ignore */}
+      toast.error(`Recorder init failed: ${err?.message || err?.name || "unknown"}`);
     }
   }, [recording, thinking, startAudioAnalysis, stopAudioAnalysis]);
 
@@ -114,12 +169,12 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
     setRecording(false);
   }, []);
 
-  const processAudio = useCallback(async (blob) => {
+  const processAudio = useCallback(async (blob, fileExt = "webm") => {
     setThinking(true);
     try {
       // 1) Transcribe
       const fd = new FormData();
-      fd.append("audio", blob, "voice.webm");
+      fd.append("audio", blob, `voice.${fileExt}`);
       const trans = await axios.post(`${API}/voice/transcribe`, fd, { withCredentials: true });
       const userText = (trans.data?.text || "").trim();
       if (!userText) {
@@ -156,7 +211,15 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
         setSpeaking(true);
       }
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "OCTON couldn't respond — try again");
+      const detail = err?.response?.data?.detail || err?.message || "unknown";
+      // Highlight a specific, common root cause so users can act on it fast
+      if (/budget|quota|insufficient|401|402|429/i.test(String(detail))) {
+        toast.error("LLM budget exhausted. Top up at Profile → Universal Key → Add Balance.");
+      } else if (/transcri/i.test(String(detail))) {
+        toast.error(`Transcription failed: ${detail}`);
+      } else {
+        toast.error(`OCTON error: ${detail}`);
+      }
     } finally {
       setThinking(false);
     }
