@@ -101,7 +101,8 @@ function sectionHeader(doc, x, y, title, accent = CYAN) {
 }
 
 // ── Main export ──────────────────────────────────────────
-export function exportAnalysisPDF(incident, analysis, audit = null) {
+export function exportAnalysisPDF(incident, analysis, audit = null, opts = {}) {
+  const { frameImage = null } = opts;
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   const pageW = 210;
   const pageH = 297;
@@ -269,6 +270,27 @@ export function exportAnalysisPDF(incident, analysis, audit = null) {
   doc.setTextColor(DARK[0], DARK[1], DARK[2]);
   wrapAndDraw(doc, decision, margin + 3, y + 5.5, contentW - 52, 4.2, 2);
 
+  // ── IFAB Critical Trigger callout (non-discretionary red card) ──
+  const critTrigger = analysis?.critical_trigger;
+  if (critTrigger) {
+    const critY = y + 16;
+    doc.setFillColor(255, 235, 235);
+    doc.setDrawColor(RED[0], RED[1], RED[2]);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(margin, critY, contentW - 46, 9, 0.6, 0.6, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(RED[0], RED[1], RED[2]);
+    doc.text(`⚠  IFAB AUTOMATIC RED  ·  TRIGGER: ${String(critTrigger).replace(/_/g, " ").toUpperCase()}`, margin + 3, critY + 4);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(120, 60, 60);
+    const note = analysis?.critical_floor_applied
+      ? "IFAB Law 12 — non-discretionary offence. Confidence floored at 92 %."
+      : "IFAB Law 12 — non-discretionary offence. Red card mandated by rule.";
+    doc.text(note, margin + 3, critY + 7.4);
+  }
+
   // ── Brain Pathway metrics strip ─────────────────────────
   y += 20;
   sectionHeader(doc, margin, y, "Neural Pathway", CYAN);
@@ -309,6 +331,54 @@ export function exportAnalysisPDF(incident, analysis, audit = null) {
     doc.text(s.hint, x0 + 3, y + 14.5);
   });
   y += 20;
+
+  // ── Annotated operator frame (scrubber snapshot with offside lines/circles) ──
+  if (frameImage && typeof frameImage === "string" && frameImage.startsWith("data:image/")) {
+    sectionHeader(doc, margin, y, "Annotated Frame (Operator Snapshot)", AMBER);
+    y += 5;
+    const imgW = 72;   // mm — ~ 70-75 mm as requested
+    const imgH = 40;   // mm
+    try {
+      doc.addImage(frameImage, "JPEG", margin, y, imgW, imgH, undefined, "FAST");
+    } catch {
+      // Fallback: render empty frame box with warning
+      doc.setDrawColor(GRAY_MUTED[0], GRAY_MUTED[1], GRAY_MUTED[2]);
+      doc.rect(margin, y, imgW, imgH, "S");
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(GRAY_MUTED[0], GRAY_MUTED[1], GRAY_MUTED[2]);
+      doc.text("frame unavailable (cross-origin)", margin + 2, y + imgH / 2);
+    }
+    // Caption + thin border
+    doc.setDrawColor(AMBER[0], AMBER[1], AMBER[2]);
+    doc.setLineWidth(0.3);
+    doc.rect(margin, y, imgW, imgH, "S");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(GRAY_MUTED[0], GRAY_MUTED[1], GRAY_MUTED[2]);
+    const capBits = [];
+    if (incident?.timestamp_in_match) capBits.push(`T ${incident.timestamp_in_match}`);
+    if (incident?.team_involved) capBits.push(incident.team_involved);
+    const cap = capBits.length ? capBits.join(" · ") : "operator scrubber frame";
+    doc.text(cap, margin, y + imgH + 3.5);
+    // Side-note (right of frame)
+    const noteX = margin + imgW + 4;
+    const noteW = contentW - imgW - 4;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+    doc.text("VISUAL EVIDENCE", noteX, y + 3);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(GRAY_TEXT[0], GRAY_TEXT[1], GRAY_TEXT[2]);
+    const evSrc = analysis?.visual_evidence_source;
+    const srcLabel = evSrc === "video_frame" ? "Extracted video still" : evSrc === "image" ? "Uploaded still frame" : "Text-only analysis";
+    doc.text(srcLabel, noteX, y + 7);
+    doc.setFontSize(6);
+    doc.setTextColor(GRAY_MUTED[0], GRAY_MUTED[1], GRAY_MUTED[2]);
+    wrapAndDraw(doc, "Operator-drawn offside lines / circles / player markers as rendered on the Live VAR scrubber at the moment of export.", noteX, y + 11.2, noteW, 3.4, 4);
+    y += imgH + 8;
+  }
 
   // ── Reasoning ───────────────────────────────────────────
   sectionHeader(doc, margin, y, "Reasoning", CYAN);

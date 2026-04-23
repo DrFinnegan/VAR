@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   BookOpen, Plus, Trash2, Upload, Sparkles, RefreshCw, Database,
-  Search, Film, Image as ImageIcon, Check, Loader2
+  Search, Film, Image as ImageIcon, Check, Loader2, Globe, ExternalLink
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -38,6 +38,18 @@ export default function TrainingLibraryPage() {
   const [saving, setSaving] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [uploadingFor, setUploadingFor] = useState(null);
+  const [showWeb, setShowWeb] = useState(false);
+  const [webUrl, setWebUrl] = useState("");
+  const [webLoading, setWebLoading] = useState(false);
+  const [webResult, setWebResult] = useState(null);
+  const [webLog, setWebLog] = useState([]);
+
+  const loadWebLog = useCallback(async () => {
+    try {
+      const r = await axios.get(`${API}/training/ingest-log`, { params: { limit: 10 }, withCredentials: true });
+      setWebLog(r.data || []);
+    } catch { /* non-fatal */ }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -138,6 +150,29 @@ export default function TrainingLibraryPage() {
     }
   };
 
+  const handleWebIngest = async () => {
+    const url = (webUrl || "").trim();
+    if (!url.startsWith("http")) {
+      toast.error("Enter a valid http(s) URL");
+      return;
+    }
+    setWebLoading(true);
+    setWebResult(null);
+    try {
+      const r = await axios.post(`${API}/training/ingest-url`, { url, auto_save: true }, { withCredentials: true });
+      setWebResult(r.data);
+      const n = r.data?.inserted || 0;
+      if (n > 0) toast.success(`${n} new precedent${n === 1 ? "" : "s"} ingested from the web`);
+      else if ((r.data?.accepted || 0) > 0) toast.info("Cases found but all already in library");
+      else toast.info("No clear VAR decisions found in this article");
+      await Promise.all([load(), loadWebLog()]);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Ingestion failed");
+    } finally {
+      setWebLoading(false);
+    }
+  };
+
   const filteredCases = cases;
 
   return (
@@ -157,6 +192,99 @@ export default function TrainingLibraryPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Dialog open={showWeb} onOpenChange={(v) => { setShowWeb(v); if (v) loadWebLog(); }}>
+            <DialogTrigger asChild>
+              <Button className="bg-transparent text-[#B366FF] border border-[#B366FF]/40 hover:bg-[#B366FF]/10 hover:border-[#B366FF]/70 rounded-none font-heading font-bold text-xs tracking-[0.1em] h-9 px-4 transition-all" data-testid="web-ingest-button">
+                <Globe className="w-3.5 h-3.5 mr-2" />
+                LEARN FROM WEB
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-[#0B0B0B] border-[#B366FF]/30 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="font-heading text-lg tracking-wide flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-[#B366FF]" />
+                  WEB-LEARNING · PULL FROM MATCH REPORT
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                <p className="text-[11px] font-mono text-gray-400 leading-relaxed">
+                  Paste a URL to a public match report, video review or VAR-decision article.
+                  OCTON will read the article, extract every unambiguous VAR-reviewable decision
+                  via GPT-5.2, and add each as a ground-truth precedent in the Training Corpus.
+                  New precedents lift analysis confidence for similar future incidents.
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    value={webUrl}
+                    onChange={(e) => setWebUrl(e.target.value)}
+                    placeholder="https://www.example.com/match-report/..."
+                    className="bg-black/40 border-white/10 rounded-none text-white font-mono text-xs flex-1"
+                    data-testid="web-url-input"
+                    onKeyDown={(e) => { if (e.key === "Enter" && !webLoading) handleWebIngest(); }}
+                  />
+                  <Button
+                    onClick={handleWebIngest}
+                    disabled={webLoading || !webUrl.trim()}
+                    className="bg-[#B366FF] text-black hover:bg-[#B366FF]/90 rounded-none h-9 px-5 font-heading font-bold text-xs tracking-[0.1em]"
+                    data-testid="web-ingest-submit"
+                  >
+                    {webLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> : <Sparkles className="w-3.5 h-3.5 mr-2" />}
+                    INGEST
+                  </Button>
+                </div>
+
+                {webResult && (
+                  <div className="border border-[#B366FF]/30 bg-[#B366FF]/[0.05] p-3 space-y-2">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <h4 className="text-xs font-heading font-bold text-white truncate">
+                        {webResult.article_title}
+                      </h4>
+                      <a href={webResult.url} target="_blank" rel="noreferrer" className="text-[#B366FF] text-[10px] font-mono flex items-center gap-1 hover:underline flex-none">
+                        source <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 text-[10px] font-mono">
+                      <div className="text-gray-500">EXTRACTED: <span className="text-white">{webResult.extracted}</span></div>
+                      <div className="text-gray-500">ACCEPTED: <span className="text-[#00FF88]">{webResult.accepted}</span></div>
+                      <div className="text-gray-500">NEW: <span className="text-[#B366FF]">{webResult.inserted}</span></div>
+                      <div className="text-gray-500">DUP: <span className="text-[#FFB800]">{webResult.skipped_existing}</span></div>
+                    </div>
+                    {webResult.cases?.length > 0 && (
+                      <div className="space-y-1 pt-1">
+                        {webResult.cases.map((c, i) => (
+                          <div key={c.id || i} className="text-[11px] font-mono text-gray-300 border-l-2 border-[#00FF88]/40 pl-2">
+                            <span className="text-[#00E5FF]">{c.incident_type?.toUpperCase()}</span>
+                            {" · "}
+                            <span className="text-white">{c.title}</span>
+                            {" → "}
+                            <span className="text-[#00FF88]">{c.correct_decision}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {webLog.length > 0 && (
+                  <div className="space-y-1 pt-2">
+                    <div className="text-[9px] font-mono uppercase tracking-[0.25em] text-gray-500">RECENT INGESTIONS</div>
+                    <div className="max-h-[180px] overflow-y-auto border border-white/[0.06]">
+                      {webLog.map((l) => (
+                        <div key={l.id} className="px-2 py-1.5 border-b border-white/[0.04] text-[10px] font-mono flex items-center justify-between gap-2 hover:bg-white/[0.02]">
+                          <span className="text-gray-300 truncate flex-1">{l.title}</span>
+                          <span className="text-[#B366FF] flex-none">+{l.inserted_count || 0}</span>
+                          <a href={l.url} target="_blank" rel="noreferrer" className="text-gray-500 hover:text-[#00E5FF] flex-none" title={l.url}>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+
           <Button onClick={handleSeed} disabled={seeding} className="bg-transparent text-[#FFB800] border border-[#FFB800]/30 hover:bg-[#FFB800]/10 hover:border-[#FFB800]/60 rounded-none font-heading font-bold text-xs tracking-[0.1em] h-9 px-4 transition-all" data-testid="seed-training-button">
             {seeding ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Database className="w-3.5 h-3.5 mr-2" />}
             SEED 20 CANONICAL

@@ -1144,6 +1144,41 @@ async def preview_precedents(req: TextAnalysisRequest):
     return {"precedents": precedents, **uplift_info}
 
 
+# ── Web-learning: pull VAR decisions from the public web ──
+from web_learning import ingest_url as _web_ingest_url, recent_ingestion_log as _web_recent_log  # noqa: E402
+
+
+class WebIngestRequest(BaseModel):
+    url: str
+    auto_save: bool = True
+
+
+@api_router.post("/training/ingest-url")
+async def training_ingest_url(body: WebIngestRequest, request: Request):
+    """Fetch a match-report URL, let GPT-5.2 extract VAR decisions, and (optionally)
+    seed them into the training corpus. Admin-only."""
+    user = await require_role(request, db, ["admin"])
+    url = (body.url or "").strip()
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(status_code=400, detail="url must start with http:// or https://")
+    try:
+        result = await _web_ingest_url(db, url, user, auto_save=body.auto_save)
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("web ingestion failed")
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}")
+    return result
+
+
+@api_router.get("/training/ingest-log")
+async def training_ingest_log(request: Request, limit: int = 20):
+    """Return recent web-ingestion attempts (admin only)."""
+    await require_role(request, db, ["admin"])
+    limit = max(1, min(100, int(limit)))
+    return await _web_recent_log(db, limit=limit)
+
+
 # ── Promote incident → Training Library ───────────────────
 @api_router.post("/incidents/{incident_id}/promote-to-training")
 async def promote_incident_to_training(incident_id: str, request: Request):

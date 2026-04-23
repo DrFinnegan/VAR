@@ -39,6 +39,11 @@ const SelectedIncidentContext = createContext({
 });
 const useSelectedIncidentId = () => useContext(SelectedIncidentContext);
 
+// Module-level hook so <VideoStage> can expose a PNG dataURL of the current
+// annotated frame to any caller (PDF export, decision comparison, etc.).
+// VideoStage writes `.current = () => dataUrl` on mount; callers invoke it.
+const frameCaptureRef = { current: null };
+
 function SelectedIncidentProvider({ children }) {
   const [id, setId] = useState(null);
   const voiceActionHandler = useRef(null);
@@ -1353,6 +1358,49 @@ const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, onSaveAnn
     }
   }, [playbackSpeed, videoSrc]);
 
+  // Expose frame capture to the module-level ref so PDF export can embed
+  // the exact annotated scrubber frame the operator is viewing.
+  useEffect(() => {
+    frameCaptureRef.current = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        const w = 960, h = 540;
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#050505"; ctx.fillRect(0, 0, w, h);
+        const stage = stageRef.current;
+        const mediaEl = stage?.querySelector("video") || stage?.querySelector("img");
+        if (mediaEl) {
+          try { ctx.drawImage(mediaEl, 0, 0, w, h); } catch { /* cross-origin safe */ }
+        }
+        annotations.forEach(a => {
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = a.color || "#00E5FF";
+          ctx.fillStyle = a.color || "#00E5FF";
+          if (a.type === "line") {
+            ctx.beginPath(); ctx.moveTo(a.x1/100*w, a.y1/100*h); ctx.lineTo(a.x2/100*w, a.y2/100*h); ctx.stroke();
+          } else if (a.type === "circle") {
+            ctx.beginPath(); ctx.arc(a.cx/100*w, a.cy/100*h, a.r/100*Math.min(w,h), 0, Math.PI*2); ctx.stroke();
+          } else if (a.type === "marker") {
+            ctx.beginPath(); ctx.arc(a.x/100*w, a.y/100*h, 6, 0, Math.PI*2); ctx.fill();
+            ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(a.x/100*w, a.y/100*h, 10, 0, Math.PI*2); ctx.stroke();
+          } else if (a.type === "formation_player") {
+            ctx.beginPath(); ctx.arc(a.x/100*w, a.y/100*h, 8, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = "#000"; ctx.font = "bold 8px monospace"; ctx.textAlign = "center";
+            ctx.fillText(a.label || "", a.x/100*w, a.y/100*h + 2.8);
+            ctx.fillStyle = a.color;
+          } else if (a.type === "offside_line") {
+            ctx.setLineDash([8, 4]); ctx.beginPath(); ctx.moveTo(0, a.y/100*h); ctx.lineTo(w, a.y/100*h); ctx.stroke(); ctx.setLineDash([]);
+          }
+        });
+        return canvas.toDataURL("image/jpeg", 0.75);
+      } catch { return null; }
+    };
+    return () => {
+      if (frameCaptureRef.current) frameCaptureRef.current = null;
+    };
+  }, [annotations]);
+
   const handleVideoPlay = () => {
     if (videoRef.current) {
       if (isPlaying) { videoRef.current.pause(); } else { videoRef.current.play(); }
@@ -1637,7 +1685,8 @@ const LiveVARPage = () => {
       case "export_pdf": {
         let audit = null;
         try { const r = await axios.post(`${API}/audit/register`, { incident_id: selectedIncident.id }); audit = r.data; } catch { /* degrade */ }
-        try { exportAnalysisPDF(selectedIncident, analysis, audit); toast.success("Report exported"); } catch { toast.error("Export failed"); }
+        const frame = (typeof frameCaptureRef.current === "function") ? frameCaptureRef.current() : null;
+        try { exportAnalysisPDF(selectedIncident, analysis, audit, { frameImage: frame }); toast.success("Report exported"); } catch { toast.error("Export failed"); }
         break;
       }
       case "promote_training":
@@ -1852,7 +1901,8 @@ const LiveVARPage = () => {
                         const res = await axios.post(`${API}/audit/register`, { incident_id: selectedIncident.id }, { withCredentials: true });
                         audit = res.data;
                       } catch (e) { /* degrade to unsigned export */ }
-                      try { const fn = exportAnalysisPDF(selectedIncident, analysis, audit); toast.success(audit ? `Signed report exported · ${fn}` : `Report exported · ${fn}`); }
+                      const frame = (typeof frameCaptureRef.current === "function") ? frameCaptureRef.current() : null;
+                      try { const fn = exportAnalysisPDF(selectedIncident, analysis, audit, { frameImage: frame }); toast.success(audit ? `Signed report exported · ${fn}` : `Report exported · ${fn}`); }
                       catch (e) { toast.error("PDF export failed"); }
                     }} className="text-[#FFB800] hover:text-[#FFB800] hover:bg-[#FFB800]/10 h-7 px-2 p-0 border border-[#FFB800]/30 hover:border-[#FFB800]/60 rounded-none transition-all flex items-center gap-1" data-testid="export-pdf-button" title="Export signed forensic PDF report">
                       <FileText className="w-3.5 h-3.5" />
@@ -1889,6 +1939,28 @@ const LiveVARPage = () => {
                     weighting={analysis.weighting || null}
                   />
                 </div>
+
+                {/* IFAB Critical Trigger chip (automatic red card / non-discretionary) */}
+                {analysis.critical_trigger && (
+                  <div
+                    className="mx-auto -mt-1 mb-2 flex items-center gap-2 px-3 py-1.5 border border-[#FF2A2A]/60 bg-[#FF2A2A]/[0.08] w-fit octon-pulse-red"
+                    data-testid="critical-trigger-chip"
+                    title="IFAB Law 12 mandates this sending-off offence — confidence floored at 92%"
+                  >
+                    <AlertTriangle className="w-3 h-3 text-[#FF2A2A]" />
+                    <span className="text-[9px] font-heading font-bold tracking-[0.2em] text-[#FF2A2A] uppercase">
+                      IFAB AUTOMATIC RED
+                    </span>
+                    <span className="text-[8px] font-mono text-[#FF6666] uppercase tracking-[0.15em]">
+                      · {String(analysis.critical_trigger).replace(/_/g, " ")}
+                    </span>
+                    {analysis.critical_floor_applied && (
+                      <span className="text-[7px] font-mono text-[#FFB380] px-1 border border-[#FF2A2A]/40" title="Confidence was raised to the 92% floor by the IFAB rule">
+                        FLOORED 92%
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 {/* Always-visible Decision tile */}
                 <div className="mt-4 border border-[#00E5FF]/20 bg-[#00E5FF]/[0.04] p-3 relative">
