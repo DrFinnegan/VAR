@@ -1444,7 +1444,7 @@ class VoiceChatRequest(BaseModel):
     session_id: Optional[str] = None
     selected_incident_id: Optional[str] = None
     include_audio: bool = True
-    voice: str = "onyx"
+    voice: str = "ash"
 
 
 @api_router.post("/voice/chat")

@@ -11,13 +11,15 @@ from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are OCTON — the voice of a professional VAR forensic AI assistant working alongside match officials.
+SYSTEM_PROMPT = """You are OCTON — the voice of a professional VAR forensic AI assistant working alongside match officials. You speak with a warm, confident American accent — like a senior US-based sports analyst briefing a colleague.
 
-Persona: calm, authoritative, EXTREMELY concise. Sound like a trusted forensic analyst briefing a referee mid-match.
+Persona: calm, authoritative, charismatic, EXTREMELY concise. Sound like a trusted forensic analyst who has seen it all, NOT a chatty robot.
 
 Rules:
 - Keep spoken replies VERY SHORT: 1-2 sentences (~15-20 words max) unless the user explicitly says "explain in detail".
-- Lead with the verdict / key fact, not a preamble. Never start with "Certainly", "Sure", or "Let me…". Just answer.
+- Lead with the verdict / key fact, not a preamble. Never start with "Certainly", "Sure", "Of course" or "Let me…". Just answer.
+- Write in natural spoken American English. Use contractions ("it's", "that's", "don't"). Drop unnecessary words.
+- Occasionally use punchy transitions ("Here's the thing —", "Short version:", "Bottom line:"). Keep it human.
 - Never hedge ("I think…", "maybe…"). State findings directly; if confidence is low, say "evidence is inconclusive".
 - When quoting laws, cite by number (e.g. "per IFAB Law 12").
 - If the user asks about an incident that isn't selected, say so in one line and ask them to select or name one.
@@ -101,7 +103,7 @@ async def generate_reply(
         api_key=api_key,
         session_id=session_id,
         system_message=SYSTEM_PROMPT + "\n\nCONTEXT:\n" + ctx_block,
-    ).with_model("openai", "gpt-5.2")
+    ).with_model("openai", "gpt-4o-mini")
 
     # Seed with any provided history so the conversation feels continuous.
     if history:
@@ -113,8 +115,10 @@ async def generate_reply(
     return (resp or "I don't have a response right now.").strip()
 
 
-async def speak(text: str, voice: str = "onyx", hd: bool = False) -> bytes:
-    """TTS — returns MP3 bytes."""
+async def speak(text: str, voice: str = "ash", hd: bool = True) -> bytes:
+    """TTS — returns MP3 bytes.
+    Default: `ash` voice on `tts-1-hd` at speed 1.05 → warm, expressive
+    American-English cadence that sounds alive rather than mechanistic."""
     try:
         from emergentintegrations.llm.openai import OpenAITextToSpeech
     except Exception as e:
@@ -131,7 +135,7 @@ async def speak(text: str, voice: str = "onyx", hd: bool = False) -> bytes:
         text=safe_text,
         model="tts-1-hd" if hd else "tts-1",
         voice=voice,
-        speed=1.1,
+        speed=1.05,
     )
     return audio_bytes
 
@@ -230,7 +234,7 @@ async def classify_intent(user_text: str, has_selection: bool) -> Dict[str, Any]
         api_key=api_key,
         session_id=f"octon-intent-{uuid.uuid4()}",
         system_message=sys_msg,
-    ).with_model("openai", "gpt-5.2")
+    ).with_model("openai", "gpt-4o-mini")
     try:
         resp = await chat.send_message(UserMessage(text=user_text))
     except Exception:

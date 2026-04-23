@@ -199,7 +199,7 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
           session_id: sessionId,
           selected_incident_id: selectedIncidentId || null,
           include_audio: true,
-          voice: "onyx",
+          voice: "ash",
         },
         { withCredentials: true }
       );
