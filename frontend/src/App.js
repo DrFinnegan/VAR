@@ -2204,17 +2204,37 @@ const HistoryPage = () => {
 };
 
 // ── Analytics Page ────────────────────────────────────────
+const LegendChip = ({ color, label, dashed }) => (
+  <div className="flex items-center gap-2">
+    <div
+      className="w-6"
+      style={{
+        height: 2,
+        backgroundColor: dashed ? "transparent" : color,
+        borderTop: dashed ? `2px dashed ${color}` : "none",
+      }}
+    />
+    <span className="text-gray-400">{label}</span>
+  </div>
+);
+
 const AnalyticsPage = () => {
   const [referees, setReferees] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [patterns, setPatterns] = useState(null);
+  const [velocity, setVelocity] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetch_ = async () => {
       try {
-        const [r, a, p] = await Promise.all([axios.get(`${API}/referees`), axios.get(`${API}/analytics/overview`), axios.get(`${API}/analytics/patterns`)]);
-        setReferees(r.data); setAnalytics(a.data); setPatterns(p.data);
+        const [r, a, p, v] = await Promise.all([
+          axios.get(`${API}/referees`),
+          axios.get(`${API}/analytics/overview`),
+          axios.get(`${API}/analytics/patterns`),
+          axios.get(`${API}/analytics/learning-velocity?days=30`),
+        ]);
+        setReferees(r.data); setAnalytics(a.data); setPatterns(p.data); setVelocity(v.data);
       } catch { toast.error("Failed to load analytics"); }
       finally { setLoading(false); }
     };
@@ -2252,6 +2272,98 @@ const AnalyticsPage = () => {
               <div className="text-center"><p className="text-2xl font-mono text-[#00FF66]">{patterns.learning_metrics.confirmed}</p><p className="text-xs font-mono text-gray-400">CONFIRMED</p></div>
               <div className="text-center"><p className="text-2xl font-mono text-[#FF3333]">{patterns.learning_metrics.overturned}</p><p className="text-xs font-mono text-gray-400">OVERTURNED</p></div>
               <div className="text-center"><p className="text-2xl font-mono text-[#00E5FF]">{patterns.learning_metrics.learning_accuracy}%</p><p className="text-xs font-mono text-gray-400">LEARNING ACC</p></div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Learning Velocity (30-day self-improvement) ── */}
+      {velocity?.series && (
+        <Card className="bg-[#0A0A0A] border-[#B366FF]/20 rounded-none relative overflow-hidden" data-testid="learning-velocity-card">
+          <div className="absolute top-0 left-0 w-24 h-[2px] bg-[#B366FF]" style={{ boxShadow: "0 0 8px #B366FF" }} />
+          <div className="absolute top-2 right-2 w-2 h-2 border-r border-t border-[#B366FF]/40" />
+          <div className="absolute bottom-2 left-2 w-2 h-2 border-l border-b border-[#B366FF]/40" />
+          <CardHeader>
+            <div className="flex items-baseline justify-between gap-4">
+              <CardTitle className="text-sm font-mono uppercase text-gray-400">
+                <span className="text-[#B366FF]">LEARNING</span> VELOCITY · 30-DAY
+              </CardTitle>
+              <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-gray-600">
+                // self-improvement over time
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Stat strip */}
+            <div className="grid grid-cols-4 gap-[1px] bg-white/[0.04] mb-5">
+              <div className="bg-[#0A0A0A] p-3">
+                <p className="text-[9px] font-mono uppercase tracking-[0.2em] text-gray-500">PRECEDENTS ADDED</p>
+                <p className="text-2xl font-mono font-bold text-white mt-1">{velocity.totals.precedents_total}</p>
+                <p className="text-[8px] font-mono text-gray-600 mt-1">// all sources</p>
+              </div>
+              <div className="bg-[#0A0A0A] p-3">
+                <p className="text-[9px] font-mono uppercase tracking-[0.2em] text-gray-500">FROM WEB</p>
+                <p className="text-2xl font-mono font-bold text-[#B366FF] mt-1" style={{ textShadow: "0 0 12px #B366FF44" }}>{velocity.totals.web_precedents_total}</p>
+                <p className="text-[8px] font-mono text-gray-600 mt-1">// ingested</p>
+              </div>
+              <div className="bg-[#0A0A0A] p-3">
+                <p className="text-[9px] font-mono uppercase tracking-[0.2em] text-gray-500">AUTO-RESCORES</p>
+                <p className="text-2xl font-mono font-bold text-[#00E5FF] mt-1" style={{ textShadow: "0 0 12px #00E5FF44" }}>{velocity.totals.auto_rescores_total}</p>
+                <p className="text-[8px] font-mono text-gray-600 mt-1">// closed-loop fires</p>
+              </div>
+              <div className="bg-[#0A0A0A] p-3">
+                <p className="text-[9px] font-mono uppercase tracking-[0.2em] text-gray-500">CUMULATIVE LIFT</p>
+                <p className="text-2xl font-mono font-bold text-[#00FF66] mt-1" style={{ textShadow: "0 0 12px #00FF6644" }}>+{velocity.totals.cumulative_lift_pct?.toFixed?.(1) ?? velocity.totals.cumulative_lift_pct}<span className="text-sm text-[#00FF66]/70">%</span></p>
+                <p className="text-[8px] font-mono text-gray-600 mt-1">// Σ confidence gained</p>
+              </div>
+            </div>
+
+            {/* Velocity chart */}
+            <div className="h-[280px]" data-testid="learning-velocity-chart">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={velocity.series} margin={{ top: 10, right: 18, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis
+                    dataKey="date"
+                    stroke="#555"
+                    fontSize={10}
+                    tickFormatter={(d) => d?.slice(5)}
+                    tick={{ fontFamily: "monospace" }}
+                  />
+                  <YAxis yAxisId="left" stroke="#555" fontSize={10} tick={{ fontFamily: "monospace" }} />
+                  <YAxis yAxisId="right" orientation="right" stroke="#00FF66" fontSize={10} tick={{ fontFamily: "monospace" }} tickFormatter={(v) => `+${v}%`} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#0B0B0B",
+                      border: "1px solid rgba(179,102,255,0.4)",
+                      borderRadius: 0,
+                      fontFamily: "monospace",
+                      fontSize: 11,
+                    }}
+                    labelStyle={{ color: "#B366FF" }}
+                    formatter={(v, n) => [
+                      n === "cumulative_lift_pct" ? `+${Number(v).toFixed(1)}%` : v,
+                      n === "precedents" ? "Precedents"
+                      : n === "web_precedents" ? "Web"
+                      : n === "auto_rescores" ? "Auto-rescores"
+                      : n === "cumulative_lift_pct" ? "Σ Confidence Lift"
+                      : n,
+                    ]}
+                  />
+                  <Line yAxisId="left" type="monotone" dataKey="precedents" stroke="#FFFFFF" strokeWidth={1.5} dot={false} activeDot={{ r: 3 }} name="Precedents" />
+                  <Line yAxisId="left" type="monotone" dataKey="web_precedents" stroke="#B366FF" strokeWidth={2} dot={false} activeDot={{ r: 3 }} name="Web" />
+                  <Line yAxisId="left" type="monotone" dataKey="auto_rescores" stroke="#00E5FF" strokeWidth={2} dot={false} activeDot={{ r: 3 }} name="Auto-rescores" />
+                  <Line yAxisId="right" type="monotone" dataKey="cumulative_lift_pct" stroke="#00FF66" strokeWidth={2.5} strokeDasharray="5 3" dot={false} activeDot={{ r: 4 }} name="Σ Confidence Lift" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Legend */}
+            <div className="flex flex-wrap items-center gap-4 mt-3 pt-3 border-t border-white/[0.06] text-[10px] font-mono">
+              <LegendChip color="#FFFFFF" label="Precedents added" dashed={false} />
+              <LegendChip color="#B366FF" label="From web" dashed={false} />
+              <LegendChip color="#00E5FF" label="Auto-rescores" dashed={false} />
+              <LegendChip color="#00FF66" label="Σ Confidence Lift (right axis)" dashed={true} />
             </div>
           </CardContent>
         </Card>

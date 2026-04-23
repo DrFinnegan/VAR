@@ -34,7 +34,7 @@ import base64
 import uuid
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from enum import Enum
 
 from auth import (
@@ -839,6 +839,86 @@ async def update_match_status(match_id: str, request: Request, status: str = Que
     if not result:
         raise HTTPException(status_code=404, detail="Match not found")
     return result
+
+
+# ── AI Feedback Loop ──────────────────────────────────────
+@api_router.get("/analytics/learning-velocity")
+async def learning_velocity(days: int = 30):
+    """30-day time series of OCTON's self-improvement velocity:
+    daily precedents ingested, daily auto-rescores triggered, and cumulative
+    confidence lift (sum of positive auto-rescore deltas, in percentage points).
+    Used by the VAR Analytics "Learning Velocity" chart."""
+    days = max(7, min(90, int(days)))
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=days - 1)
+    start_iso = start.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+    # ── Precedents added per day (any source: web, seed, promoted, manual) ──
+    cases = await db.training_cases.find(
+        {"created_at": {"$gte": start_iso}},
+        {"_id": 0, "created_at": 1, "incident_type": 1, "source_url": 1, "tags": 1},
+    ).to_list(2000)
+
+    # ── Auto-rescores per day + cumulative confidence lift ──
+    # Pull every web-ingestion log in the window and pick up auto_rescored_count.
+    logs = await db.web_ingestion_log.find(
+        {"ingested_at": {"$gte": start_iso}},
+        {"_id": 0, "ingested_at": 1, "auto_rescored_count": 1},
+    ).to_list(2000)
+
+    # Confidence lift comes from incidents whose ai_analysis.auto_rescored timestamp
+    # falls in the window — that's the ground truth of *applied* learning.
+    rescored_incidents = await db.incidents.find(
+        {"ai_analysis.auto_rescored.at": {"$gte": start_iso}},
+        {"_id": 0, "ai_analysis": 1},
+    ).to_list(2000)
+
+    # Build a day-keyed aggregate
+    def day_key(iso: str) -> str:
+        return (iso or "")[:10]  # YYYY-MM-DD
+
+    series: Dict[str, Dict] = {}
+    for i in range(days):
+        d = (start + timedelta(days=i)).date().isoformat()
+        series[d] = {"date": d, "precedents": 0, "web_precedents": 0,
+                     "auto_rescores": 0, "daily_lift_pct": 0.0}
+
+    for c in cases:
+        k = day_key(c.get("created_at"))
+        if k in series:
+            series[k]["precedents"] += 1
+            if c.get("source_url") or "web-ingested" in (c.get("tags") or []):
+                series[k]["web_precedents"] += 1
+
+    for log in logs:
+        k = day_key(log.get("ingested_at"))
+        if k in series:
+            series[k]["auto_rescores"] += int(log.get("auto_rescored_count") or 0)
+
+    for inc in rescored_incidents:
+        ar = ((inc.get("ai_analysis") or {}).get("auto_rescored") or {})
+        k = day_key(ar.get("at"))
+        if k in series:
+            d = float(ar.get("delta") or 0)
+            if d > 0:
+                series[k]["daily_lift_pct"] = round(series[k]["daily_lift_pct"] + d, 1)
+
+    # Compute cumulative lift
+    ordered = [series[d] for d in sorted(series.keys())]
+    running = 0.0
+    for row in ordered:
+        running = round(running + row["daily_lift_pct"], 1)
+        row["cumulative_lift_pct"] = running
+
+    # Totals block for the header stat tiles
+    totals = {
+        "precedents_total": sum(r["precedents"] for r in ordered),
+        "web_precedents_total": sum(r["web_precedents"] for r in ordered),
+        "auto_rescores_total": sum(r["auto_rescores"] for r in ordered),
+        "cumulative_lift_pct": running,
+        "days_in_window": days,
+    }
+    return {"series": ordered, "totals": totals}
 
 
 # ── AI Feedback Loop ──────────────────────────────────────
