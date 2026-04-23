@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { Mic, X, Loader2, Waves, MessageSquareText } from "lucide-react";
+import { Mic, X, Loader2, Waves, MessageSquareText, Ear, EarOff } from "lucide-react";
 import { OctonBrainLogo } from "./OctonBrainLogo";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -19,6 +19,11 @@ export default function OctonVoiceWidget({ selectedIncidentId }) {
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages] = useState([]); // {role, text}
   const [levels, setLevels] = useState([0, 0, 0, 0, 0]); // audio bars
+  const [wakeOn, setWakeOn] = useState(false);
+  const [wakeSupported, setWakeSupported] = useState(true);
+
+  const wakeRecRef = useRef(null);
+  const wakeRestartTimerRef = useRef(null);
 
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -163,6 +168,86 @@ export default function OctonVoiceWidget({ selectedIncidentId }) {
     toast.info("Conversation cleared");
   };
 
+  // ── Wake-word "Hey OCTON" via Web Speech API (client-side, free) ──
+  const stopWakeListener = useCallback(() => {
+    if (wakeRestartTimerRef.current) { clearTimeout(wakeRestartTimerRef.current); wakeRestartTimerRef.current = null; }
+    try { wakeRecRef.current?.stop(); } catch {/* ignore */}
+    wakeRecRef.current = null;
+  }, []);
+
+  const startWakeListener = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      setWakeSupported(false);
+      toast.error("Wake-word needs Chrome/Edge — not supported here");
+      return;
+    }
+    stopWakeListener();
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+
+    rec.onresult = (event) => {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript.toLowerCase();
+        // Very tolerant — catches "hey octon", "hey oxton", "hey octan", "hey octopus" etc
+        if (/\bhey\s*(o(c|x|k|g)t(on|an|in|um|us)?|octopus)\b/i.test(transcript)) {
+          try { rec.stop(); } catch {/* ignore */}
+          toast.success("OCTON wake word detected — listening");
+          setTimeout(() => startRecording(), 150);
+          return;
+        }
+      }
+    };
+    rec.onerror = (e) => {
+      // NB: "no-speech" and "aborted" are expected, recover silently
+      if (e.error !== "no-speech" && e.error !== "aborted") {
+        console.warn("wake listener error", e.error);
+      }
+    };
+    rec.onend = () => {
+      // Auto-restart while wake is still enabled and we're not mid-record/thinking
+      if (wakeRecRef.current === rec && !recording && !thinking) {
+        wakeRestartTimerRef.current = setTimeout(() => {
+          try { rec.start(); } catch {/* ignore */}
+        }, 500);
+      }
+    };
+
+    try {
+      rec.start();
+      wakeRecRef.current = rec;
+    } catch (e) {
+      console.warn("wake start failed", e);
+    }
+  }, [stopWakeListener, startRecording, recording, thinking]);
+
+  const toggleWake = useCallback(() => {
+    if (wakeOn) {
+      stopWakeListener();
+      setWakeOn(false);
+      toast.info("Wake-word off");
+    } else {
+      setWakeOn(true);
+      startWakeListener();
+      toast.success("Say \u201cHey OCTON\u201d to activate");
+    }
+  }, [wakeOn, stopWakeListener, startWakeListener]);
+
+  // Pause wake listener during active recording / thinking so it doesn't re-trigger on OCTON's own voice
+  useEffect(() => {
+    if (!wakeOn) return;
+    if (recording || thinking || speaking) {
+      stopWakeListener();
+    } else {
+      startWakeListener();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wakeOn, recording, thinking, speaking]);
+
+  useEffect(() => () => stopWakeListener(), [stopWakeListener]);
+
   useEffect(() => {
     const el = audioElRef.current;
     if (!el) return;
@@ -221,11 +306,27 @@ export default function OctonVoiceWidget({ selectedIncidentId }) {
               <div>
                 <h2 className="text-sm font-heading font-black text-white tracking-tight uppercase leading-none" style={{ textShadow: "0 0 8px #00E5FF33" }}>OCTON</h2>
                 <p className="text-[8px] font-mono text-[#00E5FF]/60 tracking-[0.25em] mt-1">
-                  {recording ? "LISTENING" : thinking ? "THINKING" : speaking ? "SPEAKING" : "STANDBY"}
+                  {recording ? "LISTENING" : thinking ? "THINKING" : speaking ? "SPEAKING" : wakeOn ? "ARMED \u00B7 SAY \u201CHEY OCTON\u201D" : "STANDBY"}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-1">
+              {wakeSupported && (
+                <button
+                  onClick={toggleWake}
+                  className={`h-7 px-2 flex items-center gap-1 text-[9px] font-mono uppercase tracking-[0.15em] border transition-all ${
+                    wakeOn
+                      ? "text-[#00FF88] border-[#00FF88]/40 bg-[#00FF88]/[0.08] hover:bg-[#00FF88]/[0.15]"
+                      : "text-gray-500 border-white/10 hover:text-white hover:border-white/30"
+                  }`}
+                  title={wakeOn ? "Wake-word ON — say \u201cHey OCTON\u201d" : "Enable wake-word"}
+                  data-testid="octon-wake-toggle"
+                >
+                  {wakeOn ? <Ear className="w-3 h-3" /> : <EarOff className="w-3 h-3" />}
+                  {wakeOn ? "WAKE" : "WAKE"}
+                  {wakeOn && <span className="w-1 h-1 bg-[#00FF88] rounded-full animate-pulse ml-0.5" />}
+                </button>
+              )}
               {messages.length > 0 && (
                 <button
                   onClick={clearConversation}
@@ -237,7 +338,7 @@ export default function OctonVoiceWidget({ selectedIncidentId }) {
                 </button>
               )}
               <button
-                onClick={() => { stopRecording(); setOpen(false); }}
+                onClick={() => { stopRecording(); stopWakeListener(); setWakeOn(false); setOpen(false); }}
                 className="h-7 w-7 flex items-center justify-center text-gray-500 hover:text-white border border-white/10 hover:border-white/30 transition-all"
                 title="Close"
                 data-testid="octon-voice-close"
