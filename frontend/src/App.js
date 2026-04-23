@@ -10,7 +10,7 @@ import {
   ArrowRight, Radio, Wifi, WifiOff, Trophy, Calendar, ThumbsUp, ThumbsDown, Lock,
   Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Maximize2, Volume2,
   Pen, Circle, Minus, Undo2, Trash2, Save, Crosshair, Download, Users2, Layers, Columns,
-  ChevronDown, FileText, Sparkles, BookOpen, GitBranch
+  ChevronDown, FileText, Sparkles, BookOpen, GitBranch, Copy, Check
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./components/ui/card";
@@ -674,6 +674,40 @@ const ConfidenceScore = ({ score, size = "default", uplift = 0, precedentCount =
         </div>
       )}
     </div>
+  );
+};
+
+// ── Copy-to-clipboard button for long-form AI text ─────────
+const CopyButton = ({ text, label = "COPY", accent = "#00E5FF", testId }) => {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async (e) => {
+    e.stopPropagation();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      toast.success("Reasoning copied to clipboard");
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      toast.error("Clipboard unavailable — select text manually");
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.2em] border transition-all focus:outline-none"
+      style={{
+        color: copied ? "#00FF88" : accent,
+        borderColor: copied ? "rgba(0,255,136,0.4)" : `${accent}33`,
+        backgroundColor: copied ? "rgba(0,255,136,0.08)" : `${accent}0d`,
+      }}
+      data-testid={testId}
+      aria-label="Copy reasoning to clipboard"
+    >
+      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+      {copied ? "COPIED" : label}
+    </button>
   );
 };
 
@@ -1940,7 +1974,11 @@ const LiveVARPage = () => {
                     accent="#00E5FF"
                     testId="reasoning-curtain"
                   >
-                    <div className="max-h-[320px] overflow-y-auto pr-2 octon-scrollbar" data-testid="reasoning-scroll">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[8px] font-mono uppercase tracking-[0.3em] text-gray-600">NEOCORTEX RATIONALE</span>
+                      <CopyButton text={analysis.reasoning} label="COPY" accent="#00E5FF" testId="copy-reasoning-btn" />
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto pr-2 octon-scrollbar" data-testid="reasoning-scroll">
                       <p className="text-xs font-body text-gray-300 leading-relaxed whitespace-pre-wrap">
                         {analysis.reasoning}
                       </p>
