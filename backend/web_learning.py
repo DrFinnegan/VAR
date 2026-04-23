@@ -255,6 +255,13 @@ async def ingest_url(db, url: str, user: Dict, auto_save: bool = True) -> Dict:
         "total_impacted": 0, "avg_uplift_pct": 0.0, "impacted_incidents": [],
     }
 
+    # ── Auto-rescore closed loop ──
+    # Re-analyse any pending incident whose projected uplift is >= 5 %. Real
+    # confidence delta is measured after re-analysis and surfaced in the
+    # response so the operator sees actual gains, not just projected ones.
+    rescored = await _auto_rescore_impacted(db, lift_report.get("impacted_incidents", []))
+    lift_report["auto_rescored"] = rescored
+
     # Also log the ingestion attempt for auditability
     await db.web_ingestion_log.insert_one({
         "id": str(uuid.uuid4()),
@@ -265,6 +272,7 @@ async def ingest_url(db, url: str, user: Dict, auto_save: bool = True) -> Dict:
         "inserted_count": len(inserted),
         "skipped_existing": skipped_existing,
         "impacted_pending_count": lift_report["total_impacted"],
+        "auto_rescored_count": len(rescored),
         "user_id": user.get("id"),
         "user_name": user.get("name"),
         "ingested_at": fetched["fetched_at"],
@@ -368,3 +376,84 @@ async def compute_confidence_lift_report(db, inserted_cases: List[Dict]) -> Dict
 async def recent_ingestion_log(db, limit: int = 20) -> List[Dict]:
     docs = await db.web_ingestion_log.find({}, {"_id": 0}).sort("ingested_at", -1).to_list(limit)
     return docs
+
+
+# ── Auto-rescore closed loop ────────────────────────────
+
+# Minimum projected uplift (%) to trigger an automatic re-analysis.
+_RESCORE_THRESHOLD = 5.0
+# Hard cap so a single large ingestion can't trigger 50 Neo Cortex calls.
+_RESCORE_MAX_INCIDENTS = 8
+
+
+async def _auto_rescore_impacted(db, impacted_incidents: List[Dict]) -> List[Dict]:
+    """Re-analyse any pending incident whose projected uplift >= threshold.
+    Returns [{incident_id, old_confidence, new_confidence, delta, decision}, ...]
+    so the UI can surface the actual gain (not just the projection)."""
+    candidates = [i for i in impacted_incidents
+                  if float(i.get("projected_uplift") or 0) >= _RESCORE_THRESHOLD]
+    if not candidates:
+        return []
+    candidates = candidates[:_RESCORE_MAX_INCIDENTS]
+
+    # Lazy imports to avoid circular deps with server.py
+    try:
+        from ai_engine import brain_engine
+    except Exception as e:
+        logger.warning(f"auto-rescore disabled — brain_engine import failed: {e}")
+        return []
+
+    rescored: List[Dict] = []
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for info in candidates:
+        inc_id = info.get("incident_id")
+        if not inc_id:
+            continue
+        inc = await db.incidents.find_one({"id": inc_id}, {"_id": 0})
+        if not inc:
+            continue
+        # Skip incidents that were already decided since the lift report was computed.
+        if inc.get("decision_status") not in (None, "pending"):
+            continue
+        try:
+            # Text-only reanalysis; image pathway stays untouched so this is
+            # cheap and safe (we don't try to re-extract frames here).
+            new_analysis = await brain_engine.analyze_incident(
+                incident_type=inc.get("incident_type", "other"),
+                description=inc.get("description", ""),
+                db=db,
+                image_base64=None,
+            )
+        except Exception as e:
+            logger.warning(f"auto-rescore failed for {inc_id}: {e}")
+            continue
+
+        old_conf = float(info.get("current_confidence") or 0)
+        new_conf = float(new_analysis.get("final_confidence") or 0)
+        delta = round(new_conf - old_conf, 1)
+        # Preserve visual_evidence_source from the previous analysis if any
+        prev_vsrc = (inc.get("ai_analysis") or {}).get("visual_evidence_source")
+        if prev_vsrc:
+            new_analysis["visual_evidence_source"] = prev_vsrc
+        # Tag provenance on the analysis so the PDF/UI can show "auto-rescored"
+        new_analysis["auto_rescored"] = {
+            "at": now_iso,
+            "reason": "web-learning-precedent-uplift",
+            "delta": delta,
+        }
+
+        await db.incidents.update_one(
+            {"id": inc_id},
+            {"$set": {"ai_analysis": new_analysis, "updated_at": now_iso}},
+        )
+        rescored.append({
+            "incident_id": inc_id,
+            "incident_type": inc.get("incident_type"),
+            "team_involved": inc.get("team_involved"),
+            "timestamp_in_match": inc.get("timestamp_in_match"),
+            "old_confidence": round(old_conf, 1),
+            "new_confidence": round(new_conf, 1),
+            "delta": delta,
+            "suggested_decision": new_analysis.get("suggested_decision"),
+        })
+    return rescored

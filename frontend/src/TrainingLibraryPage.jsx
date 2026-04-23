@@ -360,30 +360,63 @@ export default function TrainingLibraryPage() {
                               CONFIDENCE LIFT REPORT
                             </span>
                           </div>
-                          <span className="text-[10px] font-mono text-gray-400">
-                            {webResult.confidence_lift.total_impacted} incident{webResult.confidence_lift.total_impacted === 1 ? "" : "s"} impacted · avg +{webResult.confidence_lift.avg_uplift_pct}%
-                          </span>
+                          <div className="flex items-center gap-2 text-[10px] font-mono text-gray-400">
+                            <span>{webResult.confidence_lift.total_impacted} impacted · avg +{webResult.confidence_lift.avg_uplift_pct}%</span>
+                            {webResult.confidence_lift.auto_rescored?.length > 0 && (
+                              <span className="px-1.5 py-0.5 border border-[#B366FF]/40 bg-[#B366FF]/10 text-[#B366FF] text-[9px] tracking-[0.15em] font-bold" data-testid="auto-rescore-chip">
+                                AUTO-RESCORED {webResult.confidence_lift.auto_rescored.length}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-[9px] font-mono text-gray-500 mb-2 uppercase tracking-[0.15em]">
-                          These pending incidents will gain confidence on the next re-analysis:
-                        </p>
-                        <div className="space-y-1 max-h-[200px] overflow-y-auto octon-scrollbar pr-1">
-                          {webResult.confidence_lift.impacted_incidents.map((i) => (
-                            <div key={i.incident_id} className="flex items-center gap-2 text-[10px] font-mono px-2 py-1.5 bg-[#00FF88]/[0.04] border border-[#00FF88]/15 hover:bg-[#00FF88]/[0.08]">
-                              <span className="text-[#00E5FF] uppercase w-16 truncate flex-none">{i.incident_type?.replace("_", " ")}</span>
-                              <span className="text-gray-400 truncate flex-1" title={i.description_preview}>
-                                {i.team_involved || "Pending"} · {i.timestamp_in_match || "—"}
-                              </span>
-                              <span className="text-gray-500 flex-none">
-                                {i.current_confidence?.toFixed(1)}% →{" "}
-                                <span className="text-[#00FF88] font-bold">{i.projected_confidence?.toFixed(1)}%</span>
-                              </span>
-                              <span className="text-[#00FF88] font-bold w-12 text-right flex-none">
-                                +{i.projected_uplift?.toFixed(1)}%
-                              </span>
+
+                        {webResult.confidence_lift.auto_rescored?.length > 0 ? (
+                          <>
+                            <p className="text-[9px] font-mono text-[#B366FF]/80 mb-2 uppercase tracking-[0.15em]">
+                              Closed-loop: these pending incidents were automatically re-analysed with the new precedents
+                            </p>
+                            <div className="space-y-1 max-h-[200px] overflow-y-auto octon-scrollbar pr-1">
+                              {webResult.confidence_lift.auto_rescored.map((i) => (
+                                <div key={i.incident_id} className="flex items-center gap-2 text-[10px] font-mono px-2 py-1.5 bg-[#B366FF]/[0.06] border border-[#B366FF]/25 hover:bg-[#B366FF]/[0.12]">
+                                  <span className="text-[#00E5FF] uppercase w-16 truncate flex-none">{i.incident_type?.replace("_", " ")}</span>
+                                  <span className="text-gray-300 truncate flex-1" title={i.suggested_decision}>
+                                    → {i.suggested_decision}
+                                  </span>
+                                  <span className="text-gray-500 flex-none">
+                                    {i.old_confidence?.toFixed(1)}% →{" "}
+                                    <span className="text-white font-bold">{i.new_confidence?.toFixed(1)}%</span>
+                                  </span>
+                                  <span className={`font-bold w-12 text-right flex-none ${i.delta > 0 ? "text-[#00FF88]" : i.delta < 0 ? "text-[#FF2A2A]" : "text-gray-500"}`}>
+                                    {i.delta > 0 ? "+" : ""}{i.delta?.toFixed(1)}%
+                                  </span>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-[9px] font-mono text-gray-500 mb-2 uppercase tracking-[0.15em]">
+                              These pending incidents will gain confidence on the next re-analysis:
+                            </p>
+                            <div className="space-y-1 max-h-[200px] overflow-y-auto octon-scrollbar pr-1">
+                              {webResult.confidence_lift.impacted_incidents.map((i) => (
+                                <div key={i.incident_id} className="flex items-center gap-2 text-[10px] font-mono px-2 py-1.5 bg-[#00FF88]/[0.04] border border-[#00FF88]/15 hover:bg-[#00FF88]/[0.08]">
+                                  <span className="text-[#00E5FF] uppercase w-16 truncate flex-none">{i.incident_type?.replace("_", " ")}</span>
+                                  <span className="text-gray-400 truncate flex-1" title={i.description_preview}>
+                                    {i.team_involved || "Pending"} · {i.timestamp_in_match || "—"}
+                                  </span>
+                                  <span className="text-gray-500 flex-none">
+                                    {i.current_confidence?.toFixed(1)}% →{" "}
+                                    <span className="text-[#00FF88] font-bold">{i.projected_confidence?.toFixed(1)}%</span>
+                                  </span>
+                                  <span className="text-[#00FF88] font-bold w-12 text-right flex-none">
+                                    +{i.projected_uplift?.toFixed(1)}%
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>

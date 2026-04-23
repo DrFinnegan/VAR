@@ -124,13 +124,46 @@ async def run():
     # Clean up any prior test runs so idempotency behaves
     await db.training_cases.delete_many({"source_url": "https://mock/test-article"})
     await db.web_ingestion_log.delete_many({"url": "https://mock/test-article"})
+    await db.incidents.delete_many({"description": {"$regex": "^__test_web_learning__"}})
+
+    # Seed a pending incident that should match the new red_card precedent
+    import uuid as _uuid
+    seeded_inc_id = str(_uuid.uuid4())
+    await db.incidents.insert_one({
+        "id": seeded_inc_id,
+        "incident_type": "red_card",
+        "description": "__test_web_learning__ elbow off the ball violent conduct aerial duel straight red elbow opponent face off-ball",
+        "decision_status": "pending",
+        "team_involved": "Test FC",
+        "timestamp_in_match": "67:12",
+        "ai_analysis": {"final_confidence": 60.0, "suggested_decision": "Reckless challenge"},
+        "created_at": "2026-02-01T00:00:00+00:00",
+    })
 
     from web_learning import ingest_url
 
     fake_extract = AsyncMock(return_value=FAKE_CASES)
 
+    # Stub out brain_engine.analyze_incident so the auto-rescore loop doesn't
+    # hit the LLM during tests — returns a deterministic bumped confidence.
+    async def _fake_analyze(incident_type, description, db, image_base64=None):
+        return {
+            "final_confidence": 78.0,
+            "suggested_decision": "Red Card - Violent Conduct",
+            "reasoning": "mocked",
+            "key_factors": [],
+            "precedents_used": [],
+            "hippocampus": {"initial_confidence": 72.0},
+            "neo_cortex": {"confidence_score": 80.0},
+            "base_confidence": 78.0,
+            "confidence_uplift": 0.0,
+            "hippocampus_bonus": 0.0,
+            "engine_version": "OCTON v2.3-test",
+        }
+
     with patch("web_learning.httpx.AsyncClient", FakeClient), \
-         patch("web_learning.extract_cases_from_text", fake_extract):
+         patch("web_learning.extract_cases_from_text", fake_extract), \
+         patch("ai_engine.brain_engine.analyze_incident", _fake_analyze):
         # ── 1) First ingestion ──
         user = {"id": "test-user-1", "name": "Test Admin"}
         result = await ingest_url(db, "https://mock/test-article", user, auto_save=True)
@@ -142,8 +175,21 @@ async def run():
         assert result["inserted"] == 3, f"expected 3 newly inserted, got {result['inserted']}"
         assert result["skipped_existing"] == 0, "no dupes on first run"
         assert "confidence_lift" in result, "lift report missing"
-        print(f"    lift_report: impacted={result['confidence_lift']['total_impacted']} "
-              f"avg_uplift={result['confidence_lift']['avg_uplift_pct']}")
+        lift = result["confidence_lift"]
+        print(f"    lift_report: impacted={lift['total_impacted']} "
+              f"avg_uplift={lift['avg_uplift_pct']} "
+              f"auto_rescored={len(lift.get('auto_rescored',[]))}")
+        assert lift["total_impacted"] >= 1, "seeded incident should be impacted"
+        assert len(lift.get("auto_rescored", [])) >= 1, "closed loop should have re-analysed"
+        rescored_one = next((r for r in lift["auto_rescored"] if r["incident_id"] == seeded_inc_id), None)
+        assert rescored_one is not None, "seeded incident missing from auto_rescored list"
+        assert rescored_one["old_confidence"] == 60.0, "old_confidence mismatch"
+        assert rescored_one["new_confidence"] == 78.0, "new_confidence mismatch"
+        assert rescored_one["delta"] == 18.0, "delta mismatch"
+        # Verify the DB was actually updated with the new analysis
+        updated = await db.incidents.find_one({"id": seeded_inc_id}, {"_id": 0})
+        assert updated["ai_analysis"]["final_confidence"] == 78.0
+        assert updated["ai_analysis"]["auto_rescored"]["reason"] == "web-learning-precedent-uplift"
         print("    PASS")
 
         # ── 2) Idempotency — re-run the same URL, no new cases inserted ──
@@ -206,9 +252,10 @@ async def run():
     # Cleanup
     await db.training_cases.delete_many({"source_url": "https://mock/test-article"})
     await db.web_ingestion_log.delete_many({"url": "https://mock/test-article"})
+    await db.incidents.delete_many({"description": {"$regex": "^__test_web_learning__"}})
 
     print("=" * 80)
-    print("RESULT: 6/6 tests passed")
+    print("RESULT: 7/7 tests passed")
     print("=" * 80)
     client.close()
 
