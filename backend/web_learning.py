@@ -219,6 +219,7 @@ async def ingest_url(db, url: str, user: Dict, auto_save: bool = True) -> Dict:
             accepted.append(norm)
 
     inserted: List[Dict] = []
+    inserted_full: List[Dict] = []
     skipped_existing: int = 0
     if auto_save and accepted:
         now = datetime.now(timezone.utc).isoformat()
@@ -243,9 +244,16 @@ async def ingest_url(db, url: str, user: Dict, auto_save: bool = True) -> Dict:
                 "updated_at": now,
             }
             await db.training_cases.insert_one(case.copy())
+            inserted_full.append(case)
             inserted.append({"id": case["id"], "title": case["title"],
                              "incident_type": case["incident_type"],
                              "correct_decision": case["correct_decision"]})
+
+    # Compute the confidence-lift report for operators (how these new
+    # precedents would improve any pending incidents of the same type).
+    lift_report = await compute_confidence_lift_report(db, inserted_full) if inserted_full else {
+        "total_impacted": 0, "avg_uplift_pct": 0.0, "impacted_incidents": [],
+    }
 
     # Also log the ingestion attempt for auditability
     await db.web_ingestion_log.insert_one({
@@ -256,6 +264,7 @@ async def ingest_url(db, url: str, user: Dict, auto_save: bool = True) -> Dict:
         "accepted_count": len(accepted),
         "inserted_count": len(inserted),
         "skipped_existing": skipped_existing,
+        "impacted_pending_count": lift_report["total_impacted"],
         "user_id": user.get("id"),
         "user_name": user.get("name"),
         "ingested_at": fetched["fetched_at"],
@@ -269,6 +278,88 @@ async def ingest_url(db, url: str, user: Dict, auto_save: bool = True) -> Dict:
         "inserted": len(inserted),
         "skipped_existing": skipped_existing,
         "cases": inserted if auto_save else accepted,
+        "confidence_lift": lift_report,
+    }
+
+
+# ── Confidence Lift Report ──────────────────────────────
+# When new precedents land, this routine estimates how much they would
+# lift analysis confidence on pending incidents of the same type, so
+# operators see tangible "learning gain" from every ingestion.
+
+async def compute_confidence_lift_report(db, inserted_cases: List[Dict]) -> Dict:
+    """For each newly-ingested case, find pending incidents of the same type
+    that match by RAG similarity, and estimate projected confidence uplift."""
+    if not inserted_cases:
+        return {"total_impacted": 0, "avg_uplift_pct": 0.0, "impacted_incidents": []}
+
+    try:
+        from training import _similarity
+    except Exception:
+        return {"total_impacted": 0, "avg_uplift_pct": 0.0, "impacted_incidents": []}
+
+    # Group by incident_type
+    by_type: Dict[str, List[Dict]] = {}
+    for c in inserted_cases:
+        by_type.setdefault(c["incident_type"], []).append(c)
+
+    impacted: List[Dict] = []
+    for itype, new_cases in by_type.items():
+        pending_cursor = db.incidents.find(
+            {"incident_type": itype, "decision_status": "pending"},
+            {"_id": 0, "id": 1, "description": 1, "ai_analysis": 1,
+             "team_involved": 1, "player_involved": 1, "incident_type": 1,
+             "timestamp_in_match": 1},
+        ).sort("created_at", -1).limit(50)
+        pending = await pending_cursor.to_list(50)
+
+        for inc in pending:
+            desc = (inc.get("description") or "").strip()
+            if not desc:
+                continue
+            # Similarity vs each newly-inserted case
+            sims: List[float] = []
+            for nc in new_cases:
+                case_text = " ".join([
+                    nc.get("title") or "",
+                    nc.get("rationale") or "",
+                    " ".join(nc.get("keywords") or []),
+                ])
+                all_tags = list(set((nc.get("keywords") or []) + (nc.get("tags") or [])))
+                s = _similarity(desc, [], case_text, all_tags)
+                if s >= 0.12:
+                    sims.append(s)
+            if not sims:
+                continue
+            # Projected uplift — mirrors training.compute_confidence_uplift logic,
+            # capped at the per-new-case delta (max +15 %)
+            top_sim = max(sims)
+            raw = top_sim * 40.0 + (len(sims) - 1) * 2.0
+            projected = round(max(0.0, min(15.0, raw)), 1)
+            current_conf = float(((inc.get("ai_analysis") or {})
+                                  .get("final_confidence") or 0))
+            impacted.append({
+                "incident_id": inc.get("id"),
+                "incident_type": itype,
+                "team_involved": inc.get("team_involved"),
+                "player_involved": inc.get("player_involved"),
+                "timestamp_in_match": inc.get("timestamp_in_match"),
+                "description_preview": desc[:120],
+                "current_confidence": round(current_conf, 1),
+                "projected_uplift": projected,
+                "projected_confidence": round(min(99.0, current_conf + projected), 1),
+                "matched_new_cases": len(sims),
+                "top_similarity": round(top_sim, 3),
+            })
+
+    impacted.sort(key=lambda x: x["projected_uplift"], reverse=True)
+    top = impacted[:10]
+    avg = (round(sum(i["projected_uplift"] for i in impacted) / len(impacted), 1)
+           if impacted else 0.0)
+    return {
+        "total_impacted": len(impacted),
+        "avg_uplift_pct": avg,
+        "impacted_incidents": top,
     }
 
 

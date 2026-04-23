@@ -1179,6 +1179,82 @@ async def training_ingest_log(request: Request, limit: int = 20):
     return await _web_recent_log(db, limit=limit)
 
 
+# ── Web-learning scheduler (cron + feeds) ────────────────
+from web_scheduler import (  # noqa: E402
+    get_config as _sched_get_config,
+    update_config as _sched_update_config,
+    list_feeds as _sched_list_feeds,
+    upsert_feed as _sched_upsert_feed,
+    delete_feed as _sched_delete_feed,
+    run_now as _sched_run_now,
+    start_scheduler as _sched_restart,
+)
+
+
+class ScheduleConfigPatch(BaseModel):
+    enabled: Optional[bool] = None
+    cron_hour: Optional[int] = None
+    cron_minute: Optional[int] = None
+
+
+class FeedUpsert(BaseModel):
+    url: str
+    label: Optional[str] = None
+    enabled: bool = True
+
+
+@api_router.get("/training/schedule")
+async def schedule_get(request: Request):
+    await require_role(request, db, ["admin"])
+    cfg = await _sched_get_config(db)
+    feeds = await _sched_list_feeds(db)
+    return {"config": cfg, "feeds": feeds}
+
+
+@api_router.put("/training/schedule")
+async def schedule_update(body: ScheduleConfigPatch, request: Request):
+    await require_role(request, db, ["admin"])
+    patch = {k: v for k, v in body.model_dump(exclude_none=True).items()}
+    if "cron_hour" in patch and not (0 <= patch["cron_hour"] <= 23):
+        raise HTTPException(status_code=400, detail="cron_hour must be 0..23")
+    if "cron_minute" in patch and not (0 <= patch["cron_minute"] <= 59):
+        raise HTTPException(status_code=400, detail="cron_minute must be 0..59")
+    cfg = await _sched_update_config(db, patch)
+    # Rebuild the cron trigger if cadence changed
+    if {"cron_hour", "cron_minute"} & set(patch.keys()):
+        try:
+            await _sched_restart(db)
+        except Exception as e:
+            logger.warning(f"scheduler restart failed: {e}")
+    return cfg
+
+
+@api_router.post("/training/schedule/run-now")
+async def schedule_run_now(request: Request):
+    """Fire the scheduled ingestion immediately (admin override)."""
+    await require_role(request, db, ["admin"])
+    return await _sched_run_now(db)
+
+
+@api_router.post("/training/feeds")
+async def feeds_upsert(body: FeedUpsert, request: Request):
+    await require_role(request, db, ["admin"])
+    try:
+        feed = await _sched_upsert_feed(db, url=body.url, label=body.label or "", enabled=body.enabled)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return feed
+
+
+@api_router.delete("/training/feeds/{feed_id}")
+async def feeds_delete(feed_id: str, request: Request):
+    await require_role(request, db, ["admin"])
+    ok = await _sched_delete_feed(db, feed_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Feed not found")
+    return {"deleted": True}
+
+
 # ── Promote incident → Training Library ───────────────────
 @api_router.post("/incidents/{incident_id}/promote-to-training")
 async def promote_incident_to_training(incident_id: str, request: Request):
@@ -1717,6 +1793,13 @@ async def startup():
         f"## Auth Endpoints\n- POST /api/auth/register\n- POST /api/auth/login\n"
         f"- POST /api/auth/logout\n- GET /api/auth/me\n- POST /api/auth/refresh\n"
     )
+
+    # Start the web-learning scheduler (no-op unless admin enabled it)
+    try:
+        from web_scheduler import start_scheduler as _start_sched
+        await _start_sched(db)
+    except Exception as e:
+        logger.warning(f"Web-learning scheduler init failed: {e}")
 
 
 @app.on_event("shutdown")

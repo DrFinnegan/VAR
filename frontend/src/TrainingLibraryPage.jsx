@@ -3,7 +3,8 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   BookOpen, Plus, Trash2, Upload, Sparkles, RefreshCw, Database,
-  Search, Film, Image as ImageIcon, Check, Loader2, Globe, ExternalLink
+  Search, Film, Image as ImageIcon, Check, Loader2, Globe, ExternalLink,
+  Clock, Power, Zap, TrendingUp
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -43,6 +44,19 @@ export default function TrainingLibraryPage() {
   const [webLoading, setWebLoading] = useState(false);
   const [webResult, setWebResult] = useState(null);
   const [webLog, setWebLog] = useState([]);
+  const [sched, setSched] = useState(null);
+  const [feeds, setFeeds] = useState([]);
+  const [newFeedUrl, setNewFeedUrl] = useState("");
+  const [newFeedLabel, setNewFeedLabel] = useState("");
+  const [schedBusy, setSchedBusy] = useState(false);
+
+  const loadSched = useCallback(async () => {
+    try {
+      const r = await axios.get(`${API}/training/schedule`, { withCredentials: true });
+      setSched(r.data?.config || null);
+      setFeeds(r.data?.feeds || []);
+    } catch { /* non-fatal */ }
+  }, []);
 
   const loadWebLog = useCallback(async () => {
     try {
@@ -50,6 +64,79 @@ export default function TrainingLibraryPage() {
       setWebLog(r.data || []);
     } catch { /* non-fatal */ }
   }, []);
+
+  const handleScheduleToggle = async (enabled) => {
+    setSchedBusy(true);
+    try {
+      const r = await axios.put(`${API}/training/schedule`, { enabled }, { withCredentials: true });
+      setSched(r.data);
+      toast.success(enabled ? "Auto-learn scheduler enabled" : "Auto-learn scheduler paused");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed");
+    } finally {
+      setSchedBusy(false);
+    }
+  };
+
+  const handleScheduleCron = async (hour, minute) => {
+    setSchedBusy(true);
+    try {
+      const r = await axios.put(`${API}/training/schedule`, { cron_hour: hour, cron_minute: minute }, { withCredentials: true });
+      setSched(r.data);
+      toast.success(`Schedule set to ${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")} UTC`);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed");
+    } finally {
+      setSchedBusy(false);
+    }
+  };
+
+  const handleRunNow = async () => {
+    setSchedBusy(true);
+    try {
+      const r = await axios.post(`${API}/training/schedule/run-now`, {}, { withCredentials: true });
+      const inserted = r.data?.total_inserted || 0;
+      toast.success(inserted ? `Auto-ingested ${inserted} new precedent${inserted===1?"":"s"}` : "Run complete — no new precedents");
+      await Promise.all([load(), loadWebLog(), loadSched()]);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Run failed");
+    } finally {
+      setSchedBusy(false);
+    }
+  };
+
+  const handleAddFeed = async () => {
+    const url = (newFeedUrl || "").trim();
+    if (!url.startsWith("http")) { toast.error("URL must start with http(s)"); return; }
+    try {
+      await axios.post(`${API}/training/feeds`, { url, label: newFeedLabel.trim() || url, enabled: true }, { withCredentials: true });
+      setNewFeedUrl("");
+      setNewFeedLabel("");
+      toast.success("Feed added");
+      await loadSched();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to add feed");
+    }
+  };
+
+  const handleToggleFeed = async (feed) => {
+    try {
+      await axios.post(`${API}/training/feeds`, { url: feed.url, label: feed.label, enabled: !feed.enabled }, { withCredentials: true });
+      await loadSched();
+    } catch {
+      toast.error("Failed to toggle feed");
+    }
+  };
+
+  const handleDeleteFeed = async (feedId) => {
+    if (!window.confirm("Remove this feed?")) return;
+    try {
+      await axios.delete(`${API}/training/feeds/${feedId}`, { withCredentials: true });
+      await loadSched();
+    } catch {
+      toast.error("Failed to delete feed");
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -192,14 +279,14 @@ export default function TrainingLibraryPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Dialog open={showWeb} onOpenChange={(v) => { setShowWeb(v); if (v) loadWebLog(); }}>
+          <Dialog open={showWeb} onOpenChange={(v) => { setShowWeb(v); if (v) { loadWebLog(); loadSched(); } }}>
             <DialogTrigger asChild>
               <Button className="bg-transparent text-[#B366FF] border border-[#B366FF]/40 hover:bg-[#B366FF]/10 hover:border-[#B366FF]/70 rounded-none font-heading font-bold text-xs tracking-[0.1em] h-9 px-4 transition-all" data-testid="web-ingest-button">
                 <Globe className="w-3.5 h-3.5 mr-2" />
                 LEARN FROM WEB
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-[#0B0B0B] border-[#B366FF]/30 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="bg-[#0B0B0B] border-[#B366FF]/30 text-white max-w-3xl max-h-[92vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="font-heading text-lg tracking-wide flex items-center gap-2">
                   <Globe className="w-4 h-4 text-[#B366FF]" />
@@ -262,6 +349,167 @@ export default function TrainingLibraryPage() {
                         ))}
                       </div>
                     )}
+
+                    {/* Confidence Lift Report */}
+                    {webResult.confidence_lift?.total_impacted > 0 && (
+                      <div className="mt-3 pt-2 border-t border-[#00FF88]/20" data-testid="confidence-lift-report">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <TrendingUp className="w-3.5 h-3.5 text-[#00FF88]" />
+                            <span className="text-[10px] font-heading font-bold uppercase tracking-[0.22em] text-[#00FF88]">
+                              CONFIDENCE LIFT REPORT
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-mono text-gray-400">
+                            {webResult.confidence_lift.total_impacted} incident{webResult.confidence_lift.total_impacted === 1 ? "" : "s"} impacted · avg +{webResult.confidence_lift.avg_uplift_pct}%
+                          </span>
+                        </div>
+                        <p className="text-[9px] font-mono text-gray-500 mb-2 uppercase tracking-[0.15em]">
+                          These pending incidents will gain confidence on the next re-analysis:
+                        </p>
+                        <div className="space-y-1 max-h-[200px] overflow-y-auto octon-scrollbar pr-1">
+                          {webResult.confidence_lift.impacted_incidents.map((i) => (
+                            <div key={i.incident_id} className="flex items-center gap-2 text-[10px] font-mono px-2 py-1.5 bg-[#00FF88]/[0.04] border border-[#00FF88]/15 hover:bg-[#00FF88]/[0.08]">
+                              <span className="text-[#00E5FF] uppercase w-16 truncate flex-none">{i.incident_type?.replace("_", " ")}</span>
+                              <span className="text-gray-400 truncate flex-1" title={i.description_preview}>
+                                {i.team_involved || "Pending"} · {i.timestamp_in_match || "—"}
+                              </span>
+                              <span className="text-gray-500 flex-none">
+                                {i.current_confidence?.toFixed(1)}% →{" "}
+                                <span className="text-[#00FF88] font-bold">{i.projected_confidence?.toFixed(1)}%</span>
+                              </span>
+                              <span className="text-[#00FF88] font-bold w-12 text-right flex-none">
+                                +{i.projected_uplift?.toFixed(1)}%
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Auto-learn scheduler ─────────────────── */}
+                {sched && (
+                  <div className="border border-[#00E5FF]/20 bg-[#00E5FF]/[0.03] p-3 space-y-3" data-testid="web-scheduler-panel">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-3.5 h-3.5 text-[#00E5FF]" />
+                        <span className="text-[10px] font-heading font-bold uppercase tracking-[0.22em] text-[#00E5FF]">
+                          AUTO-LEARN SCHEDULER
+                        </span>
+                        <span className={`text-[9px] font-mono px-1.5 py-0.5 border ${sched.enabled ? "text-[#00FF88] border-[#00FF88]/40 bg-[#00FF88]/10" : "text-gray-500 border-white/10 bg-white/[0.02]"}`}>
+                          {sched.enabled ? "ARMED" : "PAUSED"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          onClick={() => handleScheduleToggle(!sched.enabled)}
+                          disabled={schedBusy}
+                          variant="ghost"
+                          className={`h-7 px-2.5 rounded-none text-[9px] font-mono tracking-[0.15em] border ${sched.enabled ? "text-[#FFB800] border-[#FFB800]/30 hover:bg-[#FFB800]/10" : "text-[#00FF88] border-[#00FF88]/30 hover:bg-[#00FF88]/10"}`}
+                          data-testid="schedule-toggle-button"
+                        >
+                          <Power className="w-3 h-3 mr-1" />
+                          {sched.enabled ? "PAUSE" : "ENABLE"}
+                        </Button>
+                        <Button
+                          onClick={handleRunNow}
+                          disabled={schedBusy}
+                          variant="ghost"
+                          className="h-7 px-2.5 rounded-none text-[9px] font-mono tracking-[0.15em] text-[#B366FF] border border-[#B366FF]/30 hover:bg-[#B366FF]/10"
+                          data-testid="schedule-run-now-button"
+                        >
+                          {schedBusy ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Zap className="w-3 h-3 mr-1" />}
+                          RUN NOW
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px] font-mono">
+                      <span className="text-gray-400">Daily at</span>
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number" min={0} max={23}
+                          value={sched.cron_hour}
+                          onChange={(e) => setSched({ ...sched, cron_hour: Math.max(0, Math.min(23, Number(e.target.value) || 0)) })}
+                          onBlur={() => handleScheduleCron(sched.cron_hour, sched.cron_minute)}
+                          className="bg-black/40 border-white/10 rounded-none text-white text-xs h-7 w-12 text-center"
+                        />
+                        <span className="text-gray-500">:</span>
+                        <Input
+                          type="number" min={0} max={59}
+                          value={sched.cron_minute}
+                          onChange={(e) => setSched({ ...sched, cron_minute: Math.max(0, Math.min(59, Number(e.target.value) || 0)) })}
+                          onBlur={() => handleScheduleCron(sched.cron_hour, sched.cron_minute)}
+                          className="bg-black/40 border-white/10 rounded-none text-white text-xs h-7 w-12 text-center"
+                        />
+                        <span className="text-[9px] text-gray-500 ml-1 tracking-[0.15em]">UTC</span>
+                      </div>
+                      {sched.last_run_at && (
+                        <span className="text-gray-500 ml-auto">
+                          Last run: <span className="text-gray-300">{new Date(sched.last_run_at).toLocaleString()}</span>
+                          {sched.last_run_summary?.total_inserted !== undefined && (
+                            <span className="text-[#00FF88] ml-2">+{sched.last_run_summary.total_inserted}</span>
+                          )}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Feeds list */}
+                    <div className="space-y-1">
+                      <div className="text-[9px] font-mono uppercase tracking-[0.25em] text-gray-500 mb-1">
+                        FEEDS ({feeds.length})
+                      </div>
+                      {feeds.map((f) => (
+                        <div key={f.id} className="flex items-center gap-2 text-[10px] font-mono px-2 py-1.5 border border-white/[0.06] bg-black/20">
+                          <button
+                            onClick={() => handleToggleFeed(f)}
+                            className={`w-2 h-2 rounded-full flex-none ${f.enabled ? "bg-[#00FF88] shadow-[0_0_6px_#00FF88aa]" : "bg-gray-700"}`}
+                            title={f.enabled ? "Enabled — click to disable" : "Disabled — click to enable"}
+                            data-testid={`feed-toggle-${f.id}`}
+                          />
+                          <span className="text-white truncate flex-1">{f.label || f.url}</span>
+                          {f.last_inserted_count > 0 && (
+                            <span className="text-[#00FF88] flex-none">+{f.last_inserted_count}</span>
+                          )}
+                          <a href={f.url} target="_blank" rel="noreferrer" className="text-gray-500 hover:text-[#00E5FF] flex-none">
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                          <button
+                            onClick={() => handleDeleteFeed(f.id)}
+                            className="text-gray-600 hover:text-[#FF2A2A] flex-none"
+                            data-testid={`feed-delete-${f.id}`}
+                          >
+                            <Trash2 className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      ))}
+                      {/* Add new feed */}
+                      <div className="flex items-center gap-1 pt-1">
+                        <Input
+                          value={newFeedLabel}
+                          onChange={(e) => setNewFeedLabel(e.target.value)}
+                          placeholder="Label"
+                          className="bg-black/40 border-white/10 rounded-none text-white text-[10px] font-mono h-7 w-28"
+                        />
+                        <Input
+                          value={newFeedUrl}
+                          onChange={(e) => setNewFeedUrl(e.target.value)}
+                          placeholder="https://..."
+                          className="bg-black/40 border-white/10 rounded-none text-white text-[10px] font-mono h-7 flex-1"
+                          data-testid="feed-url-input"
+                          onKeyDown={(e) => { if (e.key === "Enter") handleAddFeed(); }}
+                        />
+                        <Button
+                          onClick={handleAddFeed}
+                          variant="ghost"
+                          className="h-7 px-2 rounded-none text-[#00E5FF] border border-[#00E5FF]/30 hover:bg-[#00E5FF]/10"
+                          data-testid="feed-add-button"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 )}
 
