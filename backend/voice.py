@@ -115,10 +115,10 @@ async def generate_reply(
     return (resp or "I don't have a response right now.").strip()
 
 
-async def speak(text: str, voice: str = "ash", hd: bool = True) -> bytes:
+async def speak(text: str, voice: str = "nova", hd: bool = True) -> bytes:
     """TTS — returns MP3 bytes.
-    Default: `ash` voice on `tts-1-hd` at speed 1.05 → warm, expressive
-    American-English cadence that sounds alive rather than mechanistic."""
+    Default: `nova` voice on `tts-1-hd` at speed 1.05 → warm, expressive
+    American-English female cadence that sounds alive rather than mechanistic."""
     try:
         from emergentintegrations.llm.openai import OpenAITextToSpeech
     except Exception as e:

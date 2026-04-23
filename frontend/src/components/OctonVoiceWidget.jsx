@@ -1,10 +1,23 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { Mic, X, Loader2, Waves, MessageSquareText, Ear, EarOff, Volume2 } from "lucide-react";
+import { Mic, X, Loader2, Waves, MessageSquareText, Ear, EarOff, Volume2, Sliders, Check } from "lucide-react";
 import { OctonBrainLogo } from "./OctonBrainLogo";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Curated American-English TTS voices shown in the picker.
+// Source: OpenAI TTS voice catalogue; labels tuned for VAR persona.
+const VOICE_OPTIONS = [
+  { id: "nova",    label: "Nova",    desc: "Warm · female",           gender: "F" },
+  { id: "shimmer", label: "Shimmer", desc: "Bright · female",         gender: "F" },
+  { id: "coral",   label: "Coral",   desc: "Friendly · female",       gender: "F" },
+  { id: "ash",     label: "Ash",    desc: "Charismatic · male",       gender: "M" },
+  { id: "echo",    label: "Echo",    desc: "News-anchor · male",      gender: "M" },
+  { id: "onyx",    label: "Onyx",    desc: "Deep · male",             gender: "M" },
+  { id: "sage",    label: "Sage",    desc: "Conversational · unisex", gender: "U" },
+  { id: "alloy",   label: "Alloy",   desc: "Neutral · unisex",        gender: "U" },
+];
 
 /**
  * Floating OCTON voice assistant — bottom-right of the dashboard.
@@ -22,6 +35,12 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
   const [wakeOn, setWakeOn] = useState(false);
   const [wakeSupported, setWakeSupported] = useState(true);
   const [pendingAudioUrl, setPendingAudioUrl] = useState(null);
+  // Persisted American-English voice choice
+  const [voiceName, setVoiceName] = useState(() => {
+    try { return window.localStorage.getItem("octon-voice") || "nova"; }
+    catch { return "nova"; }
+  });
+  const [showVoicePicker, setShowVoicePicker] = useState(false);
 
   const wakeRecRef = useRef(null);
   const wakeRestartTimerRef = useRef(null);
@@ -199,7 +218,7 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
           session_id: sessionId,
           selected_incident_id: selectedIncidentId || null,
           include_audio: true,
-          voice: "ash",
+          voice: voiceName,
         },
         { withCredentials: true }
       );
@@ -279,7 +298,7 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
     } finally {
       setThinking(false);
     }
-  }, [sessionId, selectedIncidentId, onVoiceAction]);
+  }, [sessionId, selectedIncidentId, onVoiceAction, voiceName]);
 
   const toggleRecording = () => {
     if (recording) stopRecording();
@@ -473,7 +492,71 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 relative">
+              {/* ── Voice picker ── */}
+              <button
+                onClick={() => setShowVoicePicker(v => !v)}
+                className={`h-7 px-2 flex items-center gap-1 text-[9px] font-mono uppercase tracking-[0.15em] border transition-all ${
+                  showVoicePicker
+                    ? "text-[#00E5FF] border-[#00E5FF]/50 bg-[#00E5FF]/[0.1]"
+                    : "text-gray-400 border-white/10 hover:text-[#00E5FF] hover:border-[#00E5FF]/40"
+                }`}
+                title={`Voice: ${voiceName}`}
+                data-testid="octon-voice-picker-toggle"
+              >
+                <Sliders className="w-3 h-3" />
+                <span>{voiceName.toUpperCase()}</span>
+              </button>
+              {showVoicePicker && (
+                <div
+                  className="absolute top-9 right-0 z-[70] w-60 bg-[#050505] border border-[#00E5FF]/30 shadow-[0_0_30px_rgba(0,229,255,0.2)]"
+                  data-testid="octon-voice-picker-menu"
+                >
+                  <div className="px-3 py-2 border-b border-white/[0.06] flex items-center justify-between">
+                    <span className="text-[9px] font-mono uppercase tracking-[0.25em] text-[#00E5FF]">// Voice (US English)</span>
+                    <button
+                      onClick={() => setShowVoicePicker(false)}
+                      className="text-gray-500 hover:text-white"
+                      aria-label="Close voice picker"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <div className="max-h-[280px] overflow-y-auto octon-scrollbar py-1">
+                    {VOICE_OPTIONS.map(v => (
+                      <button
+                        key={v.id}
+                        onClick={() => {
+                          setVoiceName(v.id);
+                          try { window.localStorage.setItem("octon-voice", v.id); } catch {/* ignore */}
+                          setShowVoicePicker(false);
+                          toast.success(`Voice set to ${v.label}`);
+                        }}
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left transition-all ${
+                          voiceName === v.id
+                            ? "bg-[#00E5FF]/[0.08] border-l-2 border-[#00E5FF]"
+                            : "border-l-2 border-transparent hover:bg-white/[0.04]"
+                        }`}
+                        data-testid={`octon-voice-option-${v.id}`}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className={`text-[11px] font-mono font-bold tracking-wide ${voiceName === v.id ? "text-[#00E5FF]" : "text-white"}`}>
+                            {v.label}
+                          </span>
+                          <span className="text-[9px] font-mono text-gray-500 tracking-wide">{v.desc}</span>
+                        </div>
+                        <div className="flex items-center gap-1 flex-none">
+                          <span className="text-[8px] font-mono text-gray-600 px-1 border border-white/10">{v.gender}</span>
+                          {voiceName === v.id && <Check className="w-3 h-3 text-[#00E5FF]" />}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="px-3 py-1.5 border-t border-white/[0.06] text-[8px] font-mono text-gray-600 tracking-[0.2em] uppercase">
+                    // saved locally · applies on next reply
+                  </div>
+                </div>
+              )}
               {wakeSupported && (
                 <button
                   onClick={toggleWake}
