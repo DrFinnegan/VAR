@@ -271,23 +271,34 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
 
       {/* Floating launcher */}
       {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          data-testid="octon-voice-launcher"
-          className="fixed bottom-24 right-6 z-[60] h-14 w-14 flex items-center justify-center border border-[#00E5FF]/40 bg-[#050505] hover:bg-[#00E5FF]/10 transition-all group"
-          style={{ boxShadow: "0 0 24px rgba(0,229,255,0.25), inset 0 0 20px rgba(0,229,255,0.05)" }}
-          title="Talk to OCTON"
-        >
-          <div className="absolute inset-0 border border-[#00E5FF]/60 animate-pulse" style={{ margin: 3 }} />
-          <div className="relative">
-            <OctonBrainLogo size={30} />
-          </div>
-          <span className="absolute -top-1 -right-1 text-[7px] font-mono font-bold text-[#00E5FF] bg-black px-1 border border-[#00E5FF]/40 tracking-widest">AI</span>
-          {/* Hover callout so the button never feels anonymous */}
-          <span className="absolute right-[68px] top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-mono tracking-[0.22em] uppercase text-[#00E5FF] bg-[#050505] border border-[#00E5FF]/30 px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-            Talk to OCTON
-          </span>
-        </button>
+        <div className="fixed bottom-24 right-6 z-[60] flex items-center gap-2" data-testid="octon-voice-dock">
+          {/* Always-visible "Talk to OCTON VAR" pill */}
+          <button
+            onClick={() => setOpen(true)}
+            data-testid="octon-voice-label"
+            className="h-10 px-3 flex items-center gap-2 border border-[#00E5FF]/40 bg-[#050505]/90 hover:bg-[#00E5FF]/10 transition-all"
+            style={{ boxShadow: "0 0 14px rgba(0,229,255,0.18)" }}
+          >
+            <Waves className="w-3 h-3 text-[#00E5FF] animate-pulse" />
+            <span className="text-[10px] font-heading font-bold tracking-[0.22em] uppercase text-[#00E5FF]">
+              Talk to OCTON VAR
+            </span>
+          </button>
+          {/* Brain launcher */}
+          <button
+            onClick={() => setOpen(true)}
+            data-testid="octon-voice-launcher"
+            className="h-14 w-14 flex items-center justify-center border border-[#00E5FF]/40 bg-[#050505] hover:bg-[#00E5FF]/10 transition-all group relative"
+            style={{ boxShadow: "0 0 24px rgba(0,229,255,0.25), inset 0 0 20px rgba(0,229,255,0.05)" }}
+            title="Talk to OCTON VAR"
+          >
+            <div className="absolute inset-0 border border-[#00E5FF]/60 animate-pulse" style={{ margin: 3 }} />
+            <div className="relative">
+              <OctonBrainLogo size={30} />
+            </div>
+            <span className="absolute -top-1 -right-1 text-[7px] font-mono font-bold text-[#00E5FF] bg-black px-1 border border-[#00E5FF]/40 tracking-widest">AI</span>
+          </button>
+        </div>
       )}
 
       {/* Dock panel */}
