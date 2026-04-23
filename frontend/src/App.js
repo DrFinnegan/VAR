@@ -88,54 +88,131 @@ const AuthProvider = ({ children }) => {
 const useAuth = () => useContext(AuthContext);
 
 // ── OCTON Neocortex Brain Logo ────────────────────────────
-const OctonBrainLogo = ({ size = 36 }) => (
-  <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="glow-cyan">
-    {/* Brain outline */}
-    <path d="M20 4C12 4 6 10 6 18c0 5 2.5 9 6 12l2 2h12l2-2c3.5-3 6-7 6-12 0-8-6-14-14-14z" stroke="#00E5FF" strokeWidth="1.5" fill="#00E5FF08" />
-    {/* Neocortex folds - left */}
-    <path d="M10 14c2-2 4-1 5 1s-1 4-3 4" stroke="#00E5FF" strokeWidth="0.8" opacity="0.6" />
-    <path d="M9 20c3-1 5 0 5 2s-2 3-4 3" stroke="#00E5FF" strokeWidth="0.8" opacity="0.6" />
-    {/* Neocortex folds - right */}
-    <path d="M30 14c-2-2-4-1-5 1s1 4 3 4" stroke="#00E5FF" strokeWidth="0.8" opacity="0.6" />
-    <path d="M31 20c-3-1-5 0-5 2s2 3 4 3" stroke="#00E5FF" strokeWidth="0.8" opacity="0.6" />
-    {/* Central fissure */}
-    <line x1="20" y1="6" x2="20" y2="30" stroke="#00E5FF" strokeWidth="0.5" opacity="0.3" />
-    {/* Neural connections */}
-    <line x1="12" y1="12" x2="18" y2="16" stroke="#00FF88" strokeWidth="0.5" opacity="0.5" />
-    <line x1="22" y1="16" x2="28" y2="12" stroke="#00FF88" strokeWidth="0.5" opacity="0.5" />
-    <line x1="14" y1="22" x2="20" y2="20" stroke="#00FF88" strokeWidth="0.5" opacity="0.5" />
-    <line x1="20" y1="20" x2="26" y2="22" stroke="#00FF88" strokeWidth="0.5" opacity="0.5" />
-    {/* Glowing synaptic nodes */}
-    <circle cx="12" cy="12" r="2" fill="#00E5FF">
-      <animate attributeName="opacity" values="0.4;1;0.4" dur="2s" repeatCount="indefinite" />
-    </circle>
-    <circle cx="28" cy="12" r="2" fill="#00E5FF">
-      <animate attributeName="opacity" values="0.6;1;0.6" dur="1.8s" repeatCount="indefinite" />
-    </circle>
-    <circle cx="20" cy="10" r="1.5" fill="#00FF88">
-      <animate attributeName="opacity" values="0.3;1;0.3" dur="2.5s" repeatCount="indefinite" />
-    </circle>
-    <circle cx="14" cy="22" r="1.5" fill="#00E5FF">
-      <animate attributeName="opacity" values="0.5;1;0.5" dur="1.5s" repeatCount="indefinite" />
-    </circle>
-    <circle cx="26" cy="22" r="1.5" fill="#00E5FF">
-      <animate attributeName="opacity" values="0.4;1;0.4" dur="2.2s" repeatCount="indefinite" />
-    </circle>
-    <circle cx="20" cy="20" r="2.5" fill="#00FF88">
-      <animate attributeName="opacity" values="0.5;1;0.5" dur="1.2s" repeatCount="indefinite" />
-      <animate attributeName="r" values="2;3;2" dur="1.2s" repeatCount="indefinite" />
-    </circle>
-    <circle cx="16" cy="16" r="1" fill="#00E5FF">
-      <animate attributeName="opacity" values="0.3;0.9;0.3" dur="3s" repeatCount="indefinite" />
-    </circle>
-    <circle cx="24" cy="16" r="1" fill="#00E5FF">
-      <animate attributeName="opacity" values="0.5;1;0.5" dur="2.8s" repeatCount="indefinite" />
-    </circle>
-    {/* Hippocampus (inner) */}
-    <ellipse cx="15" cy="24" rx="3" ry="2" stroke="#00FF88" strokeWidth="0.6" fill="none" opacity="0.4" />
-    <ellipse cx="25" cy="24" rx="3" ry="2" stroke="#00FF88" strokeWidth="0.6" fill="none" opacity="0.4" />
-  </svg>
-);
+const OctonBrainLogo = ({ size = 36 }) => {
+  // Deterministic "random" field of neural dots inside the brain silhouette
+  const dots = [
+    { x: 20, y: 12, r: 1.1, c: "#00E5FF", d: 2.0 },
+    { x: 14, y: 14, r: 1.4, c: "#00E5FF", d: 2.4 },
+    { x: 26, y: 14, r: 1.4, c: "#00E5FF", d: 1.8 },
+    { x: 10, y: 18, r: 0.9, c: "#7CF9FF", d: 3.1 },
+    { x: 30, y: 18, r: 0.9, c: "#7CF9FF", d: 2.7 },
+    { x: 17, y: 18, r: 1.0, c: "#00FF88", d: 1.6 },
+    { x: 23, y: 18, r: 1.0, c: "#00FF88", d: 2.2 },
+    { x: 13, y: 22, r: 1.2, c: "#00E5FF", d: 1.9 },
+    { x: 27, y: 22, r: 1.2, c: "#00E5FF", d: 2.3 },
+    { x: 20, y: 22, r: 1.6, c: "#00FF88", d: 1.4 },
+    { x: 16, y: 26, r: 0.9, c: "#7CF9FF", d: 3.0 },
+    { x: 24, y: 26, r: 0.9, c: "#7CF9FF", d: 2.6 },
+    { x: 20, y: 29, r: 1.0, c: "#00E5FF", d: 1.7 },
+    { x: 11, y: 25, r: 0.7, c: "#00FF88", d: 3.5 },
+    { x: 29, y: 25, r: 0.7, c: "#00FF88", d: 3.2 },
+  ];
+  const edges = [
+    [0, 1], [0, 2], [1, 3], [2, 4], [1, 5], [2, 6], [5, 6],
+    [5, 7], [6, 8], [7, 9], [8, 9], [9, 10], [9, 11], [10, 12], [11, 12],
+    [7, 13], [8, 14], [3, 7], [4, 8],
+  ];
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 40 40"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-label="OCTON Neocortex"
+    >
+      <defs>
+        <radialGradient id="brainGlow" cx="50%" cy="50%" r="55%">
+          <stop offset="0%" stopColor="#00E5FF" stopOpacity="0.18" />
+          <stop offset="60%" stopColor="#00E5FF" stopOpacity="0.06" />
+          <stop offset="100%" stopColor="#00E5FF" stopOpacity="0" />
+        </radialGradient>
+        <filter id="brainBlur" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="0.5" />
+        </filter>
+      </defs>
+
+      {/* Ambient glow */}
+      <circle cx="20" cy="20" r="17" fill="url(#brainGlow)" />
+
+      {/* Anatomical brain silhouette — two hemispheres + cerebellum lobe */}
+      <path
+        d="M20 5
+           C13 5 8 9 7 15
+           C5 17 5 22 8 24
+           C8 28 11 32 16 33
+           C18 35 22 35 24 33
+           C29 32 32 28 32 24
+           C35 22 35 17 33 15
+           C32 9 27 5 20 5 Z"
+        stroke="#00E5FF"
+        strokeWidth="0.9"
+        fill="#020A0D"
+        opacity="0.95"
+      />
+
+      {/* Central fissure */}
+      <path d="M20 6 Q19.5 18 20 34" stroke="#00E5FF" strokeWidth="0.4" opacity="0.35" />
+
+      {/* Neocortex folds (subtle gyri) */}
+      <path d="M10 14 Q13 12 15 15" stroke="#00E5FF" strokeWidth="0.45" opacity="0.4" />
+      <path d="M9 20 Q12 18 15 21" stroke="#00E5FF" strokeWidth="0.45" opacity="0.4" />
+      <path d="M10 26 Q13 24 16 27" stroke="#00E5FF" strokeWidth="0.45" opacity="0.4" />
+      <path d="M30 14 Q27 12 25 15" stroke="#00E5FF" strokeWidth="0.45" opacity="0.4" />
+      <path d="M31 20 Q28 18 25 21" stroke="#00E5FF" strokeWidth="0.45" opacity="0.4" />
+      <path d="M30 26 Q27 24 24 27" stroke="#00E5FF" strokeWidth="0.45" opacity="0.4" />
+
+      {/* Neural edges (synaptic pathways) */}
+      <g stroke="#00E5FF" strokeWidth="0.35" opacity="0.45">
+        {edges.map(([a, b], i) => (
+          <line
+            key={i}
+            x1={dots[a].x}
+            y1={dots[a].y}
+            x2={dots[b].x}
+            y2={dots[b].y}
+          />
+        ))}
+      </g>
+
+      {/* Halo pulse around each node (blurred) */}
+      <g filter="url(#brainBlur)">
+        {dots.map((d, i) => (
+          <circle key={`h${i}`} cx={d.x} cy={d.y} r={d.r * 1.8} fill={d.c} opacity="0.3" />
+        ))}
+      </g>
+
+      {/* Glowing neural nodes */}
+      {dots.map((d, i) => (
+        <circle key={`n${i}`} cx={d.x} cy={d.y} r={d.r} fill={d.c}>
+          <animate
+            attributeName="opacity"
+            values="0.35;1;0.35"
+            dur={`${d.d}s`}
+            repeatCount="indefinite"
+            begin={`${(i % 5) * 0.2}s`}
+          />
+          <animate
+            attributeName="r"
+            values={`${d.r * 0.8};${d.r * 1.3};${d.r * 0.8}`}
+            dur={`${d.d}s`}
+            repeatCount="indefinite"
+            begin={`${(i % 5) * 0.2}s`}
+          />
+        </circle>
+      ))}
+
+      {/* Signal traveler along one primary pathway */}
+      <circle r="0.8" fill="#FFFFFF" opacity="0.9">
+        <animateMotion
+          dur="4s"
+          repeatCount="indefinite"
+          path="M14,14 L20,18 L26,14"
+        />
+      </circle>
+    </svg>
+  );
+};
 
 // ── Config Maps ───────────────────────────────────────────
 const incidentTypeConfig = {
@@ -213,7 +290,7 @@ const LoginPage = () => {
           </div>
           <div>
             <CardTitle className="text-2xl font-heading font-black text-white tracking-tight">OCTON VAR</CardTitle>
-            <p className="text-xs font-mono text-[#00E5FF] tracking-[0.15em] mt-1">DR FINNEGAN'S FORENSIC AI</p>
+            <p className="text-xs font-mono text-[#00E5FF] tracking-[0.15em] mt-1">NEOCORTEX FORENSIC AI</p>
           </div>
           <CardDescription className="text-gray-400 text-sm">Lightning speed analyses for match decisions</CardDescription>
         </CardHeader>
@@ -338,12 +415,19 @@ const Sidebar = () => {
 
   return (
     <div className="w-60 flex-shrink-0 border-r border-white/[0.06] h-screen sticky top-0 bg-[#050505] flex flex-col">
-      <div className="p-5 border-b border-white/[0.06]">
-        <div className="flex items-center gap-3">
-          <OctonBrainLogo size={36} />
+      <div className="p-5 border-b border-white/[0.06] relative overflow-hidden">
+        {/* Ambient neural glow */}
+        <div className="absolute -top-8 -left-6 w-24 h-24 bg-[#00E5FF]/10 blur-2xl pointer-events-none" />
+        {/* Top cyan accent line */}
+        <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-[#00E5FF]/60 via-[#00E5FF]/20 to-transparent" />
+        <div className="flex items-center gap-3 relative">
+          <div className="relative">
+            <div className="absolute inset-0 bg-[#00E5FF]/15 rounded-full blur-md" />
+            <OctonBrainLogo size={42} />
+          </div>
           <div>
-            <h1 className="font-heading font-black text-white text-base tracking-tighter">OCTON VAR</h1>
-            <p className="text-[8px] font-mono text-[#00E5FF]/60 tracking-[0.15em]">DR FINNEGAN'S FORENSIC AI</p>
+            <h1 className="font-heading font-black text-white text-base tracking-tighter leading-none" style={{ textShadow: "0 0 10px #00E5FF33" }}>OCTON VAR</h1>
+            <p className="text-[8px] font-mono text-[#00E5FF]/70 tracking-[0.2em] mt-1">NEOCORTEX · v2.1</p>
           </div>
         </div>
       </div>
@@ -1770,20 +1854,26 @@ const LiveVARPage = () => {
 
       {/* Header */}
       <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <div className="relative flex items-center">
-              {/* Accent bar */}
-              <div className="w-[3px] h-9 bg-[#00E5FF] mr-3" style={{ boxShadow: "0 0 8px #00E5FFaa" }} />
-              <h1 className="text-4xl font-heading font-black text-white tracking-tighter uppercase leading-none">LIVE <span className="text-[#00E5FF]" style={{ textShadow: "0 0 14px #00E5FF66" }}>VAR</span></h1>
-            </div>
-            <div className="h-5 w-[1px] bg-white/10" />
-            <span className="text-[10px] font-mono text-[#00E5FF]/70 tracking-[0.25em]">DR FINNEGAN</span>
-            <span className="px-1.5 py-0.5 border border-[#00E5FF]/30 text-[8px] font-mono tracking-[0.2em] text-[#00E5FF]/80 bg-[#00E5FF]/[0.05]">v2.0</span>
+        <div className="flex items-center gap-4">
+          {/* Larger brain logo right next to title */}
+          <div className="relative flex-none">
+            <div className="absolute inset-0 rounded-full bg-[#00E5FF]/10 blur-xl" />
+            <OctonBrainLogo size={56} />
           </div>
-          <div className="flex items-center gap-2 mt-1 ml-[15px]">
-            <div className="w-1 h-1 bg-[#00E5FF]/60 animate-pulse" />
-            <p className="text-[10px] font-mono text-gray-500 tracking-[0.15em] uppercase">OCTON Neocortex · forensic incident analysis</p>
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-[3px] h-9 bg-[#00E5FF]" style={{ boxShadow: "0 0 10px #00E5FFbb" }} />
+              <h1 className="text-4xl font-heading font-black text-white tracking-tighter uppercase leading-none">
+                OCTON <span className="text-[#00E5FF]" style={{ textShadow: "0 0 16px #00E5FF88" }}>VAR</span>
+              </h1>
+              <span className="px-1.5 py-0.5 border border-[#00E5FF]/30 text-[8px] font-mono tracking-[0.2em] text-[#00E5FF]/80 bg-[#00E5FF]/[0.05]">NEOCORTEX · v2.1</span>
+            </div>
+            <div className="flex items-center gap-2 mt-1 ml-[12px]">
+              <div className="w-1 h-1 bg-[#00E5FF]/60 animate-pulse" />
+              <p className="text-[10px] font-mono text-gray-500 tracking-[0.15em] uppercase">
+                Forensic Incident Analysis · Dual-Brain Decision Support
+              </p>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -1942,7 +2032,7 @@ const LiveVARPage = () => {
                     </div>
                     <div className="flex flex-col">
                       <span className="text-[10px] font-heading font-bold uppercase tracking-[0.22em] text-[#00E5FF]">OCTON ANALYSIS</span>
-                      <span className="text-[8px] font-mono uppercase tracking-[0.2em] text-gray-600">Neocortex · v2.0</span>
+                      <span className="text-[8px] font-mono uppercase tracking-[0.2em] text-gray-600">Neocortex · v2.1</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5">
