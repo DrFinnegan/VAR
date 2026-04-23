@@ -119,20 +119,29 @@ class HippocampusAnalyzer:
         },
         "red_card": {
             "keywords": [
-                "red card", "serious", "violent", "dangerous", "reckless",
-                "excessive force", "straight red", "studs up", "elbow",
-                "head butt", "spitting", "dogso", "last man",
-                "denied goal scoring", "brutal", "endangered safety",
-                "off the ball", "violent conduct",
+                "red card", "serious", "violent", "violently", "dangerous", "reckless",
+                "excessive force", "straight red", "studs up", "studs-up", "stamp",
+                "stamped", "stamping", "two-footed", "two footed", "over the top",
+                "follow-through", "follow through", "high boot", "shin", "ankle",
+                "elbow", "elbowed", "head butt", "headbutt", "headbutted", "spitting",
+                "spat", "spit", "punched", "punch", "kicked out", "kicked-out",
+                "dogso", "last man", "denied goal scoring", "brutal", "endangered safety",
+                "off the ball", "off-the-ball", "violent conduct", "shoved", "shove",
+                "pushed", "grabbed", "confronted", "confrontation", "aggression",
+                "aggressive", "attacked", "assaulted", "referee", "official",
+                "linesman", "assistant referee", "fourth official", "pushed referee",
+                "shoved referee", "grabbed referee", "howled", "screamed at",
+                "head-high", "scissor tackle",
             ],
-            "negative_keywords": ["yellow", "first offence", "minor", "accidental", "attempt to play ball"],
+            "negative_keywords": ["first offence", "minor", "accidental", "attempt to play ball", "won the ball", "fair challenge"],
             "common_decisions": [
-                "Red Card - Serious Foul Play",
                 "Red Card - Violent Conduct",
-                "Yellow Card Only - Not Excessive Force",
+                "Red Card - Serious Foul Play",
+                "Red Card - Denying Obvious Goal-Scoring Opportunity",
+                "Yellow Card - Reckless but Not Excessive",
             ],
             "severity_weight": 0.88,
-            "base_confidence": 52.0,
+            "base_confidence": 58.0,
         },
         "other": {
             "keywords": [],
@@ -142,6 +151,75 @@ class HippocampusAnalyzer:
             "base_confidence": 40.0,
         },
     }
+
+    # ── Critical red-card triggers ──
+    # When the description explicitly mentions any of these, IFAB Law 12 is
+    # not discretionary — confidence must floor at 88 % and the verdict is fixed.
+    #
+    # Each trigger is either:
+    #   ("name", ["phrase_list"], "decision")                                 → any phrase present
+    #   ("name", {"any": [...], "plus_any": [...]}, "decision")               → combo: at least one from each list
+    CRITICAL_RED_TRIGGERS = [
+        # Physical contact / aggression toward a match official (automatic violent conduct).
+        # Combo detector: an aggression verb *somewhere* in the description AND a match-official
+        # target *somewhere* in the description (not necessarily contiguous).
+        ("referee_contact", {
+            "any": [
+                "pushed", "push ", "shoved", "shove ", "grabbed", "grab ",
+                "struck", "strike ", "hit ", "punched", "punch ", "kicked",
+                "headbutt", "head-butt", "head butt", "elbowed", "elbow ",
+                "spat at", "spat on", "spit at", "spit on",
+                "attacked", "assault", "assaulted", "confront", "confronted",
+                "aggression", "aggressive", "violence against", "violently",
+                "howled", "charged at", "rushed at",
+            ],
+            "plus_any": [
+                "referee", "the ref ", "ref.", " ref,", " ref ",
+                "official", "officials", "linesman", "assistant referee",
+                "assistant ref", "4th official", "fourth official",
+                "var official", "match official",
+            ],
+        }, "Red Card - Violent Conduct (Referee Contact)"),
+        # Spitting at an opponent or any other person.
+        ("spitting", [
+            "spat at", "spat on", "spit at", "spit on", "spitting at", "spitting on",
+        ], "Red Card - Violent Conduct (Spitting)"),
+        # Stamping.
+        ("stamping", [
+            "stamped on", "stamping on", "stamp on", "stamped down",
+        ], "Red Card - Serious Foul Play (Stamping)"),
+        # Punch / strike off the ball.
+        ("off_ball_strike", [
+            "struck off the ball", "struck an opponent", "struck the opponent",
+            "punched opponent", "punched the opponent",
+            "elbowed opponent", "elbowed the opponent", "elbowed the centre-back",
+            "elbowed the defender", "elbowed in the face",
+            "headbutted", "head-butted", "head butted",
+        ], "Red Card - Violent Conduct"),
+        # Two-footed / scissor tackle — serious foul play.
+        ("two_footed", [
+            "two-footed lunge", "two footed lunge", "scissor tackle",
+            "studs up over the top", "over-the-top studs",
+        ], "Red Card - Serious Foul Play"),
+        # Explicit "straight red" / "red card" mention with clear facts.
+        ("explicit_red", [
+            "straight red", "direct red", "sent off",
+        ], "Red Card - Serious Foul Play"),
+    ]
+
+    def _check_critical_triggers(self, desc_lower: str):
+        """Return (trigger_name, fixed_decision, matched_phrase) or None."""
+        for name, rule, decision in self.CRITICAL_RED_TRIGGERS:
+            if isinstance(rule, dict):
+                hit_any = next((p for p in rule["any"] if p in desc_lower), None)
+                hit_plus = next((p for p in rule["plus_any"] if p in desc_lower), None)
+                if hit_any and hit_plus:
+                    return name, decision, f"{hit_any.strip()} + {hit_plus.strip()}"
+            else:
+                for p in rule:
+                    if p in desc_lower:
+                        return name, decision, p
+        return None
 
     def analyze(
         self,
@@ -193,8 +271,24 @@ class HippocampusAnalyzer:
 
         confidence = min(92, max(15, confidence))
 
+        # ── Critical red-card trigger overrides ──
+        # When the description explicitly asserts an offence that IFAB leaves
+        # no discretion on (contact with an official, spitting, stamping,
+        # off-ball strike), Hippocampus floors confidence at 88 % and locks
+        # the initial decision. Only applied when incident_type is red_card
+        # (or when triggers fire under a mis-tagged 'foul'/'other').
+        critical_trigger = None
+        if incident_type in ("red_card", "foul", "other"):
+            critical_trigger = self._check_critical_triggers(desc_lower)
+            if critical_trigger is not None:
+                confidence = max(confidence, 88.0)
+
+        # Decision: if critical trigger fires, use its fixed decision.
+        if critical_trigger is not None:
+            _, fixed_decision, _ = critical_trigger
+            initial_decision = fixed_decision
         # Decision: if negatives outweigh positives, flip to conservative option
-        if negative_score > keyword_score and len(pattern["common_decisions"]) > 1:
+        elif negative_score > keyword_score and len(pattern["common_decisions"]) > 1:
             initial_decision = pattern["common_decisions"][-1]  # Conservative
         elif keyword_score > 0.3 and len(pattern["common_decisions"]) > 0:
             initial_decision = pattern["common_decisions"][0]
@@ -217,6 +311,8 @@ class HippocampusAnalyzer:
             "historical_boost": round(historical_boost, 1),
             "feedback_adjustment": round(feedback_adjust, 1),
             "description_quality": "detailed" if word_count > 30 else "brief" if word_count > 15 else "minimal",
+            "critical_trigger": critical_trigger[0] if critical_trigger else None,
+            "critical_trigger_phrase": critical_trigger[2] if critical_trigger else None,
             "processing_time_ms": max(processing_ms, 1),
         }
 
@@ -272,12 +368,26 @@ class NeoCortexAnalyzer:
             "Millimeter precision required - if ANY part of the ball is on or above the line, it's NOT a goal."
         ),
         "red_card": (
-            "IFAB Law 12 - Sending Off: Red card for: serious foul play (tackle/challenge using "
-            "excessive force or brutality), violent conduct, spitting, DOGSO by foul (outside penalty area "
-            "or non-ball-playing foul in box), DOGSO by handball, offensive language/gestures, "
-            "receiving second yellow. Serious foul play = endangered safety of opponent. "
-            "Assess: speed of tackle, use of studs, height of challenge, contact point, "
-            "whether from behind, whether ball was playable."
+            "IFAB Law 12 - Sending Off Offences (straight red card, not discretionary when facts are explicit):\n"
+            "1) SERIOUS FOUL PLAY — a tackle/challenge that uses excessive force or brutality and endangers "
+            "the safety of an opponent (studs up, over-the-top, two-footed lunge, high boot into head/neck, stamping).\n"
+            "2) VIOLENT CONDUCT — any use (or attempt) of excessive force or brutality against an opponent "
+            "when NOT challenging for the ball, AND against ANY other person (team-mate, match official, "
+            "spectator, coach). This includes punching, elbowing, head-butting, kicking out, pushing, shoving, "
+            "grabbing, or striking.\n"
+            "3) PHYSICAL CONTACT WITH A MATCH OFFICIAL — any deliberate physical contact with a referee, "
+            "assistant referee, 4th official or VAR official (push, shove, grab, strike, headbutt, kick) is "
+            "AUTOMATIC VIOLENT CONDUCT = straight red card with no discretion. Confidence ≥ 92 %.\n"
+            "4) SPITTING at any person = automatic red (violent conduct).\n"
+            "5) DOGSO — denying an obvious goal-scoring opportunity by foul outside the penalty area, or by "
+            "a non-ball-playing foul / handball anywhere.\n"
+            "6) OFFENSIVE / INSULTING / THREATENING LANGUAGE or GESTURES.\n"
+            "7) Receiving a SECOND YELLOW CARD.\n\n"
+            "CRITICAL: The 'clear and obvious error' VAR threshold does NOT mean hedging on explicit facts. "
+            "If the description unambiguously states one of the offences above, apply the law directly and "
+            "issue the red card. 'Marginal' only applies to ambiguous tackles, not to explicit violent acts. "
+            "Assess: speed of tackle, use of studs, height of challenge, contact point, whether from behind, "
+            "whether ball was playable, whether contact was with an opponent or with an official."
         ),
         "other": (
             "General VAR protocol: VAR can only intervene for clear and obvious errors or serious "
@@ -324,8 +434,10 @@ class NeoCortexAnalyzer:
                     "- Confidence score must reflect actual certainty: 90+ only for clear-cut cases\n"
                     "- 60-75 for borderline cases that could go either way\n"
                     "- Below 50 means you're genuinely uncertain\n"
-                    "- The VAR threshold is 'clear and obvious error' - if the call is marginal, "
-                    "the on-field decision should typically stand\n\n"
+                    "- The VAR 'clear and obvious error' threshold applies ONLY to ambiguous incidents. "
+                    "When the description explicitly asserts an offence (studs up, excessive force, contact "
+                    "with a match official, spitting, stamping, off-ball strike), apply the law directly — "
+                    "do NOT hedge, do NOT defer to 'on-field decision stands'. Confidence must be >= 92 %.\n\n"
                     "DECISION ACCURACY GUIDELINES:\n"
                     "- For OFFSIDE: focus on the exact moment the ball is played, not when received. "
                     "Consider which body parts are offside. Marginal = suggest on-field decision stands.\n"
@@ -335,7 +447,11 @@ class NeoCortexAnalyzer:
                     "and whether it stopped a promising attack (yellow) or DOGSO (red).\n"
                     "- For PENALTIES: same as fouls but MUST be inside the penalty area. Check for simulation.\n"
                     "- For RED CARDS: distinguish serious foul play (excessive force) from normal fouls. "
-                    "Not every bad tackle is a red card. Studs up + excessive force + endangered safety = red.\n"
+                    "Not every bad tackle is a red card. Studs up + excessive force + endangered safety = red. "
+                    "ALWAYS-RED TRIGGERS (no discretion, confidence >= 92 %): any physical contact with a "
+                    "match official (push, shove, grab, strike, headbutt, kick, spit); spitting at any person; "
+                    "stamping; off-ball punch/elbow/headbutt; two-footed over-the-top lunge. These override "
+                    "the 'on-field stands' heuristic.\n"
                     "- For GOAL LINE: the WHOLE ball must cross the WHOLE line. Any doubt = no goal.\n\n"
                     "BIAS FIREWALL (CRITICAL):\n"
                     "- You are provided game history and player/team data for CONTEXT ONLY\n"
@@ -371,8 +487,18 @@ class NeoCortexAnalyzer:
                 f"HIPPOCAMPUS RAPID SCAN:\n"
                 f"- Initial Confidence: {hippocampus_result['initial_confidence']}%\n"
                 f"- Initial Decision: {hippocampus_result['initial_decision']}\n"
-                f"- Matched Patterns: {', '.join(hippocampus_result['matched_keywords']) or 'None'}\n\n"
-                f"INCIDENT UNDER REVIEW:\n"
+                f"- Matched Patterns: {', '.join(hippocampus_result['matched_keywords']) or 'None'}\n"
+            )
+            crit = hippocampus_result.get("critical_trigger")
+            if crit:
+                prompt += (
+                    f"- CRITICAL TRIGGER DETECTED: `{crit}` — phrase matched: "
+                    f"\"{hippocampus_result.get('critical_trigger_phrase', '')}\"\n"
+                    f"  -> This is an AUTOMATIC sending-off offence under IFAB Law 12. "
+                    f"Issue the red card, cite the specific offence, and use confidence >= 92 %.\n"
+                )
+            prompt += (
+                f"\nINCIDENT UNDER REVIEW:\n"
                 f"- Category: {incident_type.upper()}\n"
                 f"- Full Description: {description}\n"
             )
@@ -643,6 +769,24 @@ class OctonBrainEngine:
             min(99.0, base_confidence + uplift_info["uplift"] + hip_bonus), 1
         )
 
+        # ── Critical-trigger floor ──
+        # If Hippocampus detected an IFAB-automatic red-card offence (referee
+        # contact, spitting, stamping, off-ball strike, explicit straight red),
+        # the verdict is not discretionary. Floor the final confidence at 92 %
+        # and override the suggested decision if Neo Cortex hedged below it.
+        critical_trigger = hippocampus_result.get("critical_trigger")
+        critical_floor_applied = False
+        suggested_decision = neo_cortex_result["suggested_decision"]
+        if critical_trigger:
+            # Lock the suggested decision to the Hippocampus fixed verdict
+            # unless Neo Cortex also produced a red-card decision.
+            neo_decision_lower = (suggested_decision or "").lower()
+            if "red card" not in neo_decision_lower:
+                suggested_decision = hippocampus_result["initial_decision"]
+            if final_confidence < 92.0:
+                final_confidence = 92.0
+                critical_floor_applied = True
+
         divergence_flag = divergence > 25
 
         return {
@@ -650,7 +794,7 @@ class OctonBrainEngine:
             "neo_cortex": neo_cortex_result,
             "base_confidence": base_confidence,
             "final_confidence": final_confidence,
-            "suggested_decision": neo_cortex_result["suggested_decision"],
+            "suggested_decision": suggested_decision,
             "reasoning": neo_cortex_result["reasoning"],
             "key_factors": neo_cortex_result["key_factors"],
             "risk_level": neo_cortex_result.get("risk_level", "medium"),
@@ -666,9 +810,11 @@ class OctonBrainEngine:
             "hippocampus_bonus": hip_bonus,
             "precedent_strong_matches": uplift_info["strong_matches"],
             "precedent_avg_similarity": uplift_info["avg_similarity"],
+            "critical_trigger": critical_trigger,
+            "critical_floor_applied": critical_floor_applied,
             "total_processing_time_ms": total_time_ms,
-            "pathway": "hippocampus -> neo_cortex (adaptive weight) + precedent-RAG + agreement bonus",
-            "engine_version": "OCTON v2.2 - Dr Finnegan",
+            "pathway": "hippocampus -> neo_cortex (adaptive weight) + precedent-RAG + agreement bonus + ifab-floor",
+            "engine_version": "OCTON v2.3 - Dr Finnegan",
         }
 
     async def _get_historical_context(
