@@ -30,23 +30,33 @@ import { OctonBrainLogo } from "./components/OctonBrainLogo";
 import { ConfidenceScore, CopyButton, CurtainSection } from "./components/OctonAnalysisParts";
 import OctonVoiceWidget from "./components/OctonVoiceWidget";
 
-// Global lightweight state: currently selected incident ID (picked in LiveVAR)
-// so the voice widget can reference it anywhere.
-const SelectedIncidentContext = createContext({ id: null, setId: () => {} });
+// Global lightweight state: currently selected incident ID + voice-action handler
+// so the voice widget can invoke page-level actions (confirm / overturn / reanalyze / …).
+const SelectedIncidentContext = createContext({
+  id: null,
+  setId: () => {},
+  voiceActionHandler: { current: null },
+});
 const useSelectedIncidentId = () => useContext(SelectedIncidentContext);
 
 function SelectedIncidentProvider({ children }) {
   const [id, setId] = useState(null);
+  const voiceActionHandler = useRef(null);
   return (
-    <SelectedIncidentContext.Provider value={{ id, setId }}>
+    <SelectedIncidentContext.Provider value={{ id, setId, voiceActionHandler }}>
       {children}
     </SelectedIncidentContext.Provider>
   );
 }
 
 function MountedVoiceWidget() {
-  const { id } = useSelectedIncidentId();
-  return <OctonVoiceWidget selectedIncidentId={id} />;
+  const { id, voiceActionHandler } = useSelectedIncidentId();
+  const onVoiceAction = useCallback(async (action, args) => {
+    const handler = voiceActionHandler.current;
+    if (handler) await handler(action, args);
+    else toast.info(`Action "${action.replace(/_/g, " ")}" — navigate to the match dashboard to execute`);
+  }, [voiceActionHandler]);
+  return <OctonVoiceWidget selectedIncidentId={id} onVoiceAction={onVoiceAction} />;
 }
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -1495,7 +1505,7 @@ const LiveVARPage = () => {
   const { user } = useAuth();
   const [incidents, setIncidents] = useState([]);
   const [selectedIncident, setSelectedIncident] = useState(null);
-  const { setId: setGlobalSelectedId } = useSelectedIncidentId();
+  const { setId: setGlobalSelectedId, voiceActionHandler } = useSelectedIncidentId();
   useEffect(() => {
     setGlobalSelectedId(selectedIncident?.id || null);
   }, [selectedIncident?.id, setGlobalSelectedId]);
@@ -1597,8 +1607,7 @@ const LiveVARPage = () => {
         decision_status: status, final_decision: decision, decided_by: user?.name || "VAR_Operator"
       });
       setSelectedIncident(res.data);
-      toast.success("Decision recorded!");
-      fetchData();
+      toast.success("Decision recorded!");      fetchData();
     } catch { toast.error("Failed to record decision"); }
   };
 
@@ -1609,6 +1618,43 @@ const LiveVARPage = () => {
   );
 
   const analysis = selectedIncident?.ai_analysis;
+
+  // Voice action dispatcher — "Hey OCTON, confirm" etc. (registered once per change)
+  voiceActionHandler.current = async (action, args) => {
+    if (!selectedIncident && ["confirm_decision","overturn_decision","reanalyze","export_pdf","promote_training","open_precedents"].includes(action)) {
+      toast.error("No incident selected"); return;
+    }
+    switch (action) {
+      case "confirm_decision":
+        await handleDecision("confirmed", analysis?.suggested_decision || selectedIncident?.final_decision || "Confirmed by voice");
+        break;
+      case "overturn_decision":
+        await handleDecision("overturned", selectedIncident?.final_decision || "Overturned by voice — specify ruling");
+        break;
+      case "reanalyze":
+        await handleReanalyze();
+        break;
+      case "export_pdf": {
+        let audit = null;
+        try { const r = await axios.post(`${API}/audit/register`, { incident_id: selectedIncident.id }); audit = r.data; } catch { /* degrade */ }
+        try { exportAnalysisPDF(selectedIncident, analysis, audit); toast.success("Report exported"); } catch { toast.error("Export failed"); }
+        break;
+      }
+      case "promote_training":
+        try {
+          const r = await axios.post(`${API}/incidents/${selectedIncident.id}/promote-to-training`);
+          toast.success(r.data?.status === "already_promoted" ? "Already in library" : "Promoted to Training Library");
+        } catch (e) { toast.error(e?.response?.data?.detail || "Promotion failed"); }
+        break;
+      case "open_incident": {
+        const idx = Math.max(1, Math.min(incidents.length, Number(args?.index || 1))) - 1;
+        const target = incidents[idx];
+        if (target) { setSelectedIncident(target); toast.info(`Incident ${idx+1} loaded`); }
+        break;
+      }
+      default: break;
+    }
+  };
 
   return (
     <div className="flex-1 min-w-0 p-4 space-y-4 bg-[#050505] grid-overlay overflow-y-auto h-screen" data-testid="live-var-dashboard">

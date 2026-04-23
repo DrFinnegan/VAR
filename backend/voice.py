@@ -6,6 +6,7 @@ import asyncio
 import io
 import logging
 import os
+import uuid
 from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,66 @@ async def speak(text: str, voice: str = "onyx", hd: bool = False) -> bytes:
         voice=voice,
     )
     return audio_bytes
+
+
+async def classify_intent(user_text: str, has_selection: bool) -> Dict[str, Any]:
+    """One-pass GPT-5.2 intent classification. Returns {action, args, confidence}."""
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+    except Exception as e:
+        raise RuntimeError(f"emergentintegrations import failed: {e}")
+    import json as _json
+    import re as _re
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        return {"action": "chat", "args": {}, "confidence": 0.0}
+
+    sys_msg = (
+        "You are the intent classifier for a VAR voice assistant. "
+        "Map the user's utterance to EXACTLY ONE of these actions:\n"
+        " - chat                (default — just answer a question / explain)\n"
+        " - confirm_decision    (user says: confirm / confirm the call / uphold / agree / stand)\n"
+        " - overturn_decision   (user says: overturn / overrule / reverse / change / disagree)\n"
+        " - reanalyze           (user says: re-analyze / run again / redo analysis / check again)\n"
+        " - open_precedents     (user says: show precedents / what precedents / open history / show similar cases)\n"
+        " - export_pdf          (user says: export / download / pdf / report / save report)\n"
+        " - promote_training    (user says: add to training / promote / train on this / learn from this)\n"
+        " - open_incident       (user says: show incident N / open incident N / go to N)\n"
+        " - summarize_match     (user says: summary / recap / overview / how is the match going)\n"
+        "\nRespond ONLY as strict JSON: {\"action\": \"...\", \"args\": {...}, \"confidence\": 0.0-1.0}.\n"
+        "For `open_incident`, `args = {\"index\": <1-based int>}`. For others `args = {}`.\n"
+        "If unsure → {\"action\": \"chat\", \"args\": {}, \"confidence\": 0.0}."
+    )
+    if not has_selection:
+        sys_msg += "\nNote: no incident is currently selected by the operator."
+
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"octon-intent-{uuid.uuid4()}",
+        system_message=sys_msg,
+    ).with_model("openai", "gpt-5.2")
+    try:
+        resp = await chat.send_message(UserMessage(text=user_text))
+    except Exception:
+        return {"action": "chat", "args": {}, "confidence": 0.0}
+
+    m = _re.search(r"\{.*\}", resp or "", flags=_re.DOTALL)
+    if not m:
+        return {"action": "chat", "args": {}, "confidence": 0.0}
+    try:
+        parsed = _json.loads(m.group())
+        action = str(parsed.get("action", "chat")).strip()
+        args = parsed.get("args") or {}
+        conf = float(parsed.get("confidence", 0.0))
+        allowed = {"chat", "confirm_decision", "overturn_decision", "reanalyze",
+                   "open_precedents", "export_pdf", "promote_training",
+                   "open_incident", "summarize_match"}
+        if action not in allowed:
+            action = "chat"
+        return {"action": action, "args": args, "confidence": conf}
+    except Exception:
+        return {"action": "chat", "args": {}, "confidence": 0.0}
 
 
 async def build_context(db, selected_incident_id: Optional[str]) -> Dict[str, Any]:

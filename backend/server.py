@@ -1229,7 +1229,7 @@ async def audit_chain_for_incident(incident_id: str):
 
 
 # ── OCTON Voice Bot ───────────────────────────────────────
-from voice import transcribe_audio, generate_reply, speak, build_context  # noqa: E402
+from voice import transcribe_audio, generate_reply, speak, build_context, classify_intent  # noqa: E402
 
 
 @api_router.post("/voice/transcribe")
@@ -1258,19 +1258,46 @@ class VoiceChatRequest(BaseModel):
 
 @api_router.post("/voice/chat")
 async def voice_chat(req: VoiceChatRequest):
-    """OCTON voice turn: text → reply (+ optional TTS MP3 b64)."""
+    """OCTON voice turn: text → intent + reply (+ optional TTS MP3 b64)."""
     if not req.text or not req.text.strip():
         raise HTTPException(status_code=400, detail="Empty text")
     session_id = req.session_id or f"octon-voice-{uuid.uuid4()}"
+    user_text = req.text.strip()
     try:
-        context = await build_context(db, req.selected_incident_id)
-        reply_text = await generate_reply(req.text.strip(), session_id, context)
+        # Run intent classification + context build concurrently
+        import asyncio as _asyncio
+        intent_task = _asyncio.create_task(classify_intent(user_text, bool(req.selected_incident_id)))
+        context_task = _asyncio.create_task(build_context(db, req.selected_incident_id))
+        intent = await intent_task
+        context = await context_task
+
+        # For pure chat or when intent is low-confidence, get a full AI reply
+        if intent.get("action") == "chat" or intent.get("confidence", 0) < 0.6:
+            reply_text = await generate_reply(user_text, session_id, context)
+            intent["action"] = "chat"
+        else:
+            # Crisp acknowledgement reply tied to the action
+            action = intent["action"]
+            action_lines = {
+                "confirm_decision": "Confirming the on-field decision.",
+                "overturn_decision": "Overturning the on-field decision — please specify the correct ruling if needed.",
+                "reanalyze": "Re-running the analysis. Stand by.",
+                "open_precedents": "Opening matched precedents.",
+                "export_pdf": "Generating the signed forensic report.",
+                "promote_training": "Promoting this decision into the Training Library.",
+                "open_incident": f"Opening incident {intent.get('args',{}).get('index','?')}.",
+                "summarize_match": "Summarising the match so far.",
+            }
+            reply_text = action_lines.get(action, "")
+            if action == "summarize_match":
+                # Generate a real summary as the reply
+                reply_text = await generate_reply("Give me a 2-sentence summary of the match so far based on the recent incidents.", session_id, context)
     except Exception as e:
         logger.exception(f"voice chat failed: {e}")
         raise HTTPException(status_code=500, detail=f"Reply failed: {e}")
 
     audio_b64 = None
-    if req.include_audio:
+    if req.include_audio and reply_text:
         try:
             audio_bytes = await speak(reply_text, voice=req.voice)
             audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
@@ -1282,6 +1309,9 @@ async def voice_chat(req: VoiceChatRequest):
         "reply_text": reply_text,
         "audio_base64": audio_b64,
         "audio_mime": "audio/mpeg" if audio_b64 else None,
+        "action": intent.get("action", "chat"),
+        "action_args": intent.get("args", {}),
+        "action_confidence": intent.get("confidence", 0.0),
     }
 
 

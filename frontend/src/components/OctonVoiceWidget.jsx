@@ -11,7 +11,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
  * Flow: click mic → record → stop (auto after silence or manual) →
  *      upload → transcribe → chat → TTS playback + transcript bubble.
  */
-export default function OctonVoiceWidget({ selectedIncidentId }) {
+export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) {
   const [open, setOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [thinking, setThinking] = useState(false);
@@ -140,9 +140,14 @@ export default function OctonVoiceWidget({ selectedIncidentId }) {
         },
         { withCredentials: true }
       );
-      const { reply_text, audio_base64, audio_mime, session_id: sid } = chat.data || {};
+      const { reply_text, audio_base64, audio_mime, session_id: sid, action, action_args, action_confidence } = chat.data || {};
       if (sid) setSessionId(sid);
-      if (reply_text) setMessages(m => [...m, { role: "octon", text: reply_text }]);
+      if (reply_text) setMessages(m => [...m, { role: "octon", text: reply_text, action }]);
+
+      // Dispatch voice action (if any)
+      if (action && action !== "chat" && action_confidence >= 0.6 && onVoiceAction) {
+        try { await onVoiceAction(action, action_args || {}); } catch { /* ignore */ }
+      }
 
       // 3) Play audio
       if (audio_base64 && audioElRef.current) {
@@ -155,7 +160,7 @@ export default function OctonVoiceWidget({ selectedIncidentId }) {
     } finally {
       setThinking(false);
     }
-  }, [sessionId, selectedIncidentId]);
+  }, [sessionId, selectedIncidentId, onVoiceAction]);
 
   const toggleRecording = () => {
     if (recording) stopRecording();
@@ -368,9 +373,14 @@ export default function OctonVoiceWidget({ selectedIncidentId }) {
                     }`}
                   >
                     {m.role === "octon" && (
-                      <div className="flex items-center gap-1.5 mb-1">
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                         <div className="w-1 h-1 bg-[#00E5FF]" />
                         <span className="text-[8px] font-mono text-[#00E5FF] tracking-[0.25em]">OCTON</span>
+                        {m.action && m.action !== "chat" && (
+                          <span className="text-[8px] font-mono text-[#00FF88] tracking-[0.2em] px-1 py-0.5 border border-[#00FF88]/30 bg-[#00FF88]/[0.05] uppercase">
+                            → {m.action.replace(/_/g, " ")}
+                          </span>
+                        )}
                       </div>
                     )}
                     {m.text}

@@ -608,17 +608,41 @@ class OctonBrainEngine:
 
         total_time_ms = int((time.time() - total_start) * 1000)
 
-        # ── Weighted merge: Neo Cortex 80%, Hippocampus 20% ──
+        # ── Weighted merge with adaptive Hippocampus weighting ──
+        # Baseline is 80/20 Neo Cortex / Hippocampus. When Hippocampus is
+        # VERY confident (>= 75) AND agrees with Neo Cortex (divergence <= 15),
+        # lift Hippocampus weight up to 30 % — our "gut + deliberation agree" case.
         neo_conf = neo_cortex_result["confidence_score"]
         hip_conf = hippocampus_result["initial_confidence"]
-        weighted_confidence = round(neo_conf * 0.80 + hip_conf * 0.20, 1)
-
-        # Apply transparent precedent uplift (capped at +20%)
-        base_confidence = weighted_confidence
-        final_confidence = round(min(99.0, base_confidence + uplift_info["uplift"]), 1)
-
-        # Divergence detection
         divergence = abs(neo_conf - hip_conf)
+
+        if hip_conf >= 75 and divergence <= 15:
+            hip_weight = 0.30
+        elif hip_conf >= 65 and divergence <= 25:
+            hip_weight = 0.25
+        else:
+            hip_weight = 0.20
+        neo_weight = round(1.0 - hip_weight, 2)
+        weighted_confidence = round(neo_conf * neo_weight + hip_conf * hip_weight, 1)
+
+        # ── Hippocampus agreement bonus ──
+        # Separate transparent additive boost up to +6 % when the fast pathway
+        # both (a) has high confidence AND (b) agrees with the Neo Cortex verdict.
+        # Scales quadratically with Hippocampus confidence above 60 %.
+        if divergence <= 15 and hip_conf >= 60:
+            hip_bonus = round(((hip_conf - 60) / 40.0) ** 1.2 * 6.0, 1)  # 0..6
+        elif divergence <= 25 and hip_conf >= 70:
+            hip_bonus = round(((hip_conf - 70) / 30.0) ** 1.2 * 4.0, 1)  # 0..4
+        else:
+            hip_bonus = 0.0
+        hip_bonus = max(0.0, min(6.0, hip_bonus))
+
+        # Apply precedent uplift + hippocampus bonus, both transparent & capped
+        base_confidence = weighted_confidence
+        final_confidence = round(
+            min(99.0, base_confidence + uplift_info["uplift"] + hip_bonus), 1
+        )
+
         divergence_flag = divergence > 25
 
         return {
@@ -633,17 +657,18 @@ class OctonBrainEngine:
             "neo_cortex_notes": neo_cortex_result.get("neo_cortex_notes", ""),
             "similar_historical_cases": historical_data["total_similar"],
             "historical_accuracy": historical_data.get("accuracy_rate", 0),
-            "weighting": {"neo_cortex": 0.80, "hippocampus": 0.20},
+            "weighting": {"neo_cortex": neo_weight, "hippocampus": hip_weight},
             "pathway_divergence": round(divergence, 1),
             "divergence_flag": divergence_flag,
             "precedents_used": precedents,
             "precedents_count": len(precedents),
             "confidence_uplift": uplift_info["uplift"],
+            "hippocampus_bonus": hip_bonus,
             "precedent_strong_matches": uplift_info["strong_matches"],
             "precedent_avg_similarity": uplift_info["avg_similarity"],
             "total_processing_time_ms": total_time_ms,
-            "pathway": "hippocampus -> neo_cortex (weighted 20:80) + precedent-RAG uplift",
-            "engine_version": "OCTON v2.1 - Dr Finnegan",
+            "pathway": "hippocampus -> neo_cortex (adaptive weight) + precedent-RAG + agreement bonus",
+            "engine_version": "OCTON v2.2 - Dr Finnegan",
         }
 
     async def _get_historical_context(
