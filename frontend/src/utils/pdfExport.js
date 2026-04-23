@@ -101,7 +101,7 @@ function sectionHeader(doc, x, y, title, accent = CYAN) {
 }
 
 // ── Main export ──────────────────────────────────────────
-export function exportAnalysisPDF(incident, analysis) {
+export function exportAnalysisPDF(incident, analysis, audit = null) {
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   const pageW = 210;
   const pageH = 297;
@@ -143,8 +143,10 @@ export function exportAnalysisPDF(incident, analysis) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(180, 180, 180);
-  const auditId = `AUDIT ID: ${shortId(incident?.id)}`;
-  doc.text(auditId, pageW - margin, 9, { align: "right" });
+  const headerAuditId = audit?.audit_id
+    ? `AUDIT ID: ${String(audit.audit_id).replace(/-/g, "").slice(0, 10).toUpperCase()}`
+    : `AUDIT ID: ${shortId(incident?.id)}`;
+  doc.text(headerAuditId, pageW - margin, 9, { align: "right" });
   doc.text(`GENERATED: ${fmtDate()}`, pageW - margin, 13, { align: "right" });
   doc.setTextColor(CYAN[0], CYAN[1], CYAN[2]);
   doc.text(
@@ -330,19 +332,36 @@ export function exportAnalysisPDF(incident, analysis) {
   }
 
   // ── Signature footer ────────────────────────────────────
-  const footY = pageH - 24;
+  const footY = pageH - 30;
   doc.setDrawColor(220, 220, 220);
   doc.setLineWidth(0.3);
   doc.line(margin, footY, pageW - margin, footY);
-  // Signature line
+
+  // Tamper-proof hash chain block (if audit entry provided)
+  if (audit?.entry_hash) {
+    doc.setFont("courier", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(PURPLE[0], PURPLE[1], PURPLE[2]);
+    doc.text("SHA-256 AUDIT SIGNATURE", margin, footY + 4);
+    doc.setFont("courier", "normal");
+    doc.setFontSize(6);
+    doc.setTextColor(80, 80, 90);
+    doc.text(`ENTRY  ${audit.entry_hash}`, margin, footY + 7.8);
+    doc.text(`PREV   ${audit.prev_hash}`, margin, footY + 11);
+    // small purple marker to the left of the block
+    doc.setFillColor(PURPLE[0], PURPLE[1], PURPLE[2]);
+    doc.rect(margin - 2, footY + 2, 0.6, 10, "F");
+  }
+
+  // Signature line (slightly higher to accommodate hash block)
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(GRAY_MUTED[0], GRAY_MUTED[1], GRAY_MUTED[2]);
-  doc.text("REFEREE SIGNATURE", margin, footY + 11);
+  doc.text("REFEREE SIGNATURE", margin, footY + 17);
   doc.setDrawColor(180, 180, 180);
-  doc.line(margin + 32, footY + 11, margin + 92, footY + 11);
-  doc.text("DATE", margin + 96, footY + 11);
-  doc.line(margin + 104, footY + 11, margin + 132, footY + 11);
+  doc.line(margin + 32, footY + 17, margin + 92, footY + 17);
+  doc.text("DATE", margin + 96, footY + 17);
+  doc.line(margin + 104, footY + 17, margin + 132, footY + 17);
 
   // Bottom strip
   doc.setFillColor(DARK[0], DARK[1], DARK[2]);
@@ -362,7 +381,10 @@ export function exportAnalysisPDF(incident, analysis) {
   doc.text("PAGE 1 / 1", pageW - margin, pageH - 3, { align: "right" });
 
   // Save
-  const fileName = `OCTON_VAR_Report_${shortId(incident?.id)}_${new Date()
+  const auditSuffix = audit?.audit_id
+    ? String(audit.audit_id).replace(/-/g, "").slice(0, 8).toUpperCase()
+    : shortId(incident?.id);
+  const fileName = `OCTON_VAR_Report_${auditSuffix}_${new Date()
     .toISOString()
     .slice(0, 10)}.pdf`;
   doc.save(fileName);

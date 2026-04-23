@@ -1113,6 +1113,90 @@ async def preview_precedents(req: TextAnalysisRequest):
     return {"precedents": precedents, **uplift_info}
 
 
+# ── Promote incident → Training Library ───────────────────
+@api_router.post("/incidents/{incident_id}/promote-to-training")
+async def promote_incident_to_training(incident_id: str, request: Request):
+    """Turn a confirmed/overturned incident into a ground-truth precedent."""
+    user = await require_role(request, db, ["admin", "var_operator"])
+    inc = await db.incidents.find_one({"id": incident_id}, {"_id": 0})
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    if inc.get("decision_status") not in ("confirmed", "overturned"):
+        raise HTTPException(status_code=400, detail="Only confirmed/overturned incidents can be promoted")
+
+    existing = await db.training_cases.find_one({"source_incident_id": incident_id}, {"_id": 0})
+    if existing:
+        return {"case": existing, "status": "already_promoted"}
+
+    analysis = inc.get("ai_analysis") or {}
+    title = f"{inc.get('incident_type','incident').replace('_',' ').title()} — {inc.get('team_involved') or str(inc.get('match_id','match'))[:8]} — {datetime.now(timezone.utc).date().isoformat()}"
+    correct_decision = inc.get("final_decision") or analysis.get("suggested_decision") or "Decision (promoted)"
+    rationale = analysis.get("reasoning") or inc.get("description") or ""
+    keywords = analysis.get("key_factors") or []
+    now = datetime.now(timezone.utc).isoformat()
+    case = {
+        "id": str(uuid.uuid4()),
+        "title": title[:160],
+        "incident_type": inc.get("incident_type", "other"),
+        "correct_decision": correct_decision,
+        "rationale": rationale[:1200],
+        "keywords": [str(k)[:60] for k in keywords][:12],
+        "tags": ["promoted", f"status:{inc.get('decision_status')}"],
+        "match_context": {
+            "teams": inc.get("team_involved"),
+            "competition": inc.get("match_id"),
+            "year": datetime.now(timezone.utc).year,
+        },
+        "law_references": [],
+        "outcome": inc.get("decision_status"),
+        "visual_tags": [],
+        "media_storage_path": inc.get("storage_path"),
+        "thumbnail_storage_path": inc.get("storage_path") if (inc.get("media_content_type", "") or "").startswith("image") else None,
+        "source_incident_id": incident_id,
+        "created_by": user.get("id"),
+        "created_by_name": user.get("name"),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.training_cases.insert_one(case.copy())
+    return {"case": case, "status": "promoted"}
+
+
+# ── Audit Hash Chain ──────────────────────────────────────
+from audit import register_audit, verify_chain  # noqa: E402
+
+
+class AuditRegisterRequest(BaseModel):
+    incident_id: str
+
+
+@api_router.post("/audit/register")
+async def audit_register(body: AuditRegisterRequest, request: Request):
+    """Register a new audit chain entry for an incident's current analysis."""
+    user = await get_current_user(request, db)
+    inc = await db.incidents.find_one({"id": body.incident_id}, {"_id": 0})
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    analysis = inc.get("ai_analysis") or {}
+    entry = await register_audit(db, body.incident_id, analysis, user_id=user.get("id"))
+    return entry
+
+
+@api_router.get("/audit/verify")
+async def audit_verify():
+    """Walk the entire audit chain and report any tampering."""
+    return await verify_chain(db)
+
+
+@api_router.get("/audit/chain/{incident_id}")
+async def audit_chain_for_incident(incident_id: str):
+    """All audit entries belonging to an incident (in order)."""
+    entries = await db.audit_chain.find(
+        {"incident_id": incident_id}, {"_id": 0}
+    ).sort("created_at", 1).to_list(100)
+    return entries
+
+
 # ── WebSocket ─────────────────────────────────────────────
 @api_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

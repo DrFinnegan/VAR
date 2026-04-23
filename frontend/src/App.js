@@ -10,7 +10,7 @@ import {
   ArrowRight, Radio, Wifi, WifiOff, Trophy, Calendar, ThumbsUp, ThumbsDown, Lock,
   Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Maximize2, Volume2,
   Pen, Circle, Minus, Undo2, Trash2, Save, Crosshair, Download, Users2, Layers, Columns,
-  ChevronDown, FileText, Sparkles, BookOpen, GitBranch, Copy, Check
+  FileText, Sparkles, BookOpen, GitBranch
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./components/ui/card";
@@ -26,6 +26,8 @@ import { Separator } from "./components/ui/separator";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import TrainingLibraryPage from "./TrainingLibraryPage";
 import { exportAnalysisPDF } from "./utils/pdfExport";
+import { OctonBrainLogo } from "./components/OctonBrainLogo";
+import { ConfidenceScore, CopyButton, CurtainSection } from "./components/OctonAnalysisParts";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -87,132 +89,7 @@ const AuthProvider = ({ children }) => {
 
 const useAuth = () => useContext(AuthContext);
 
-// ── OCTON Neocortex Brain Logo ────────────────────────────
-const OctonBrainLogo = ({ size = 36 }) => {
-  // Deterministic "random" field of neural dots inside the brain silhouette
-  const dots = [
-    { x: 20, y: 12, r: 1.1, c: "#00E5FF", d: 2.0 },
-    { x: 14, y: 14, r: 1.4, c: "#00E5FF", d: 2.4 },
-    { x: 26, y: 14, r: 1.4, c: "#00E5FF", d: 1.8 },
-    { x: 10, y: 18, r: 0.9, c: "#7CF9FF", d: 3.1 },
-    { x: 30, y: 18, r: 0.9, c: "#7CF9FF", d: 2.7 },
-    { x: 17, y: 18, r: 1.0, c: "#00FF88", d: 1.6 },
-    { x: 23, y: 18, r: 1.0, c: "#00FF88", d: 2.2 },
-    { x: 13, y: 22, r: 1.2, c: "#00E5FF", d: 1.9 },
-    { x: 27, y: 22, r: 1.2, c: "#00E5FF", d: 2.3 },
-    { x: 20, y: 22, r: 1.6, c: "#00FF88", d: 1.4 },
-    { x: 16, y: 26, r: 0.9, c: "#7CF9FF", d: 3.0 },
-    { x: 24, y: 26, r: 0.9, c: "#7CF9FF", d: 2.6 },
-    { x: 20, y: 29, r: 1.0, c: "#00E5FF", d: 1.7 },
-    { x: 11, y: 25, r: 0.7, c: "#00FF88", d: 3.5 },
-    { x: 29, y: 25, r: 0.7, c: "#00FF88", d: 3.2 },
-  ];
-  const edges = [
-    [0, 1], [0, 2], [1, 3], [2, 4], [1, 5], [2, 6], [5, 6],
-    [5, 7], [6, 8], [7, 9], [8, 9], [9, 10], [9, 11], [10, 12], [11, 12],
-    [7, 13], [8, 14], [3, 7], [4, 8],
-  ];
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 40 40"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-label="OCTON Neocortex"
-    >
-      <defs>
-        <radialGradient id="brainGlow" cx="50%" cy="50%" r="55%">
-          <stop offset="0%" stopColor="#00E5FF" stopOpacity="0.18" />
-          <stop offset="60%" stopColor="#00E5FF" stopOpacity="0.06" />
-          <stop offset="100%" stopColor="#00E5FF" stopOpacity="0" />
-        </radialGradient>
-        <filter id="brainBlur" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="0.5" />
-        </filter>
-      </defs>
-
-      {/* Ambient glow */}
-      <circle cx="20" cy="20" r="17" fill="url(#brainGlow)" />
-
-      {/* Anatomical brain silhouette — two hemispheres + cerebellum lobe */}
-      <path
-        d="M20 5
-           C13 5 8 9 7 15
-           C5 17 5 22 8 24
-           C8 28 11 32 16 33
-           C18 35 22 35 24 33
-           C29 32 32 28 32 24
-           C35 22 35 17 33 15
-           C32 9 27 5 20 5 Z"
-        stroke="#00E5FF"
-        strokeWidth="0.9"
-        fill="#020A0D"
-        opacity="0.95"
-      />
-
-      {/* Central fissure */}
-      <path d="M20 6 Q19.5 18 20 34" stroke="#00E5FF" strokeWidth="0.4" opacity="0.35" />
-
-      {/* Neocortex folds (subtle gyri) */}
-      <path d="M10 14 Q13 12 15 15" stroke="#00E5FF" strokeWidth="0.45" opacity="0.4" />
-      <path d="M9 20 Q12 18 15 21" stroke="#00E5FF" strokeWidth="0.45" opacity="0.4" />
-      <path d="M10 26 Q13 24 16 27" stroke="#00E5FF" strokeWidth="0.45" opacity="0.4" />
-      <path d="M30 14 Q27 12 25 15" stroke="#00E5FF" strokeWidth="0.45" opacity="0.4" />
-      <path d="M31 20 Q28 18 25 21" stroke="#00E5FF" strokeWidth="0.45" opacity="0.4" />
-      <path d="M30 26 Q27 24 24 27" stroke="#00E5FF" strokeWidth="0.45" opacity="0.4" />
-
-      {/* Neural edges (synaptic pathways) */}
-      <g stroke="#00E5FF" strokeWidth="0.35" opacity="0.45">
-        {edges.map(([a, b], i) => (
-          <line
-            key={i}
-            x1={dots[a].x}
-            y1={dots[a].y}
-            x2={dots[b].x}
-            y2={dots[b].y}
-          />
-        ))}
-      </g>
-
-      {/* Halo pulse around each node (blurred) */}
-      <g filter="url(#brainBlur)">
-        {dots.map((d, i) => (
-          <circle key={`h${i}`} cx={d.x} cy={d.y} r={d.r * 1.8} fill={d.c} opacity="0.3" />
-        ))}
-      </g>
-
-      {/* Glowing neural nodes */}
-      {dots.map((d, i) => (
-        <circle key={`n${i}`} cx={d.x} cy={d.y} r={d.r} fill={d.c}>
-          <animate
-            attributeName="opacity"
-            values="0.35;1;0.35"
-            dur={`${d.d}s`}
-            repeatCount="indefinite"
-            begin={`${(i % 5) * 0.2}s`}
-          />
-          <animate
-            attributeName="r"
-            values={`${d.r * 0.8};${d.r * 1.3};${d.r * 0.8}`}
-            dur={`${d.d}s`}
-            repeatCount="indefinite"
-            begin={`${(i % 5) * 0.2}s`}
-          />
-        </circle>
-      ))}
-
-      {/* Signal traveler along one primary pathway */}
-      <circle r="0.8" fill="#FFFFFF" opacity="0.9">
-        <animateMotion
-          dur="4s"
-          repeatCount="indefinite"
-          path="M14,14 L20,18 L26,14"
-        />
-      </circle>
-    </svg>
-  );
-};
+// OctonBrainLogo extracted to /components/OctonBrainLogo.jsx
 
 // ── Config Maps ───────────────────────────────────────────
 const incidentTypeConfig = {
@@ -691,154 +568,7 @@ const DecisionTicker = ({ incidents, onSelect }) => {
   );
 };
 
-const ConfidenceScore = ({ score, size = "default", uplift = 0, precedentCount = 0 }) => {
-  const s = Number(score) || 0;
-  const getColor = (s) => s >= 90 ? "#00FF88" : s >= 70 ? "#00E5FF" : s >= 50 ? "#FFB800" : "#FF2A2A";
-  const getTier = (s) => s >= 90 ? "HIGH" : s >= 70 ? "STRONG" : s >= 50 ? "MODERATE" : "LOW";
-  const color = getColor(s);
-
-  if (size === "small") {
-    return (
-      <div className="flex items-baseline gap-0.5" data-testid="ai-confidence-score">
-        <span className="font-mono font-bold tracking-tighter text-2xl" style={{ color }}>{s.toFixed(1)}</span>
-        <span className="text-sm font-mono" style={{ color, opacity: 0.5 }}>%</span>
-      </div>
-    );
-  }
-
-  // Radial ring for default/large sizes
-  const dim = size === "large" ? 140 : 120;
-  const stroke = 6;
-  const r = (dim - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const progress = Math.max(0, Math.min(100, s));
-  const dash = (progress / 100) * c;
-
-  return (
-    <div className="flex flex-col items-center" data-testid="ai-confidence-score">
-      <span className="text-[10px] font-mono uppercase tracking-[0.3em] text-gray-500 mb-2">FINAL CONFIDENCE</span>
-      <div className="relative" style={{ width: dim, height: dim }}>
-        <svg width={dim} height={dim} className="-rotate-90">
-          {/* Track */}
-          <circle cx={dim / 2} cy={dim / 2} r={r} fill="none" stroke="#ffffff0d" strokeWidth={stroke} />
-          {/* Progress */}
-          <circle
-            cx={dim / 2} cy={dim / 2} r={r} fill="none"
-            stroke={color} strokeWidth={stroke} strokeLinecap="round"
-            strokeDasharray={`${dash} ${c - dash}`}
-            style={{ transition: "stroke-dasharray 600ms ease, stroke 300ms ease", filter: `drop-shadow(0 0 6px ${color}80)` }}
-          />
-          {/* Tick marks */}
-          {Array.from({ length: 36 }).map((_, i) => {
-            const ang = (i / 36) * 2 * Math.PI;
-            const x1 = dim / 2 + (r - stroke - 3) * Math.cos(ang);
-            const y1 = dim / 2 + (r - stroke - 3) * Math.sin(ang);
-            const x2 = dim / 2 + (r - stroke) * Math.cos(ang);
-            const y2 = dim / 2 + (r - stroke) * Math.sin(ang);
-            return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#ffffff14" strokeWidth="1" />;
-          })}
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="flex items-baseline gap-0.5">
-            <span className="font-mono font-bold tracking-tighter text-4xl" style={{ color, textShadow: `0 0 10px ${color}80` }}>
-              {s.toFixed(1)}
-            </span>
-            <span className="text-base font-mono" style={{ color, opacity: 0.5 }}>%</span>
-          </div>
-          <span className="text-[8px] font-mono uppercase tracking-[0.25em] mt-0.5" style={{ color, opacity: 0.7 }}>
-            {getTier(s)}
-          </span>
-        </div>
-      </div>
-      {uplift > 0 && (
-        <div className="mt-2 flex items-center gap-1.5 px-2 py-1 border border-[#B366FF]/30 bg-[#B366FF]/[0.08]" data-testid="uplift-badge">
-          <Sparkles className="w-3 h-3 text-[#B366FF]" />
-          <span className="text-[9px] font-mono text-[#B366FF] tracking-wider">
-            +{uplift.toFixed(1)}% <span className="text-[#B366FF]/70">from {precedentCount} precedent{precedentCount === 1 ? "" : "s"}</span>
-          </span>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ── Copy-to-clipboard button for long-form AI text ─────────
-const CopyButton = ({ text, label = "COPY", accent = "#00E5FF", testId }) => {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = async (e) => {
-    e.stopPropagation();
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      toast.success("Reasoning copied to clipboard");
-      setTimeout(() => setCopied(false), 1800);
-    } catch {
-      toast.error("Clipboard unavailable — select text manually");
-    }
-  };
-  return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      className="inline-flex items-center gap-1 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.2em] border transition-all focus:outline-none"
-      style={{
-        color: copied ? "#00FF88" : accent,
-        borderColor: copied ? "rgba(0,255,136,0.4)" : `${accent}33`,
-        backgroundColor: copied ? "rgba(0,255,136,0.08)" : `${accent}0d`,
-      }}
-      data-testid={testId}
-      aria-label="Copy reasoning to clipboard"
-    >
-      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-      {copied ? "COPIED" : label}
-    </button>
-  );
-};
-
-// ── Curtain / Accordion Section for analysis details ───────
-const CurtainSection = ({ icon: Icon, title, accent = "#00E5FF", defaultOpen = false, count, children, testId }) => {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="border border-white/[0.06] bg-black/30 hover:border-white/[0.12] transition-colors" data-testid={testId}>
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-3 py-2.5 text-left group focus:outline-none"
-        data-testid={testId ? `${testId}-toggle` : undefined}
-        aria-expanded={open}
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <div
-            className="h-4 w-[2px] flex-none"
-            style={{ backgroundColor: accent, boxShadow: `0 0 6px ${accent}cc` }}
-          />
-          {Icon && <Icon className="w-3.5 h-3.5 flex-none" style={{ color: accent }} />}
-          <span className="text-[10px] font-heading font-bold uppercase tracking-[0.22em] text-gray-300 truncate">
-            {title}
-          </span>
-          {typeof count === "number" && (
-            <span className="text-[9px] font-mono px-1.5 py-0.5 border" style={{ color: accent, borderColor: `${accent}40`, backgroundColor: `${accent}0d` }}>
-              {count}
-            </span>
-          )}
-        </div>
-        <ChevronDown
-          className="w-3.5 h-3.5 text-gray-500 group-hover:text-white transition-all duration-300"
-          style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
-        />
-      </button>
-      <div
-        className="overflow-hidden transition-all duration-300 ease-out"
-        style={{ maxHeight: open ? 500 : 0, opacity: open ? 1 : 0 }}
-      >
-        <div className="px-3 pb-3 pt-1 border-t border-white/[0.05]">
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-};
+// ConfidenceScore, CopyButton, CurtainSection extracted to /components/OctonAnalysisParts.jsx
 
 const IncidentBadge = ({ type }) => {
   const c = incidentTypeConfig[type] || incidentTypeConfig.other;
@@ -2037,10 +1767,32 @@ const LiveVARPage = () => {
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Button variant="ghost" size="sm" onClick={handleReanalyze} className="text-[#00E5FF] hover:text-[#00E5FF] hover:bg-[#00E5FF]/10 h-7 w-7 p-0 border border-[#00E5FF]/20 hover:border-[#00E5FF]/50 rounded-none transition-all" data-testid="reanalyze-button" title="Re-run analysis"><RefreshCw className="w-3.5 h-3.5" /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => { try { const fn = exportAnalysisPDF(selectedIncident, analysis); toast.success(`Report exported: ${fn}`); } catch (e) { toast.error("PDF export failed"); } }} className="text-[#FFB800] hover:text-[#FFB800] hover:bg-[#FFB800]/10 h-7 px-2 p-0 border border-[#FFB800]/30 hover:border-[#FFB800]/60 rounded-none transition-all flex items-center gap-1" data-testid="export-pdf-button" title="Export forensic PDF report">
+                    <Button variant="ghost" size="sm" onClick={async () => {
+                      let audit = null;
+                      try {
+                        const res = await axios.post(`${API}/audit/register`, { incident_id: selectedIncident.id }, { withCredentials: true });
+                        audit = res.data;
+                      } catch (e) { /* degrade to unsigned export */ }
+                      try { const fn = exportAnalysisPDF(selectedIncident, analysis, audit); toast.success(audit ? `Signed report exported · ${fn}` : `Report exported · ${fn}`); }
+                      catch (e) { toast.error("PDF export failed"); }
+                    }} className="text-[#FFB800] hover:text-[#FFB800] hover:bg-[#FFB800]/10 h-7 px-2 p-0 border border-[#FFB800]/30 hover:border-[#FFB800]/60 rounded-none transition-all flex items-center gap-1" data-testid="export-pdf-button" title="Export signed forensic PDF report">
                       <FileText className="w-3.5 h-3.5" />
                       <span className="text-[9px] font-mono tracking-[0.15em]">PDF</span>
                     </Button>
+                    {["confirmed", "overturned"].includes(selectedIncident?.decision_status) && (
+                      <Button variant="ghost" size="sm" onClick={async () => {
+                        try {
+                          const res = await axios.post(`${API}/incidents/${selectedIncident.id}/promote-to-training`, {}, { withCredentials: true });
+                          if (res.data?.status === "already_promoted") toast.info("Already in Training Library");
+                          else toast.success("Promoted to Training Library");
+                        } catch (e) {
+                          toast.error(e?.response?.data?.detail || "Promotion failed");
+                        }
+                      }} className="text-[#B366FF] hover:text-[#B366FF] hover:bg-[#B366FF]/10 h-7 px-2 p-0 border border-[#B366FF]/30 hover:border-[#B366FF]/60 rounded-none transition-all flex items-center gap-1" data-testid="promote-training-button" title="Promote this decision into the Training Library">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span className="text-[9px] font-mono tracking-[0.15em]">TRAIN</span>
+                      </Button>
+                    )}
                   </div>
                 </div>
 
