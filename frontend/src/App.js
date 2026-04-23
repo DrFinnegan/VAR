@@ -25,6 +25,7 @@ import { ScrollArea } from "./components/ui/scroll-area";
 import { Separator } from "./components/ui/separator";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import TrainingLibraryPage from "./TrainingLibraryPage";
+import { exportAnalysisPDF } from "./utils/pdfExport";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -1944,7 +1945,13 @@ const LiveVARPage = () => {
                       <span className="text-[8px] font-mono uppercase tracking-[0.2em] text-gray-600">Neocortex · v2.0</span>
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={handleReanalyze} className="text-[#00E5FF] hover:text-[#00E5FF] hover:bg-[#00E5FF]/10 h-7 w-7 p-0 border border-[#00E5FF]/20 hover:border-[#00E5FF]/50 rounded-none transition-all" data-testid="reanalyze-button" title="Re-run analysis"><RefreshCw className="w-3.5 h-3.5" /></Button>
+                  <div className="flex items-center gap-1.5">
+                    <Button variant="ghost" size="sm" onClick={handleReanalyze} className="text-[#00E5FF] hover:text-[#00E5FF] hover:bg-[#00E5FF]/10 h-7 w-7 p-0 border border-[#00E5FF]/20 hover:border-[#00E5FF]/50 rounded-none transition-all" data-testid="reanalyze-button" title="Re-run analysis"><RefreshCw className="w-3.5 h-3.5" /></Button>
+                    <Button variant="ghost" size="sm" onClick={() => { try { const fn = exportAnalysisPDF(selectedIncident, analysis); toast.success(`Report exported: ${fn}`); } catch (e) { toast.error("PDF export failed"); } }} className="text-[#FFB800] hover:text-[#FFB800] hover:bg-[#FFB800]/10 h-7 px-2 p-0 border border-[#FFB800]/30 hover:border-[#FFB800]/60 rounded-none transition-all flex items-center gap-1" data-testid="export-pdf-button" title="Export forensic PDF report">
+                      <FileText className="w-3.5 h-3.5" />
+                      <span className="text-[9px] font-mono tracking-[0.15em]">PDF</span>
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Confidence Ring */}
