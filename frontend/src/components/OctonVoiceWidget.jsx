@@ -274,7 +274,7 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
         <button
           onClick={() => setOpen(true)}
           data-testid="octon-voice-launcher"
-          className="fixed bottom-6 right-6 z-[60] h-14 w-14 flex items-center justify-center border border-[#00E5FF]/40 bg-[#050505] hover:bg-[#00E5FF]/10 transition-all group"
+          className="fixed bottom-24 right-6 z-[60] h-14 w-14 flex items-center justify-center border border-[#00E5FF]/40 bg-[#050505] hover:bg-[#00E5FF]/10 transition-all group"
           style={{ boxShadow: "0 0 24px rgba(0,229,255,0.25), inset 0 0 20px rgba(0,229,255,0.05)" }}
           title="Talk to OCTON"
         >
@@ -283,13 +283,17 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
             <OctonBrainLogo size={30} />
           </div>
           <span className="absolute -top-1 -right-1 text-[7px] font-mono font-bold text-[#00E5FF] bg-black px-1 border border-[#00E5FF]/40 tracking-widest">AI</span>
+          {/* Hover callout so the button never feels anonymous */}
+          <span className="absolute right-[68px] top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-mono tracking-[0.22em] uppercase text-[#00E5FF] bg-[#050505] border border-[#00E5FF]/30 px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            Talk to OCTON
+          </span>
         </button>
       )}
 
       {/* Dock panel */}
       {open && (
         <div
-          className="fixed bottom-6 right-6 z-[60] w-[380px] max-h-[640px] flex flex-col border border-[#00E5FF]/30 bg-[#050505]/95 backdrop-blur-md"
+          className="fixed bottom-24 right-6 z-[60] w-[380px] max-h-[640px] flex flex-col border border-[#00E5FF]/30 bg-[#050505]/95 backdrop-blur-md"
           style={{ boxShadow: "0 0 40px rgba(0,229,255,0.2), inset 0 0 60px rgba(0,229,255,0.04)" }}
           data-testid="octon-voice-panel"
         >
