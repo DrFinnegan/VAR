@@ -200,6 +200,60 @@ export function exportAnalysisPDF(incident, analysis, audit = null) {
       { align: "center" }
     );
   }
+  const hipBonus = Number(analysis?.hippocampus_bonus || 0);
+  if (hipBonus > 0) {
+    // Green agreement chip
+    doc.setDrawColor(GREEN[0], GREEN[1], GREEN[2]);
+    doc.roundedRect(ringCx - 18, ringCy + 27.5, 36, 5, 0.5, 0.5, "S");
+    doc.setTextColor(GREEN[0], GREEN[1], GREEN[2]);
+    doc.setFontSize(6.5);
+    doc.text(`+${hipBonus.toFixed(1)}%  AGREEMENT`, ringCx, ringCy + 30.8, { align: "center" });
+  }
+
+  // ── Confidence Breakdown stacked bar (mirrors the UI panel) ──
+  const baseConfVal = Number(analysis?.base_confidence ?? Math.max(0, score - uplift - hipBonus));
+  const totalParts = Math.max(0.1, baseConfVal + uplift + hipBonus);
+  const barY = ringCy + (hipBonus > 0 ? 36 : uplift > 0 ? 30 : 24);
+  const barX = ringCx - 20;
+  const barW = 40;
+  const barH = 2.2;
+  doc.setFillColor(238, 238, 242);
+  doc.rect(barX, barY, barW, barH, "F");
+  let cursorX = barX;
+  const basePx = (baseConfVal / totalParts) * barW;
+  const upliftPx = (uplift / totalParts) * barW;
+  const hipPx = (hipBonus / totalParts) * barW;
+  doc.setFillColor(CYAN[0], CYAN[1], CYAN[2]);
+  doc.rect(cursorX, barY, basePx, barH, "F"); cursorX += basePx;
+  if (upliftPx > 0) {
+    doc.setFillColor(PURPLE[0], PURPLE[1], PURPLE[2]);
+    doc.rect(cursorX, barY, upliftPx, barH, "F"); cursorX += upliftPx;
+  }
+  if (hipPx > 0) {
+    doc.setFillColor(GREEN[0], GREEN[1], GREEN[2]);
+    doc.rect(cursorX, barY, hipPx, barH, "F");
+  }
+  // Tiny legend beneath the bar
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(5.5);
+  doc.setTextColor(GRAY_MUTED[0], GRAY_MUTED[1], GRAY_MUTED[2]);
+  const legY = barY + barH + 2.4;
+  // base
+  doc.setFillColor(CYAN[0], CYAN[1], CYAN[2]);
+  doc.rect(barX, legY - 1.2, 1.6, 1.6, "F");
+  doc.text(`BASE ${baseConfVal.toFixed(1)}%`, barX + 2.4, legY);
+  // uplift
+  if (uplift > 0) {
+    doc.setFillColor(PURPLE[0], PURPLE[1], PURPLE[2]);
+    doc.rect(barX + 14, legY - 1.2, 1.6, 1.6, "F");
+    doc.text(`+${uplift.toFixed(1)}%`, barX + 16.4, legY);
+  }
+  // agreement
+  if (hipBonus > 0) {
+    doc.setFillColor(GREEN[0], GREEN[1], GREEN[2]);
+    doc.rect(barX + 26, legY - 1.2, 1.6, 1.6, "F");
+    doc.text(`+${hipBonus.toFixed(1)}%`, barX + 28.4, legY);
+  }
 
   // ── Decision block ──────────────────────────────────────
   y = 48;
@@ -219,15 +273,17 @@ export function exportAnalysisPDF(incident, analysis, audit = null) {
   y += 20;
   sectionHeader(doc, margin, y, "Neural Pathway", CYAN);
   y += 5;
-  const hipConf = analysis?.hippocampus?.initial_confidence ?? 0;
-  const neoConf = analysis?.neo_cortex?.confidence_score ?? 0;
+  const hipConfStat = analysis?.hippocampus?.initial_confidence ?? 0;
+  const neoConfStat = analysis?.neo_cortex?.confidence_score ?? 0;
   const totalMs = analysis?.total_processing_time_ms ?? 0;
   const histCount = analysis?.similar_historical_cases ?? 0;
+  const neoWeightPct = Math.round((analysis?.weighting?.neo_cortex ?? 0.8) * 100);
+  const hipWeightPct = Math.round((analysis?.weighting?.hippocampus ?? 0.2) * 100);
   const stats = [
-    { label: "Hippocampus", value: `${hipConf.toFixed(1)}%`, hint: "weight 20%", color: GREEN },
-    { label: "Neo Cortex", value: `${neoConf.toFixed(1)}%`, hint: "weight 80%", color: CYAN },
-    { label: "Base Conf", value: `${baseConf.toFixed(1)}%`, hint: "pre-uplift", color: GRAY_TEXT },
-    { label: "Uplift", value: `+${uplift.toFixed(1)}%`, hint: `${precedents.length} precedents`, color: PURPLE },
+    { label: "Hippocampus", value: `${hipConfStat.toFixed(1)}%`, hint: `weight ${hipWeightPct}%`, color: GREEN },
+    { label: "Neo Cortex", value: `${neoConfStat.toFixed(1)}%`, hint: `weight ${neoWeightPct}%`, color: CYAN },
+    { label: "Base Conf", value: `${baseConf.toFixed(1)}%`, hint: "pre-boost", color: GRAY_TEXT },
+    { label: "Boost", value: `+${(uplift + hipBonus).toFixed(1)}%`, hint: `${precedents.length} prec · ${hipBonus > 0 ? "agree" : "no agree"}`, color: PURPLE },
     { label: "Latency", value: `${totalMs}ms`, hint: `history: ${histCount}`, color: AMBER },
   ];
   const cellW = contentW / stats.length;
