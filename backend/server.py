@@ -25,6 +25,8 @@ from fastapi import (
     Response,
 )
 from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import StreamingResponse
+import io
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
@@ -307,17 +309,29 @@ async def create_incident(data: IncidentCreate, request: Request):
         except Exception as e:
             logger.warning(f"Image upload failed: {e}")
 
-    # Handle video upload to storage
+    # Handle video upload to storage + extract a representative frame for AI vision
     video_storage_path = None
+    video_bytes_buf = None
     if data.video_base64:
         try:
             user_id = user.get("_id", "anonymous") if user else "anonymous"
             vpath = generate_upload_path(user_id, f"{incident_id}.mp4")
-            video_bytes = base64.b64decode(data.video_base64)
-            put_object(vpath, video_bytes, "video/mp4")
+            video_bytes_buf = base64.b64decode(data.video_base64)
+            put_object(vpath, video_bytes_buf, "video/mp4")
             video_storage_path = vpath
         except Exception as e:
             logger.warning(f"Video upload failed: {e}")
+
+    # If no image was provided but we have a video, extract a still frame
+    # so the Neo Cortex vision pathway has visual evidence to reason about.
+    if not image_b64 and video_bytes_buf:
+        try:
+            from video_utils import extract_frame_b64
+            image_b64 = await extract_frame_b64(video_bytes_buf)
+            if image_b64:
+                logger.info(f"[incident {incident_id}] extracted frame for vision analysis ({len(image_b64)//1024} KB b64)")
+        except Exception as e:
+            logger.warning(f"Frame extraction failed: {e}")
 
     # Run OCTON Brain analysis (Hippocampus -> Neo Cortex)
     analysis_result = await brain_engine.analyze_incident(
@@ -325,6 +339,9 @@ async def create_incident(data: IncidentCreate, request: Request):
         description=data.description,
         db=db,
         image_base64=image_b64,
+    )
+    analysis_result["visual_evidence_source"] = (
+        "image" if data.image_base64 else ("video_frame" if video_bytes_buf else None)
     )
 
     incident_doc = {
@@ -484,12 +501,25 @@ async def reanalyze_incident(incident_id: str, request: Request):
 
     # Re-fetch image from storage if available
     image_b64 = None
+    visual_source = None
     if doc.get("storage_path"):
         try:
             data, _ = get_object(doc["storage_path"])
             image_b64 = base64.b64encode(data).decode("utf-8")
+            visual_source = "image"
         except Exception as e:
             logger.warning(f"Could not fetch image for reanalysis: {e}")
+
+    # Fall back to video-frame extraction if only video is stored
+    if not image_b64 and doc.get("video_storage_path"):
+        try:
+            from video_utils import extract_frame_b64
+            vdata, _ = get_object(doc["video_storage_path"])
+            image_b64 = await extract_frame_b64(vdata)
+            if image_b64:
+                visual_source = "video_frame"
+        except Exception as e:
+            logger.warning(f"Could not extract frame for reanalysis: {e}")
 
     analysis = await brain_engine.analyze_incident(
         incident_type=doc["incident_type"],
@@ -497,6 +527,7 @@ async def reanalyze_incident(incident_id: str, request: Request):
         db=db,
         image_base64=image_b64,
     )
+    analysis["visual_evidence_source"] = visual_source  # "image" | "video_frame" | None
 
     result = await db.incidents.find_one_and_update(
         {"id": incident_id},
@@ -1195,6 +1226,79 @@ async def audit_chain_for_incident(incident_id: str):
         {"incident_id": incident_id}, {"_id": 0}
     ).sort("created_at", 1).to_list(100)
     return entries
+
+
+# ── OCTON Voice Bot ───────────────────────────────────────
+from voice import transcribe_audio, generate_reply, speak, build_context  # noqa: E402
+
+
+@api_router.post("/voice/transcribe")
+async def voice_transcribe(audio: UploadFile = File(...)):
+    """Whisper STT — accepts webm/wav/mp3."""
+    data = await audio.read()
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Audio too large (25 MB max)")
+    if len(data) < 1000:
+        raise HTTPException(status_code=400, detail="Audio clip too short")
+    try:
+        text = await transcribe_audio(data, filename=audio.filename or "voice.webm")
+    except Exception as e:
+        logger.exception(f"transcribe failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
+    return {"text": text}
+
+
+class VoiceChatRequest(BaseModel):
+    text: str
+    session_id: Optional[str] = None
+    selected_incident_id: Optional[str] = None
+    include_audio: bool = True
+    voice: str = "onyx"
+
+
+@api_router.post("/voice/chat")
+async def voice_chat(req: VoiceChatRequest):
+    """OCTON voice turn: text → reply (+ optional TTS MP3 b64)."""
+    if not req.text or not req.text.strip():
+        raise HTTPException(status_code=400, detail="Empty text")
+    session_id = req.session_id or f"octon-voice-{uuid.uuid4()}"
+    try:
+        context = await build_context(db, req.selected_incident_id)
+        reply_text = await generate_reply(req.text.strip(), session_id, context)
+    except Exception as e:
+        logger.exception(f"voice chat failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Reply failed: {e}")
+
+    audio_b64 = None
+    if req.include_audio:
+        try:
+            audio_bytes = await speak(reply_text, voice=req.voice)
+            audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+        except Exception as e:
+            logger.warning(f"TTS failed (returning text only): {e}")
+
+    return {
+        "session_id": session_id,
+        "reply_text": reply_text,
+        "audio_base64": audio_b64,
+        "audio_mime": "audio/mpeg" if audio_b64 else None,
+    }
+
+
+@api_router.post("/voice/speak")
+async def voice_speak(req: VoiceChatRequest):
+    """Plain TTS — returns raw audio/mpeg bytes."""
+    if not req.text:
+        raise HTTPException(status_code=400, detail="Empty text")
+    try:
+        audio_bytes = await speak(req.text, voice=req.voice)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TTS failed: {e}")
+    return StreamingResponse(
+        io.BytesIO(audio_bytes),
+        media_type="audio/mpeg",
+        headers={"Content-Disposition": "inline; filename=octon.mp3"},
+    )
 
 
 # ── WebSocket ─────────────────────────────────────────────

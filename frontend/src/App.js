@@ -28,6 +28,26 @@ import TrainingLibraryPage from "./TrainingLibraryPage";
 import { exportAnalysisPDF } from "./utils/pdfExport";
 import { OctonBrainLogo } from "./components/OctonBrainLogo";
 import { ConfidenceScore, CopyButton, CurtainSection } from "./components/OctonAnalysisParts";
+import OctonVoiceWidget from "./components/OctonVoiceWidget";
+
+// Global lightweight state: currently selected incident ID (picked in LiveVAR)
+// so the voice widget can reference it anywhere.
+const SelectedIncidentContext = createContext({ id: null, setId: () => {} });
+const useSelectedIncidentId = () => useContext(SelectedIncidentContext);
+
+function SelectedIncidentProvider({ children }) {
+  const [id, setId] = useState(null);
+  return (
+    <SelectedIncidentContext.Provider value={{ id, setId }}>
+      {children}
+    </SelectedIncidentContext.Provider>
+  );
+}
+
+function MountedVoiceWidget() {
+  const { id } = useSelectedIncidentId();
+  return <OctonVoiceWidget selectedIncidentId={id} />;
+}
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -1475,6 +1495,10 @@ const LiveVARPage = () => {
   const { user } = useAuth();
   const [incidents, setIncidents] = useState([]);
   const [selectedIncident, setSelectedIncident] = useState(null);
+  const { setId: setGlobalSelectedId } = useSelectedIncidentId();
+  useEffect(() => {
+    setGlobalSelectedId(selectedIncident?.id || null);
+  }, [selectedIncident?.id, setGlobalSelectedId]);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showNewIncident, setShowNewIncident] = useState(false);
@@ -1521,12 +1545,21 @@ const LiveVARPage = () => {
   const handleVideoChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Hard guard: base64 JSON body can't exceed ~15 MB reliably through the proxy.
+    if (file.size > 12 * 1024 * 1024) {
+      toast.error(`Video too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 12 MB — please trim the clip.`);
+      e.target.value = "";
+      return;
+    }
+    toast.info(`Reading ${(file.size / 1024 / 1024).toFixed(1)} MB clip…`);
     const reader = new FileReader();
     reader.onloadend = () => {
       const b64 = reader.result.split(",")[1];
       setNewIncident(prev => ({ ...prev, video_base64: b64 }));
       setPreviewVideo(URL.createObjectURL(file));
+      toast.success("Video ready — OCTON will extract a frame for analysis on submit");
     };
+    reader.onerror = () => toast.error("Could not read the video file");
     reader.readAsDataURL(file);
   };
 
@@ -1811,6 +1844,20 @@ const LiveVARPage = () => {
                   <div className="flex items-center gap-2 mb-1.5">
                     <Target className="w-3 h-3 text-[#00E5FF]" />
                     <span className="text-[9px] font-mono uppercase tracking-[0.25em] text-[#00E5FF]/80">SUGGESTED DECISION</span>
+                    {analysis.visual_evidence_source && (
+                      <span
+                        className="ml-auto text-[8px] font-mono uppercase tracking-[0.15em] px-1.5 py-0.5 border"
+                        style={{
+                          color: analysis.visual_evidence_source === "video_frame" ? "#00FF88" : analysis.visual_evidence_source === "image" ? "#00E5FF" : "#FFB800",
+                          borderColor: analysis.visual_evidence_source ? "rgba(0,229,255,0.3)" : "rgba(255,184,0,0.3)",
+                          backgroundColor: "rgba(0,229,255,0.05)",
+                        }}
+                        data-testid="visual-evidence-badge"
+                        title={analysis.visual_evidence_source === "video_frame" ? "Neo Cortex analysed an extracted video frame" : analysis.visual_evidence_source === "image" ? "Neo Cortex analysed the uploaded still frame" : "Text-only analysis — no visual evidence"}
+                      >
+                        {analysis.visual_evidence_source === "video_frame" ? "VIDEO FRAME" : analysis.visual_evidence_source === "image" ? "STILL FRAME" : "TEXT ONLY"}
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm font-body text-white leading-relaxed" data-testid="suggested-decision">{analysis.suggested_decision}</p>
                 </div>
@@ -2489,26 +2536,29 @@ function App() {
     <div className="App min-h-screen bg-[#050505]">
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/*" element={
-              <ProtectedRoute>
-                <div className="flex">
-                  <Sidebar />
-                  <Routes>
-                    <Route path="/" element={<LiveVARPage />} />
-                    <Route path="/history" element={<HistoryPage />} />
-                    <Route path="/matches" element={<ProtectedRoute roles={["admin"]}><MatchesPage /></ProtectedRoute>} />
-                    <Route path="/training" element={<ProtectedRoute roles={["admin"]}><TrainingLibraryPage /></ProtectedRoute>} />
-                    <Route path="/analytics" element={<AnalyticsPage />} />
-                    <Route path="/feedback" element={<ProtectedRoute roles={["admin", "var_operator"]}><FeedbackPage /></ProtectedRoute>} />
-                    <Route path="/settings" element={<SettingsPage />} />
-                  </Routes>
-                </div>
-              </ProtectedRoute>
-            } />
-          </Routes>
+          <SelectedIncidentProvider>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/*" element={
+                <ProtectedRoute>
+                  <div className="flex">
+                    <Sidebar />
+                    <Routes>
+                      <Route path="/" element={<LiveVARPage />} />
+                      <Route path="/history" element={<HistoryPage />} />
+                      <Route path="/matches" element={<ProtectedRoute roles={["admin"]}><MatchesPage /></ProtectedRoute>} />
+                      <Route path="/training" element={<ProtectedRoute roles={["admin"]}><TrainingLibraryPage /></ProtectedRoute>} />
+                      <Route path="/analytics" element={<AnalyticsPage />} />
+                      <Route path="/feedback" element={<ProtectedRoute roles={["admin", "var_operator"]}><FeedbackPage /></ProtectedRoute>} />
+                      <Route path="/settings" element={<SettingsPage />} />
+                    </Routes>
+                    <MountedVoiceWidget />
+                  </div>
+                </ProtectedRoute>
+              } />
+            </Routes>
+          </SelectedIncidentProvider>
         </AuthProvider>
       </BrowserRouter>
       <Toaster position="top-right" toastOptions={{ style: { background: '#121212', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' } }} />
