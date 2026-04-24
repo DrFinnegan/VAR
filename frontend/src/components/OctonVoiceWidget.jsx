@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { Mic, X, Loader2, Waves, MessageSquareText, Ear, EarOff, Volume2, Sliders, Check } from "lucide-react";
+import { Mic, X, Loader2, Waves, MessageSquareText, Ear, EarOff, Volume2, Sliders, Check, Play, Pause } from "lucide-react";
 import { OctonBrainLogo } from "./OctonBrainLogo";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -41,6 +41,74 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
     catch { return "nova"; }
   });
   const [showVoicePicker, setShowVoicePicker] = useState(false);
+  const [previewingVoice, setPreviewingVoice] = useState(null);
+  const previewAudioRef = useRef(null);
+
+  // Load persisted voice preference from the backend on first open so the
+  // user's choice carries across devices. Fall back to localStorage if the
+  // backend hasn't been reached yet (offline or not authenticated).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await axios.get(`${API}/preferences`, { withCredentials: true });
+        const v = r.data?.voice;
+        if (!cancelled && v && v !== voiceName) {
+          setVoiceName(v);
+          try { window.localStorage.setItem("octon-voice", v); } catch {/* ignore */}
+        }
+      } catch { /* unauthenticated or offline — keep localStorage value */ }
+    })();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Stop any in-flight preview when the picker closes
+  useEffect(() => {
+    if (!showVoicePicker && previewAudioRef.current) {
+      try { previewAudioRef.current.pause(); } catch {/* ignore */}
+      setPreviewingVoice(null);
+    }
+  }, [showVoicePicker]);
+
+  const playVoicePreview = useCallback(async (voiceId) => {
+    // Toggle: if the same voice is already playing, stop it
+    if (previewingVoice === voiceId && previewAudioRef.current) {
+      try { previewAudioRef.current.pause(); } catch {/* ignore */}
+      setPreviewingVoice(null);
+      return;
+    }
+    // Stop any currently playing preview
+    if (previewAudioRef.current) {
+      try { previewAudioRef.current.pause(); } catch {/* ignore */}
+    }
+    setPreviewingVoice(voiceId);
+    try {
+      const el = new Audio(`${API}/voice/sample?voice=${encodeURIComponent(voiceId)}`);
+      el.onended = () => setPreviewingVoice(cur => (cur === voiceId ? null : cur));
+      el.onerror = () => {
+        setPreviewingVoice(cur => (cur === voiceId ? null : cur));
+        toast.error("Could not play sample");
+      };
+      previewAudioRef.current = el;
+      await el.play();
+    } catch (err) {
+      setPreviewingVoice(null);
+      if (err?.name === "NotAllowedError") {
+        toast.error("Browser blocked audio — click the voice row again.");
+      } else {
+        toast.error(`Sample error: ${err?.message || err?.name || "unknown"}`);
+      }
+    }
+  }, [previewingVoice]);
+
+  const changeVoice = useCallback(async (voiceId) => {
+    setVoiceName(voiceId);
+    try { window.localStorage.setItem("octon-voice", voiceId); } catch {/* ignore */}
+    // Fire-and-forget server persistence so the choice follows the user
+    try {
+      await axios.put(`${API}/preferences`, { voice: voiceId }, { withCredentials: true });
+    } catch { /* degrade silently — localStorage still has the value */ }
+  }, []);
 
   const wakeRecRef = useRef(null);
   const wakeRestartTimerRef = useRef(null);
@@ -523,37 +591,55 @@ export default function OctonVoiceWidget({ selectedIncidentId, onVoiceAction }) 
                     </button>
                   </div>
                   <div className="max-h-[280px] overflow-y-auto octon-scrollbar py-1">
-                    {VOICE_OPTIONS.map(v => (
-                      <button
-                        key={v.id}
-                        onClick={() => {
-                          setVoiceName(v.id);
-                          try { window.localStorage.setItem("octon-voice", v.id); } catch {/* ignore */}
-                          setShowVoicePicker(false);
-                          toast.success(`Voice set to ${v.label}`);
-                        }}
-                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left transition-all ${
-                          voiceName === v.id
-                            ? "bg-[#00E5FF]/[0.08] border-l-2 border-[#00E5FF]"
-                            : "border-l-2 border-transparent hover:bg-white/[0.04]"
-                        }`}
-                        data-testid={`octon-voice-option-${v.id}`}
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <span className={`text-[11px] font-mono font-bold tracking-wide ${voiceName === v.id ? "text-[#00E5FF]" : "text-white"}`}>
-                            {v.label}
-                          </span>
-                          <span className="text-[9px] font-mono text-gray-500 tracking-wide">{v.desc}</span>
+                    {VOICE_OPTIONS.map(v => {
+                      const isSelected = voiceName === v.id;
+                      const isPreviewing = previewingVoice === v.id;
+                      return (
+                        <div
+                          key={v.id}
+                          className={`w-full flex items-center justify-between gap-2 px-3 py-2 transition-all ${
+                            isSelected
+                              ? "bg-[#00E5FF]/[0.08] border-l-2 border-[#00E5FF]"
+                              : "border-l-2 border-transparent hover:bg-white/[0.04]"
+                          }`}
+                          data-testid={`octon-voice-option-${v.id}`}
+                        >
+                          {/* Preview button */}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); playVoicePreview(v.id); }}
+                            className={`flex-none h-7 w-7 flex items-center justify-center border transition-all ${
+                              isPreviewing
+                                ? "border-[#00FF88] bg-[#00FF88]/15 text-[#00FF88] animate-pulse"
+                                : "border-white/10 hover:border-[#00E5FF]/60 text-gray-400 hover:text-[#00E5FF]"
+                            }`}
+                            title={isPreviewing ? "Stop preview" : `Preview ${v.label}`}
+                            data-testid={`octon-voice-preview-${v.id}`}
+                          >
+                            {isPreviewing ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                          </button>
+                          {/* Select row (label + gender chip + check) */}
+                          <button
+                            onClick={() => { changeVoice(v.id); setShowVoicePicker(false); toast.success(`Voice set to ${v.label}`); }}
+                            className="flex-1 flex items-center justify-between gap-2 text-left"
+                            data-testid={`octon-voice-select-${v.id}`}
+                          >
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                              <span className={`text-[11px] font-mono font-bold tracking-wide truncate ${isSelected ? "text-[#00E5FF]" : "text-white"}`}>
+                                {v.label}
+                              </span>
+                              <span className="text-[9px] font-mono text-gray-500 tracking-wide truncate">{v.desc}</span>
+                            </div>
+                            <div className="flex items-center gap-1 flex-none">
+                              <span className="text-[8px] font-mono text-gray-600 px-1 border border-white/10">{v.gender}</span>
+                              {isSelected && <Check className="w-3 h-3 text-[#00E5FF]" />}
+                            </div>
+                          </button>
                         </div>
-                        <div className="flex items-center gap-1 flex-none">
-                          <span className="text-[8px] font-mono text-gray-600 px-1 border border-white/10">{v.gender}</span>
-                          {voiceName === v.id && <Check className="w-3 h-3 text-[#00E5FF]" />}
-                        </div>
-                      </button>
-                    ))}
+                      );
+                    })}
                   </div>
                   <div className="px-3 py-1.5 border-t border-white/[0.06] text-[8px] font-mono text-gray-600 tracking-[0.2em] uppercase">
-                    // saved locally · applies on next reply
+                    // syncs across your devices · ▶ to preview
                   </div>
                 </div>
               )}

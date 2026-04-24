@@ -1552,6 +1552,87 @@ async def voice_speak(req: VoiceChatRequest):
     )
 
 
+# ── Voice sample preview (cached per voice) ──────────────
+_VOICE_SAMPLE_TEXT = "Ready when you are — this is OCTON VAR, your forensic AI co-pilot."
+_VOICE_SAMPLE_WHITELIST = {"nova", "shimmer", "coral", "ash", "echo", "onyx", "sage", "alloy"}
+
+
+@api_router.get("/voice/sample")
+async def voice_sample(voice: str = "nova"):
+    """Return a short sample MP3 for a given voice, cached per-voice in Mongo
+    so repeated previews don't hit the TTS API. ~1.5 s audio."""
+    v = (voice or "nova").lower().strip()
+    if v not in _VOICE_SAMPLE_WHITELIST:
+        raise HTTPException(status_code=400, detail=f"Unknown voice: {voice}")
+    cached = await db.voice_samples.find_one({"voice": v, "text_hash": "v1"}, {"_id": 0})
+    if cached and cached.get("audio_b64"):
+        audio_bytes = base64.b64decode(cached["audio_b64"])
+    else:
+        try:
+            audio_bytes = await speak(_VOICE_SAMPLE_TEXT, voice=v)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Sample generation failed: {e}")
+        await db.voice_samples.update_one(
+            {"voice": v, "text_hash": "v1"},
+            {"$set": {
+                "voice": v,
+                "text_hash": "v1",
+                "audio_b64": base64.b64encode(audio_bytes).decode("utf-8"),
+                "sample_text": _VOICE_SAMPLE_TEXT,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }},
+            upsert=True,
+        )
+    return StreamingResponse(
+        io.BytesIO(audio_bytes),
+        media_type="audio/mpeg",
+        headers={
+            "Content-Disposition": f"inline; filename=octon-sample-{v}.mp3",
+            "Cache-Control": "public, max-age=3600",
+        },
+    )
+
+
+# ── Per-user preferences (voice choice etc.) ─────────────
+class UserPreferencesPatch(BaseModel):
+    voice: Optional[str] = None
+
+
+@api_router.get("/preferences")
+async def preferences_get(request: Request):
+    """Return the signed-in user's preferences (voice etc.). Empty dict if unset."""
+    user = await get_current_user(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    uid = user.get("id") or user.get("_id")
+    prefs = await db.user_preferences.find_one({"user_id": uid}, {"_id": 0}) or {}
+    return {"voice": prefs.get("voice") or "nova"}
+
+
+@api_router.put("/preferences")
+async def preferences_update(body: UserPreferencesPatch, request: Request):
+    """Persist per-user voice preference on the server so referees carry the
+    setting across devices."""
+    user = await get_current_user(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    uid = user.get("id") or user.get("_id")
+    update = {}
+    if body.voice is not None:
+        v = body.voice.lower().strip()
+        if v not in _VOICE_SAMPLE_WHITELIST:
+            raise HTTPException(status_code=400, detail=f"Unknown voice: {body.voice}")
+        update["voice"] = v
+    if not update:
+        raise HTTPException(status_code=400, detail="No supported preference in payload")
+    update["user_id"] = uid
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.user_preferences.update_one(
+        {"user_id": uid}, {"$set": update}, upsert=True,
+    )
+    return {"voice": update.get("voice", "nova")}
+
+
 # ── WebSocket ─────────────────────────────────────────────
 @api_router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
