@@ -166,3 +166,95 @@ body {
 
 
 *:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+
+
+
+/* ── OCTON Connectome animations ────────────────────── */
+
+/* Pulsing action-potential ring around each neuron */
+@keyframes cnxRing {
+  0%, 100% { transform: scale(1);   opacity: 0.55; }
+  50%      { transform: scale(1.7); opacity: 0;    }
+}
+.cnx-ring {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: cnxRing 2s ease-out infinite;
+}
+
+/* Click-fired ripple wave */
+@keyframes cnxRipple {
+  0%   { transform: scale(1);   opacity: 0.95; stroke-width: 1.6; }
+  100% { transform: scale(4.5); opacity: 0;    stroke-width: 0.4; }
+}
+.cnx-ripple {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: cnxRipple 1.4s ease-out forwards;
+}
+
+/* Soft starlight blink for header pips */
+@keyframes octonBlink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+.octon-blink { animation: octonBlink 1.6s ease-in-out infinite; }
+
+/* ── Military-spec dashboard polish ─────────────────── */
+
+/* Tactical grid backdrop (1px lines every 24px) */
+.mil-grid {
+  background-image:
+    linear-gradient(to right, rgba(0,229,255,0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0,229,255,0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Slow ambient scanline travelling top-to-bottom */
+@keyframes milScan {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(220%);  }
+}
+.mil-scanline::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(0,229,255,0.08) 48%,
+    rgba(0,229,255,0.18) 50%,
+    rgba(0,229,255,0.08) 52%,
+    transparent
+  );
+  height: 30%;
+  animation: milScan 6s linear infinite;
+  pointer-events: none;
+}
+
+/* Sharper corner-clip frame (used on mil-spec containers) */
+.mil-corner {
+  clip-path: polygon(
+    8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px),
+    calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px
+  );
+}
+
+/* Targeting reticle (used on stat tiles & cards) */
+.mil-reticle::before,
+.mil-reticle::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-color: rgba(0,229,255,0.55);
+  pointer-events: none;
+}
+.mil-reticle::before {
+  top: 4px; left: 4px;
+  border-top: 1px solid; border-left: 1px solid;
+}
+.mil-reticle::after {
+  bottom: 4px; right: 4px;
+  border-bottom: 1px solid; border-right: 1px solid;
+}

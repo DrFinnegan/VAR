@@ -26,6 +26,7 @@ import { Separator } from "./components/ui/separator";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import TrainingLibraryPage from "./TrainingLibraryPage";
 import { exportAnalysisPDF } from "./utils/pdfExport";
+import { Connectome } from "./components/Connectome";
 import { OctonBrainLogo } from "./components/OctonBrainLogo";
 import { ConfidenceScore, CopyButton, CurtainSection } from "./components/OctonAnalysisParts";
 import OctonVoiceWidget from "./components/OctonVoiceWidget";
@@ -425,63 +426,37 @@ const BrainPathway = ({ analysis }) => {
           </div>
         </div>
 
-        {/* Neural Pathway Grid */}
-        <div className="grid grid-cols-[1fr_80px_1fr] gap-0 items-stretch">
-          {/* Hippocampus */}
-          <div className="border border-[#00FF88]/20 bg-[#00FF88]/[0.03] p-4 relative border-glow-green">
-            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-[#00FF88]/60 via-[#00FF88]/20 to-transparent" />
-            <div className="flex items-center gap-2 mb-3">
-              <Zap className="w-4 h-4 text-[#00FF88] glow-green" />
-              <span className="text-[11px] font-heading font-bold uppercase tracking-[0.15em] text-[#00FF88]">HIPPOCAMPUS</span>
+        {/* OCTON Connectome — interactive 3-column neural visualisation */}
+        <Connectome analysis={analysis} />
+
+        {/* Compact pathway stat strip (kept for at-a-glance numbers) */}
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <div className="px-3 py-2 border border-[#00FF88]/20 bg-[#00FF88]/[0.04]">
+            <div className="flex items-center gap-2 mb-1">
+              <Zap className="w-3 h-3 text-[#00FF88]" />
+              <span className="text-[9px] font-heading font-bold uppercase tracking-[0.18em] text-[#00FF88]">FAST PATH · HIPP</span>
+              <span className="ml-auto text-[8px] font-mono text-gray-500">{hippo.processing_time_ms}ms</span>
             </div>
-            <p className="text-[10px] font-mono text-gray-500 mb-2 tracking-wide">RAPID PATTERN SCAN</p>
             <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-mono font-bold text-[#00FF88] glow-text-green">{hippo.initial_confidence}</span>
-              <span className="text-sm font-mono text-[#00FF88]/60">%</span>
+              <span className="text-2xl font-mono font-bold text-[#00FF88] glow-text-green">{hippo.initial_confidence}</span>
+              <span className="text-xs font-mono text-[#00FF88]/60">%</span>
+              <span className="ml-auto text-[9px] font-mono text-gray-600">w {(analysis.weighting?.hippocampus * 100).toFixed(0)}%</span>
             </div>
-            <p className="text-[10px] font-mono text-gray-500 mt-2">{hippo.processing_time_ms}ms</p>
-            <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">{hippo.initial_decision}</p>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {hippo.matched_keywords?.slice(0, 3).map((kw, i) => (
-                <span key={i} className="text-[9px] font-mono px-1.5 py-0.5 bg-[#00FF88]/10 text-[#00FF88]/70 border border-[#00FF88]/10">{kw}</span>
-              ))}
-            </div>
-            <div className="text-[9px] font-mono text-gray-600 mt-2">WEIGHT: 20%</div>
+            <p className="text-[10px] text-gray-400 mt-0.5 leading-tight truncate">{hippo.initial_decision}</p>
           </div>
 
-          {/* Signal Bridge */}
-          <div className="flex flex-col items-center justify-center relative">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-full h-[2px] bg-gradient-to-r from-[#00FF88]/40 via-[#00E5FF] to-[#00E5FF]/40 animate-neural-pulse" />
+          <div className="px-3 py-2 border border-[#00E5FF]/20 bg-[#00E5FF]/[0.04]">
+            <div className="flex items-center gap-2 mb-1">
+              <Brain className="w-3 h-3 text-[#00E5FF]" />
+              <span className="text-[9px] font-heading font-bold uppercase tracking-[0.18em] text-[#00E5FF]">DEEP PATH · NEO</span>
+              <span className="ml-auto text-[8px] font-mono text-gray-500">{neo.processing_time_ms}ms</span>
             </div>
-            <div className="relative z-10 flex flex-col items-center gap-1 bg-[#050505] px-2 py-3 border border-white/[0.08]">
-              <ArrowRight className="w-4 h-4 text-[#00E5FF] glow-cyan" />
-              <span className="text-[7px] font-mono text-[#00E5FF]/60 tracking-[0.15em]">SIGNAL</span>
-              <div className="w-1 h-6 bg-gradient-to-b from-[#00FF88] to-[#00E5FF] opacity-50 animate-data-flow" />
-              <ArrowRight className="w-4 h-4 text-[#00E5FF] glow-cyan" />
-            </div>
-          </div>
-
-          {/* Neo Cortex */}
-          <div className="border border-[#00E5FF]/20 bg-[#00E5FF]/[0.03] p-4 relative border-glow-cyan">
-            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-[#00E5FF]/60 via-[#00E5FF]/20 to-transparent" />
-            <div className="flex items-center gap-2 mb-3">
-              <Brain className="w-4 h-4 text-[#00E5FF] glow-cyan" />
-              <span className="text-[11px] font-heading font-bold uppercase tracking-[0.15em] text-[#00E5FF]">NEO CORTEX</span>
-            </div>
-            <p className="text-[10px] font-mono text-gray-500 mb-2 tracking-wide">DEEP COGNITIVE ANALYSIS</p>
             <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-mono font-bold text-[#00E5FF] glow-text-cyan">{neo.confidence_score}</span>
-              <span className="text-sm font-mono text-[#00E5FF]/60">%</span>
+              <span className="text-2xl font-mono font-bold text-[#00E5FF] glow-text-cyan">{neo.confidence_score}</span>
+              <span className="text-xs font-mono text-[#00E5FF]/60">%</span>
+              <span className="ml-auto text-[9px] font-mono text-gray-600">w {(analysis.weighting?.neo_cortex * 100).toFixed(0)}%</span>
             </div>
-            <p className="text-[10px] font-mono text-gray-500 mt-2">{neo.processing_time_ms}ms</p>
-            <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">{neo.suggested_decision}</p>
-            <div className="mt-2">
-              <span className="text-[9px] font-mono px-1.5 py-0.5 border" style={{ color: riskColors[neo.risk_level] || "#FFB800", borderColor: (riskColors[neo.risk_level] || "#FFB800") + "30" }}>
-                RISK: {(neo.risk_level || "medium").toUpperCase()}
-              </span>
-            </div>
-            <div className="text-[9px] font-mono text-gray-600 mt-2">WEIGHT: 80%</div>
+            <p className="text-[10px] text-gray-400 mt-0.5 leading-tight truncate">{neo.suggested_decision}</p>
           </div>
         </div>
 
@@ -1816,7 +1791,9 @@ const LiveVARPage = () => {
           { label: "AVG DECISION TIME", value: `${analytics?.average_decision_time_seconds?.toFixed(1) || 0}s`, icon: Clock, color: "#00FF88", hint: "per call" },
           { label: "ACCURACY RATE", value: `${analytics?.decision_accuracy_rate?.toFixed(1) || 0}%`, icon: Target, color: "#00FF88", hint: "vs ref panel" },
         ].map(({ label, value, icon: Icon, color, hint }) => (
-          <div key={label} className="group bg-gradient-to-br from-[#0A0A0A] to-[#070707] p-4 relative overflow-hidden hover:from-[#0C0C0C] transition-colors" data-testid={`stat-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+          <div key={label} className="group bg-gradient-to-br from-[#0A0A0A] to-[#070707] p-4 relative overflow-hidden hover:from-[#0C0C0C] transition-colors mil-corner" data-testid={`stat-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+            {/* Tactical grid */}
+            <div className="absolute inset-0 mil-grid opacity-40 pointer-events-none" />
             {/* Top accent */}
             <div className="absolute top-0 left-0 w-12 h-[2px]" style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }} />
             {/* Corner ticks */}
