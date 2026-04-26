@@ -387,6 +387,24 @@ async def create_incident(data: IncidentCreate, request: Request):
     }
     await ws_manager.send_incident_created(ws_data)
 
+    # If any storage warnings fired, push a real-time system_health event so
+    # the dashboard pip flips to "degraded" within ~100 ms instead of waiting
+    # for the next 30 s poll cycle.
+    if storage_warnings:
+        try:
+            await ws_manager.send_system_health({
+                "trigger": "incident_storage_failure",
+                "incident_id": incident_id,
+                "warnings": storage_warnings,
+                "at": now,
+            })
+            # Force-invalidate the health cache so the next /system/health
+            # GET reflects the failure immediately
+            _HEALTH_CACHE["at"] = 0
+            _HEALTH_CACHE["data"] = None
+        except Exception as e:
+            logger.warning(f"system_health broadcast failed: {e}")
+
     return incident_doc
 
 

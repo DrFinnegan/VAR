@@ -1469,15 +1469,30 @@ const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, onSaveAnn
   const timeStr = `${String(matchTime.min).padStart(2,'0')}:${String(matchTime.sec).padStart(2,'0')}.${String(matchTime.ms).padStart(3,'0')}`;
   const speeds = [0.25, 0.5, 1, 2, 4];
 
+  // Track media load failures so the stage can fall back to the stadium
+  // backdrop when storage gave us a path but the actual asset is missing.
+  const [imgBroken, setImgBroken] = useState(false);
+  const [videoBroken, setVideoBroken] = useState(false);
+  useEffect(() => { setImgBroken(false); }, [imgSrc]);
+  useEffect(() => { setVideoBroken(false); }, [videoSrc]);
+
   return (
     <div ref={stageRef} className="relative border border-white/[0.08] bg-black overflow-hidden" data-testid="video-player-container">
       <div className="aspect-video relative">
-        {videoSrc ? (
-          <video ref={videoRef} src={videoSrc} className="w-full h-full object-cover" onTimeUpdate={handleVideoTimeUpdate} onEnded={() => setIsPlaying(false)} onLoadedMetadata={() => { if (videoRef.current) videoRef.current.playbackRate = playbackSpeed; }} playsInline muted />
-        ) : imgSrc ? (
-          <img src={imgSrc} alt="Incident" className="w-full h-full object-cover" />
+        {videoSrc && !videoBroken ? (
+          <video ref={videoRef} src={videoSrc} className="w-full h-full object-cover" onTimeUpdate={handleVideoTimeUpdate} onEnded={() => setIsPlaying(false)} onError={() => setVideoBroken(true)} onLoadedMetadata={() => { if (videoRef.current) videoRef.current.playbackRate = playbackSpeed; }} playsInline muted />
+        ) : imgSrc && !imgBroken ? (
+          <img src={imgSrc} alt="Incident" className="w-full h-full object-cover" onError={() => setImgBroken(true)} />
         ) : (
-          <img src="https://images.pexels.com/photos/12201296/pexels-photo-12201296.jpeg" alt="Stadium" className="w-full h-full object-cover opacity-40" />
+          <>
+            <img src="https://images.pexels.com/photos/12201296/pexels-photo-12201296.jpeg" alt="Stadium" className="w-full h-full object-cover opacity-45" />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#050505]/30 via-transparent to-[#050505]/85" />
+            {(imgBroken || videoBroken) && (
+              <div className="absolute top-3 right-3 px-2 py-1 bg-[#FFB800]/15 border border-[#FFB800]/40 text-[#FFB800] text-[9px] font-mono uppercase tracking-[0.2em]" title="Media missing in object storage; analysis still ran on the original frame.">
+                ⚠ media offline · stadium fallback
+              </div>
+            )}
+          </>
         )}
         <div className="absolute inset-0 grid-overlay opacity-50" />
         {/* Annotation Canvas Overlay */}

@@ -69,5 +69,16 @@ class ConnectionManager:
             }
         )
 
+    async def send_system_health(self, payload: dict):
+        """Push a real-time system-health update to all connected clients.
+        Called whenever an upstream service flips state (e.g. storage 500)."""
+        await self.broadcast({
+            "type": "system_health",
+            "data": payload,
+            "message": "OCTON system health update",
+        })
+
+
+
 
 ws_manager = ConnectionManager()

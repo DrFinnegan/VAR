@@ -122,7 +122,7 @@ export const Connectome = ({ analysis }) => {
 
   const fire = useCallback((id) => {
     setFiringId(id);
-    setTimeout(() => setFiringId(cur => (cur === id ? null : cur)), 1500);
+    setTimeout(() => setFiringId(cur => (cur === id ? null : cur)), 1800);
   }, []);
 
   // Neighbour resolver for ripple + edge-highlight
@@ -164,12 +164,12 @@ export const Connectome = ({ analysis }) => {
         </span>
       </div>
 
-      {/* SVG connectome */}
-      <div className="relative border border-white/[0.08] bg-[#020608] overflow-hidden mil-corner">
-        {/* Tactical grid backdrop */}
-        <div className="absolute inset-0 mil-grid pointer-events-none" />
-        {/* Scanline */}
-        <div className="absolute inset-0 mil-scanline pointer-events-none" />
+      {/* SVG connectome — frameless, integrates seamlessly with the panel */}
+      <div className="relative bg-transparent overflow-hidden">
+        {/* Subtle vignette so the connectome sits cleanly without a hard frame */}
+        <div className="absolute inset-0 pointer-events-none" style={{
+          background: "radial-gradient(ellipse at center, transparent 50%, rgba(2,8,12,0.85) 100%)",
+        }} />
 
         <svg viewBox="0 0 300 200" className="relative w-full" style={{ aspectRatio: "300/200" }}>
           <defs>
@@ -299,15 +299,57 @@ export const Connectome = ({ analysis }) => {
                 />
                 {/* Hit-area expander for tiny neurons */}
                 <circle cx={n.x} cy={n.y} r={baseR + 4} fill="transparent" />
-                {/* Ripple wave on fire */}
+                {/* Cloud burst on fire — multiple radiating waves expanding both
+                    sides across the columns, mimicking a synaptic flash that
+                    propagates through the network */}
                 {firingId === n.id && (
-                  <circle
-                    cx={n.x} cy={n.y} r={baseR}
-                    fill="none"
-                    stroke={n.color}
-                    strokeWidth="0.8"
-                    className="cnx-ripple"
-                  />
+                  <>
+                    {/* Three expanding waves at staggered phases — wider radii so
+                        the burst clearly crosses into the neighbouring columns */}
+                    <circle
+                      cx={n.x} cy={n.y} r={n.r}
+                      fill="none"
+                      stroke={n.color}
+                      strokeWidth="0.6"
+                      className="cnx-burst cnx-burst-1"
+                    />
+                    <circle
+                      cx={n.x} cy={n.y} r={n.r}
+                      fill="none"
+                      stroke={PALETTE.lateral}
+                      strokeWidth="0.45"
+                      className="cnx-burst cnx-burst-2"
+                    />
+                    <circle
+                      cx={n.x} cy={n.y} r={n.r}
+                      fill="none"
+                      stroke="#FFFFFF"
+                      strokeWidth="0.35"
+                      className="cnx-burst cnx-burst-3"
+                    />
+                    {/* 16 radiating particle rays — fly outward in all directions
+                        so the burst visually crosses both Hippocampus and
+                        Neo-Cortex columns */}
+                    {Array.from({ length: 16 }).map((_, k) => {
+                      const angle = (k / 16) * Math.PI * 2;
+                      const dx = Math.cos(angle);
+                      const dy = Math.sin(angle);
+                      // particle ends ~120 svg units away → easily covers both
+                      // sides of the canvas (column gap is ~130)
+                      return (
+                        <line
+                          key={k}
+                          x1={n.x} y1={n.y}
+                          x2={n.x + dx * 140} y2={n.y + dy * 140}
+                          stroke={n.color}
+                          strokeWidth="0.5"
+                          opacity="0.9"
+                          className="cnx-ray"
+                          style={{ animationDelay: `${(k % 8) * 0.02}s` }}
+                        />
+                      );
+                    })}
+                  </>
                 )}
               </g>
             );
@@ -320,12 +362,6 @@ export const Connectome = ({ analysis }) => {
             <line x1="282" y1="14" x2="282" y2="194" stroke="#00E5FF" strokeDasharray="2 4" />
           </g>
         </svg>
-
-        {/* Corner brackets */}
-        <span className="absolute top-0 left-0 w-3 h-3 border-l border-t border-[#00E5FF]/60 pointer-events-none" />
-        <span className="absolute top-0 right-0 w-3 h-3 border-r border-t border-[#00E5FF]/60 pointer-events-none" />
-        <span className="absolute bottom-0 left-0 w-3 h-3 border-l border-b border-[#00E5FF]/60 pointer-events-none" />
-        <span className="absolute bottom-0 right-0 w-3 h-3 border-r border-b border-[#00E5FF]/60 pointer-events-none" />
       </div>
 
       {/* Focus readout — the "which feature does this neuron represent?" panel */}

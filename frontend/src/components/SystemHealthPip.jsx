@@ -46,8 +46,42 @@ export const SystemHealthPip = () => {
       } catch { /* offline — keep last known state */ }
     };
     tick();
-    const id = setInterval(tick, 30000);
-    return () => { cancelled = true; clearInterval(id); };
+    // Poll every 60 s as a safety net; the WebSocket pushes deliver real-time updates.
+    const id = setInterval(tick, 60000);
+
+    // ── WebSocket subscription for real-time system_health pushes ──
+    let ws = null;
+    let wsRetryTimer = null;
+    const wsUrl = `${process.env.REACT_APP_BACKEND_URL.replace(/^http/, "ws")}/api/ws`;
+    const connect = () => {
+      try {
+        ws = new WebSocket(wsUrl);
+        ws.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg?.type === "system_health") {
+              // Re-pull the live snapshot so the popover stays consistent;
+              // also flag the incoming event by flashing the pip border.
+              tick();
+            }
+          } catch { /* ignore malformed frame */ }
+        };
+        ws.onclose = () => {
+          if (!cancelled) {
+            wsRetryTimer = setTimeout(connect, 5000);
+          }
+        };
+        ws.onerror = () => { try { ws.close(); } catch {} };
+      } catch { /* WebSocket unsupported — polling continues to work */ }
+    };
+    connect();
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      if (wsRetryTimer) clearTimeout(wsRetryTimer);
+      try { ws && ws.close(); } catch {/* ignore */}
+    };
   }, []);
 
   // Close on outside click
