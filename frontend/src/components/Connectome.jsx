@@ -58,7 +58,7 @@ const buildNeurons = (analysis) => {
   const layoutCol = (count, x) => Array.from({ length: count }, (_, i) => ({
     x,
     y: 18 + (i * (164 / Math.max(count - 1, 1))),
-    r: 5.2 + ((i % 3) * 0.6),
+    r: 2.6 + ((i % 3) * 0.35),
     delay: (i * 0.27) % 2.4,
     duration: 1.6 + (i * 0.13) % 1.4,
   }));
@@ -78,7 +78,7 @@ const buildNeurons = (analysis) => {
     color: PALETTE.lateral,
     ...n, x: 150,
     y: 36 + (i * 35),
-    r: 4.2 + (i % 2) * 0.5,
+    r: 2.2 + (i % 2) * 0.3,
   }));
 
   // Build edges deterministically (each left/right neuron binds to 2-3 lateral)
@@ -189,7 +189,7 @@ export const Connectome = ({ analysis }) => {
               <stop offset="100%" stopColor="#00E5FF" stopOpacity="0" />
             </radialGradient>
             <filter id="cnx-soft" x="-30%" y="-30%" width="160%" height="160%">
-              <feGaussianBlur stdDeviation="1.4" />
+              <feGaussianBlur stdDeviation="0.6" />
             </filter>
             {/* Animated dash for ambient signal traffic */}
             <linearGradient id="signal-h" x1="0" x2="1">
@@ -215,8 +215,8 @@ export const Connectome = ({ analysis }) => {
           {edges.map((e, i) => {
             const isActive = activeIds.has(e.from.id) && activeIds.has(e.to.id);
             const isLong = e.kind === "long";
-            const stroke = isActive ? PALETTE.linkHi : (isLong ? "rgba(124,249,255,0.18)" : PALETTE.link);
-            const width  = isActive ? 1.4 : (isLong ? 0.55 : 0.85);
+            const stroke = isActive ? PALETTE.linkHi : (isLong ? "rgba(124,249,255,0.12)" : "rgba(124,249,255,0.16)");
+            const width  = isActive ? 0.7 : (isLong ? 0.22 : 0.32);
 
             // Curved bezier — graceful lateral binding
             const dx = e.to.x - e.from.x;
@@ -225,28 +225,25 @@ export const Connectome = ({ analysis }) => {
             const cy1 = e.from.y;
             const cy2 = e.to.y;
             const d = `M ${e.from.x} ${e.from.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${e.to.x} ${e.to.y}`;
-            // Phase-shifted dash so packets travel along each edge at slightly different rate
             const dashOffset = -((tick + i * 7) % 60);
             return (
               <g key={i} pointerEvents="none">
-                {/* Static synapse line */}
                 <path
                   d={d}
                   stroke={stroke}
                   strokeWidth={width}
                   fill="none"
-                  opacity={isActive ? 0.95 : 0.65}
+                  opacity={isActive ? 0.95 : 0.7}
                   style={{ transition: "stroke 250ms, stroke-width 250ms, opacity 250ms" }}
                 />
-                {/* Animated travelling packet */}
                 <path
                   d={d}
                   stroke={isActive ? PALETTE.linkHi : (e.kind === "l-n" ? "#00E5FF" : e.kind === "h-l" ? "#00FF88" : "#7CF9FF")}
-                  strokeWidth={isActive ? 2.0 : 1.1}
+                  strokeWidth={isActive ? 0.85 : 0.45}
                   fill="none"
-                  strokeDasharray="4 56"
+                  strokeDasharray="3 70"
                   strokeDashoffset={dashOffset}
-                  opacity={isActive ? 0.95 : 0.55}
+                  opacity={isActive ? 0.95 : 0.6}
                 />
               </g>
             );
@@ -258,7 +255,7 @@ export const Connectome = ({ analysis }) => {
             const isInRipple = activeIds.has(n.id);
             const glowId = n.role === "hipp" ? "cnx-glow-h" : n.role === "neo" ? "cnx-glow-n" : "cnx-glow-l";
             const baseR = n.r;
-            const pulseR = baseR + (isFocus ? 5 : 0);
+            const pulseR = baseR + (isFocus ? 2.2 : 0);
             return (
               <g
                 key={n.id}
@@ -270,18 +267,18 @@ export const Connectome = ({ analysis }) => {
               >
                 {/* Outer glow */}
                 <circle
-                  cx={n.x} cy={n.y} r={pulseR + 7}
+                  cx={n.x} cy={n.y} r={pulseR + 4}
                   fill={`url(#${glowId})`}
-                  opacity={isFocus ? 0.95 : (isInRipple ? 0.55 : 0.35)}
+                  opacity={isFocus ? 0.85 : (isInRipple ? 0.5 : 0.28)}
                   style={{ transition: "opacity 250ms" }}
                 />
                 {/* Pulsing outer ring (action potential) */}
                 <circle
-                  cx={n.x} cy={n.y} r={baseR + 1.5}
+                  cx={n.x} cy={n.y} r={baseR + 0.9}
                   fill="none"
                   stroke={n.color}
-                  strokeWidth={isFocus ? 1.4 : 0.7}
-                  opacity={isFocus ? 0.95 : 0.55}
+                  strokeWidth={isFocus ? 0.7 : 0.35}
+                  opacity={isFocus ? 0.9 : 0.5}
                   className="cnx-ring"
                   style={{
                     animationDuration: `${n.duration}s`,
@@ -293,20 +290,22 @@ export const Connectome = ({ analysis }) => {
                   cx={n.x} cy={n.y} r={baseR}
                   fill={n.color}
                   filter="url(#cnx-soft)"
-                  opacity={0.9}
+                  opacity={0.95}
                 />
                 <circle
-                  cx={n.x} cy={n.y} r={baseR * 0.55}
+                  cx={n.x} cy={n.y} r={baseR * 0.45}
                   fill="#FFFFFF"
                   opacity={isFocus ? 1 : 0.85}
                 />
+                {/* Hit-area expander for tiny neurons */}
+                <circle cx={n.x} cy={n.y} r={baseR + 4} fill="transparent" />
                 {/* Ripple wave on fire */}
                 {firingId === n.id && (
                   <circle
                     cx={n.x} cy={n.y} r={baseR}
                     fill="none"
                     stroke={n.color}
-                    strokeWidth="1.5"
+                    strokeWidth="0.8"
                     className="cnx-ripple"
                   />
                 )}
