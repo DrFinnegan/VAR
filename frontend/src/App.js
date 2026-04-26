@@ -28,6 +28,7 @@ import TrainingLibraryPage from "./TrainingLibraryPage";
 import { exportAnalysisPDF } from "./utils/pdfExport";
 import { Connectome } from "./components/Connectome";
 import { OctonBrainLogo } from "./components/OctonBrainLogo";
+import { SystemHealthPip } from "./components/SystemHealthPip";
 import { ConfidenceScore, CopyButton, CurtainSection } from "./components/OctonAnalysisParts";
 import OctonVoiceWidget from "./components/OctonVoiceWidget";
 
@@ -338,10 +339,11 @@ const Sidebar = () => {
             <div className="absolute inset-0 bg-[#00E5FF]/15 rounded-full blur-md" />
             <OctonBrainLogo size={42} />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <h1 className="font-heading font-black text-white text-base tracking-tighter leading-none" style={{ textShadow: "0 0 10px #00E5FF33" }}>OCTON VAR</h1>
             <p className="text-[8px] font-mono text-[#00E5FF]/70 tracking-[0.2em] mt-1">NEOCORTEX · v2.1</p>
           </div>
+          <SystemHealthPip />
         </div>
       </div>
 
