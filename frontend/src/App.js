@@ -1625,6 +1625,12 @@ const LiveVARPage = () => {
     try {
       const res = await axios.post(`${API}/incidents`, newIncident);
       toast.success("OCTON analysis complete!");
+      // Surface any storage outage warnings so the operator knows visual evidence
+      // wasn't archived (the analysis still ran on the in-memory frame).
+      const warnings = res.data?.storage_warnings || [];
+      warnings.forEach(w => {
+        toast.warning(w.message, { duration: 8000 });
+      });
       setSelectedIncident(res.data);
       setShowNewIncident(false);
       setNewIncident({ incident_type: "foul", description: "", timestamp_in_match: "", team_involved: "", player_involved: "", image_base64: null, video_base64: null });

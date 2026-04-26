@@ -38,18 +38,43 @@ def init_storage():
         return None
 
 
-def put_object(path: str, data: bytes, content_type: str) -> dict:
+def put_object(path: str, data: bytes, content_type: str, max_retries: int = 2) -> dict:
+    """Upload a blob to Emergent Object Storage with simple exponential-backoff retry
+    for transient upstream errors (5xx). Raises after `max_retries + 1` attempts."""
     key = init_storage()
     if not key:
         raise Exception("Storage not initialized")
-    resp = requests.put(
-        f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key, "Content-Type": content_type},
-        data=data,
-        timeout=120,
-    )
-    resp.raise_for_status()
-    return resp.json()
+    last_exc = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = requests.put(
+                f"{STORAGE_URL}/objects/{path}",
+                headers={"X-Storage-Key": key, "Content-Type": content_type},
+                data=data,
+                timeout=120,
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except requests.HTTPError as e:
+            status = getattr(e.response, "status_code", 0)
+            last_exc = e
+            # Only retry on transient upstream failures (5xx, 408, 429)
+            if status in (408, 429) or 500 <= status < 600:
+                if attempt < max_retries:
+                    import time
+                    time.sleep(0.6 * (2 ** attempt))  # 0.6s, 1.2s, 2.4s
+                    continue
+            raise
+        except (requests.ConnectionError, requests.Timeout) as e:
+            last_exc = e
+            if attempt < max_retries:
+                import time
+                time.sleep(0.6 * (2 ** attempt))
+                continue
+            raise
+    if last_exc:
+        raise last_exc
+    raise Exception("put_object failed without recorded exception")
 
 
 def get_object(path: str):

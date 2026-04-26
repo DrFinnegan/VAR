@@ -299,6 +299,7 @@ async def create_incident(data: IncidentCreate, request: Request):
     # Handle image upload to storage
     storage_path = None
     image_b64 = data.image_base64
+    storage_warnings = []
     if image_b64:
         try:
             user_id = user.get("_id", "anonymous") if user else "anonymous"
@@ -308,6 +309,10 @@ async def create_incident(data: IncidentCreate, request: Request):
             storage_path = path
         except Exception as e:
             logger.warning(f"Image upload failed: {e}")
+            storage_warnings.append({
+                "type": "image_storage_unavailable",
+                "message": "Visual evidence storage upstream is currently unavailable. Analysis ran on the in-memory image but the frame was not archived for replay.",
+            })
 
     # Handle video upload to storage + extract a representative frame for AI vision
     video_storage_path = None
@@ -321,6 +326,10 @@ async def create_incident(data: IncidentCreate, request: Request):
             video_storage_path = vpath
         except Exception as e:
             logger.warning(f"Video upload failed: {e}")
+            storage_warnings.append({
+                "type": "video_storage_unavailable",
+                "message": "Video storage upstream is currently unavailable. A frame was extracted in memory for analysis but the video clip was not archived.",
+            })
 
     # If no image was provided but we have a video, extract a still frame
     # so the Neo Cortex vision pathway has visual evidence to reason about.
@@ -363,6 +372,7 @@ async def create_incident(data: IncidentCreate, request: Request):
         "created_by": user.get("_id") if user else None,
         "created_at": now,
         "updated_at": now,
+        "storage_warnings": storage_warnings,
     }
 
     await db.incidents.insert_one(incident_doc)
