@@ -45,9 +45,15 @@ export const BrainPathway = ({ analysis }) => {
       {open && (
         <div
           className="relative border-t border-white/[0.06]"
-          style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1737505599159-5ffc1dcbc08f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MjJ8MHwxfHNlYXJjaHwxfHxuZXVyYWwlMjBuZXR3b3JrJTIwYWJzdHJhY3QlMjBkYXRhfGVufDB8fHx8MTc3Njg2Nzk2NHww&ixlib=rb-4.1.0&q=85)', backgroundSize: 'cover', backgroundPosition: 'center' }}
+          style={{
+            backgroundImage: 'url(https://images.unsplash.com/photo-1559757148-5c350d0d3c56?auto=format&fit=crop&w=1600&q=70)',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
         >
-          <div className="absolute inset-0 bg-black/88" />
+          {/* Heavy dim — keep the brain just barely visible as ambient texture */}
+          <div className="absolute inset-0 bg-black/[0.94]" />
+          <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at center, rgba(0,0,0,0.55) 0%, rgba(5,5,5,0.92) 100%)" }} />
 
           <div className="relative z-10 p-4 octon-fade-in">
             <div className="flex items-center justify-end mb-2">
