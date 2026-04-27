@@ -122,7 +122,7 @@ export const Connectome = ({ analysis }) => {
 
   const fire = useCallback((id) => {
     setFiringId(id);
-    setTimeout(() => setFiringId(cur => (cur === id ? null : cur)), 1800);
+    setTimeout(() => setFiringId(cur => (cur === id ? null : cur)), 2400);
   }, []);
 
   // Neighbour resolver for ripple + edge-highlight
@@ -138,6 +138,21 @@ export const Connectome = ({ analysis }) => {
 
   const activeIds = neighboursOf(firingId || hoverId);
   const focusNeuron = allNeurons.find(n => n.id === (firingId || hoverId));
+
+  // ── Trunk synaptic link: Hippocampus ↔ Neo Cortex ──
+  // When the user fires any neuron, draw a prominent data-transfer trunk
+  // spanning the two cortices. Source/target Y is anchored to the fired
+  // neuron's column row (so the link visually originates from where the
+  // user clicked); if a Bind/lateral node was clicked, we use the canvas
+  // mid-line so the trunk reads as a brain-wide signal.
+  const firingNeuron = allNeurons.find(n => n.id === firingId);
+  const trunkY = firingNeuron
+    ? (firingNeuron.role === "lateral" ? 105 : firingNeuron.y)
+    : 105;
+  const trunkActive = !!firingId;
+  // Direction always reads left → right (Hipp → Neo) regardless of which
+  // side the operator clicked, because that's the brain's signal flow.
+  const trunkPath = `M 22 ${trunkY} C 90 ${trunkY - 18}, 210 ${trunkY + 18}, 278 ${trunkY}`;
 
   return (
     <div className="relative" data-testid="octon-connectome">
@@ -248,6 +263,72 @@ export const Connectome = ({ analysis }) => {
               </g>
             );
           })}
+
+          {/* ── Trunk Synaptic Link · Hippocampus → Neo Cortex ───────
+              Fires on neuron click: a wide glowing channel + 4 data
+              packets travelling left → right + endpoint pulse rings. */}
+          {trunkActive && (
+            <g pointerEvents="none" data-testid="trunk-synaptic-link">
+              {/* Outer glow (wide, soft) */}
+              <path
+                d={trunkPath}
+                stroke="#00E5FF"
+                strokeWidth="3.2"
+                fill="none"
+                opacity="0.18"
+                strokeLinecap="round"
+                style={{ filter: "blur(1.2px)" }}
+              />
+              {/* Mid lane */}
+              <path
+                d={trunkPath}
+                stroke="#7CF9FF"
+                strokeWidth="1.4"
+                fill="none"
+                opacity="0.55"
+                strokeLinecap="round"
+              />
+              {/* Inner bright core */}
+              <path
+                d={trunkPath}
+                stroke="#FFFFFF"
+                strokeWidth="0.55"
+                fill="none"
+                opacity="0.85"
+                strokeLinecap="round"
+              />
+
+              {/* Travelling data packets — 4 chevrons spaced along the
+                  path via SVG <animateMotion>. Total cycle 1.6s. */}
+              {[0, 0.4, 0.8, 1.2].map((delay, idx) => (
+                <g key={idx}>
+                  <circle r="1.4" fill="#FFFFFF" opacity="0.95">
+                    <animateMotion dur="1.6s" begin={`${delay}s`} repeatCount="indefinite" path={trunkPath} rotate="auto" />
+                    <animate attributeName="opacity" values="0;1;1;0" dur="1.6s" begin={`${delay}s`} repeatCount="indefinite" />
+                  </circle>
+                  <circle r="2.6" fill="none" stroke="#00E5FF" strokeWidth="0.4" opacity="0.7">
+                    <animateMotion dur="1.6s" begin={`${delay}s`} repeatCount="indefinite" path={trunkPath} />
+                    <animate attributeName="opacity" values="0;0.85;0.85;0" dur="1.6s" begin={`${delay}s`} repeatCount="indefinite" />
+                  </circle>
+                </g>
+              ))}
+
+              {/* Source pulse (Hippocampus side) */}
+              <circle cx="22" cy={trunkY} r="2.2" fill="none" stroke="#00FF88" strokeWidth="0.5" className="cnx-trunk-pulse" />
+              <circle cx="22" cy={trunkY} r="2.2" fill="#00FF88" opacity="0.9" />
+              {/* Target pulse (Neo Cortex side) */}
+              <circle cx="278" cy={trunkY} r="2.2" fill="none" stroke="#00E5FF" strokeWidth="0.5" className="cnx-trunk-pulse" style={{ animationDelay: "0.4s" }} />
+              <circle cx="278" cy={trunkY} r="2.2" fill="#00E5FF" opacity="0.9" />
+
+              {/* In-canvas readout label, centred above the trunk */}
+              <g transform={`translate(150, ${Math.max(14, trunkY - 18)})`}>
+                <rect x="-32" y="-5" width="64" height="9" fill="#00000088" stroke="#00E5FF55" strokeWidth="0.2" />
+                <text textAnchor="middle" fontSize="4.4" fontFamily="monospace" fill="#00E5FF" letterSpacing="1.4" y="1.7">
+                  DATA TRANSFER · HIPP → NEO
+                </text>
+              </g>
+            </g>
+          )}
 
           {/* Neurons */}
           {allNeurons.map(n => {

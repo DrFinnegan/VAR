@@ -224,6 +224,17 @@ body {
 }
 .octon-blink { animation: octonBlink 1.6s ease-in-out infinite; }
 
+/* ── Trunk synaptic link — endpoint pulse rings (Hipp & Neo) ── */
+@keyframes cnxTrunkPulse {
+  0%   { transform: scale(1);   opacity: 0.9; }
+  100% { transform: scale(3.2); opacity: 0;   }
+}
+.cnx-trunk-pulse {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: cnxTrunkPulse 1.4s ease-out infinite;
+}
+
 /* ── Military-spec dashboard polish ─────────────────── */
 
 /* Tactical grid backdrop (1px lines every 24px) */
