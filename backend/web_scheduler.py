@@ -38,15 +38,22 @@ MIN_REFRESH_HOURS = 20
 
 DEFAULT_FEEDS: List[Dict] = [
     # Public football news roots — article URLs extracted from section pages
-    # will typically not yield any VAR decisions, but admins can add specific
-    # match-report URLs themselves. These defaults are intentionally broad
-    # landing pages; the real value comes from admin-curated feeds.
+    # may not always yield VAR decisions, but the scheduler dedupes per-URL,
+    # so leaving these enabled keeps the precedent corpus growing daily.
+    # Admins can disable individual feeds from the Training Library UI.
     {"url": "https://www.theguardian.com/football",
-     "label": "The Guardian · Football", "enabled": False},
+     "label": "The Guardian · Football",          "enabled": True},
     {"url": "https://www.espn.com/soccer/",
-     "label": "ESPN Soccer",              "enabled": False},
+     "label": "ESPN Soccer",                       "enabled": True},
     {"url": "https://www.bbc.com/sport/football",
-     "label": "BBC Sport · Football",     "enabled": False},
+     "label": "BBC Sport · Football",              "enabled": True},
+    # VAR-specific authoritative sources — much higher hit-rate for our
+    # precedent extractor (Premier League officiating + dedicated VAR
+    # decision/explanation pages).
+    {"url": "https://www.premierleague.com/news",
+     "label": "Premier League · Official News",   "enabled": True},
+    {"url": "https://www.skysports.com/football/news",
+     "label": "Sky Sports · Football News",       "enabled": True},
 ]
 
 
@@ -77,11 +84,25 @@ async def update_config(db, patch: Dict) -> Dict:
 
 
 async def seed_default_feeds(db) -> int:
-    """Idempotently ensure the default-feeds list exists in Mongo."""
+    """Idempotently ensure the default-feeds list exists in Mongo.
+
+    Existing rows that have never been attempted (`last_attempted_at` is
+    None) AND match a default-feed URL get their `enabled` flag aligned
+    with the latest DEFAULT_FEEDS list, so a server restart can promote
+    previously-disabled defaults without trampling admin overrides on
+    feeds the scheduler has already touched.
+    """
     inserted = 0
     for f in DEFAULT_FEEDS:
         existing = await db.feeds.find_one({"url": f["url"]}, {"_id": 0})
         if existing:
+            wants_enabled = bool(f.get("enabled", False))
+            never_run = existing.get("last_attempted_at") is None
+            if never_run and bool(existing.get("enabled", False)) != wants_enabled:
+                await db.feeds.update_one(
+                    {"url": f["url"]},
+                    {"$set": {"enabled": wants_enabled, "label": f["label"]}},
+                )
             continue
         doc = {
             "id": str(uuid.uuid4()),

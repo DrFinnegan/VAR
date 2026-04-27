@@ -106,22 +106,48 @@ async def retrieve_precedents(
 
 
 def compute_confidence_uplift(precedents: List[Dict]) -> Dict:
-    """Return a transparent, capped uplift so the badge can audit the boost."""
+    """Return a transparent, capped uplift so the badge can audit the boost.
+
+    Updated 2026-02 — consensus-aware uplift:
+      • Top match drives baseline ( top_sim × 40 )
+      • Each supporting strong-match (>= 0.10) adds +2 %
+      • +3 % consensus bonus when ≥ 3 strong matches all agree on the same
+        canonical decision (read from the literal `correct_decision` first
+        word — penalty / red / yellow / offside / no-handball / etc.)
+      • Cap raised from 20 → 25 % to reflect the larger seeded corpus.
+    """
     if not precedents:
-        return {"uplift": 0.0, "strong_matches": 0, "avg_similarity": 0.0}
+        return {"uplift": 0.0, "strong_matches": 0, "avg_similarity": 0.0, "consensus": False}
     strong = [p for p in precedents if p["similarity"] >= 0.10]
     if not strong:
-        return {"uplift": 0.0, "strong_matches": 0, "avg_similarity": 0.0}
+        return {"uplift": 0.0, "strong_matches": 0, "avg_similarity": 0.0, "consensus": False}
     top_sim = max(p["similarity"] for p in strong)
     avg_sim = sum(p["similarity"] for p in strong) / len(strong)
-    # Quality-weighted uplift: top match drives it, supporting cases add a small bonus.
-    # Example: top 0.35 with 3 strong matches → min(20, 14 + 4) = 18 %
+
+    # Consensus detection — 3+ strong precedents whose `correct_decision`
+    # share the same head-token (case-insensitive) signal a textbook
+    # application of law. Adds a +3 % uplift bonus.
+    consensus = False
+    if len(strong) >= 3:
+        heads = []
+        for p in strong:
+            d = (p.get("correct_decision") or "").strip().lower()
+            if not d:
+                continue
+            head = d.split()[0]
+            heads.append(head)
+        if heads and heads.count(heads[0]) >= max(3, int(0.66 * len(heads))):
+            consensus = True
+
     raw = top_sim * 40.0 + (len(strong) - 1) * 2.0
-    uplift = round(max(0.0, min(20.0, raw)), 1)
+    if consensus:
+        raw += 3.0
+    uplift = round(max(0.0, min(25.0, raw)), 1)
     return {
         "uplift": uplift,
         "strong_matches": len(strong),
         "avg_similarity": round(avg_sim, 3),
+        "consensus": consensus,
     }
 
 
