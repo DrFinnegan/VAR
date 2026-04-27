@@ -1,0 +1,54 @@
+{
+  "summary": "Post-refactor regression testing of OCTON VAR completed. App.js split into pages/components/contexts/hooks/lib compiles cleanly and every tested flow works identically to the pre-refactor app. Admin login → Live VAR dashboard → DecisionTicker, stats cards, VideoStage with stadium-fallback IMG + 'MEDIA OFFLINE · STADIUM FALLBACK' badge, confidence ring, BrainPathway, Connectome cloud-burst, COMPARE mode, Annotation toolbar, reanalyze/export-pdf/confirm/override, all sidebar routes (Live VAR, History, Matches, Training, Analytics, Feedback, Settings), OctonVoiceWidget, and logout ALL confirmed rendering and interactive. SystemHealthPip shows green 'SYS · ONLINE' and popover exposes Storage/LLM/Scheduler rows (WS connects — logs show 'WS connected. Active: 5').",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "AnalyticsPage / Settings — ResponsiveContainer warnings on first paint",
+        "issues": ["Recharts console warning: 'The width(-1) and height(-1) of chart should be greater than 0' — container measured before layout settles. Charts render correctly after layout, so cosmetic only. Consider adding minHeight on ResponsiveContainer wrapper or deferring chart render until container is measured."]
+      }
+    ]
+  },
+  "passed_tests": [
+    "Login admin@octonvar.com → lands on / (Live VAR)",
+    "DecisionTicker renders with LIVE VERDICTS + rotating verdicts",
+    "Stats cards: TOTAL INCIDENTS 77, AVG CONFIDENCE 63.6%, AVG DECISION TIME 20.4s, ACCURACY RATE 92.2%",
+    "VideoStage stadium fallback IMG visible with '⚠ MEDIA OFFLINE' badge (seeded incidents have stale storage paths as expected)",
+    "OCTON Analysis panel: FINAL CONFIDENCE 60.0% ring, Suggested Decision, REASONING / NEO CORTEX / KEY FACTORS collapsibles, CONFIRM + OVERTURN buttons",
+    "BrainPathway renders with 'expand connectome' toggle → Connectome SVG opens (203 circles, 108 lines/rays)",
+    "Connectome: cloud-burst rays/rings appear on neuron click; SVG is frameless (no blue border — verified via screenshot)",
+    "SystemHealthPip green 'SYS · ONLINE' visible in top-left; popover shows Storage/LLM/Scheduler rows; WS connection active (backend logs confirm)",
+    "VideoStage controls: play-pause-button, step-back-1, step-forward-1, step-back-10, step-forward-10, speed-selector (0.25x/0.5x/1x/2x/4x) all present (scrubber has data-testid='replay-scrubber-track')",
+    "AnnotationToolbar: tool-line, tool-circle, tool-marker, tool-formation, tool-offside-line, color-picker, annotation-undo, annotation-clear, annotation-export all present",
+    "DecisionComparisonMode: COMPARE button opens side-by-side BEFORE/AFTER panels with independent toolbars, TRAIL ON + EXPORT + close controls",
+    "OCTON Analysis: reanalyze-button, export-pdf-button, reasoning-curtain, confirm-decision-button, override-decision-button all wired",
+    "Sidebar navigation: nav-live-var, nav-incident-history, nav-matches, nav-training-library, nav-var-analytics, nav-ai-feedback, nav-settings all route without blank screens or runtime errors",
+    "OctonVoiceWidget 'TALK TO OCTON VAR' pill visible on right side",
+    "Logout button → redirects to /login",
+    "No pageerror events fired; console only shows benign 401s on initial /api/auth/me (pre-login) and dompurify source-map warnings (pre-existing)"
+  ],
+  "test_report_links": ["/app/test_reports/iteration_8.json"],
+  "action_items": [
+    "(LOW/cosmetic) Suppress the initial recharts ResponsiveContainer 'width(-1) height(-1)' warnings by giving the chart wrapper an explicit minHeight, or gate the chart mount behind a measured-size effect. Charts render fine — this is just log noise.",
+    "(OPTIONAL) Consider aliasing data-testid='play-pause-button' → 'play-pause' and exposing data-testid='scrubber' on the scrubber container if the product spec expects those shorter names; current names work but differ from the review-request spec."
+  ],
+  "critical_code_review_comments": [
+    "Refactor is clean: App.js went from 2828 → ~572 lines, extracted modules compile cleanly (webpack 0 errors, only pre-existing dompurify source-map warnings).",
+    "No broken imports detected across LiveVARPage, MatchesPage, AnalyticsPage, VideoStage, AnnotationCanvas, AnnotationToolbar, DecisionTicker, DecisionComparisonMode, BrainPathway, Badges, Connectome, SystemHealthPip, AuthContext, SelectedIncidentContext, useWebSocket, lib/api, lib/config.",
+    "WebSocket subscription in SystemHealthPip is working — backend logs show multiple WS connections from the same client session, and the pip renders green with popover opening on click. Initial transient 'WebSocket closed before the connection is established' warnings are normal React strict-mode double-mount artifacts and self-heal.",
+    "Stadium fallback feature verified — 'MEDIA OFFLINE' badge appears exactly where expected when media paths are stale.",
+    "Connectome is frameless (no blue border wrapper); cloud-burst animation present (radiating lines + wave rings in SVG)."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "not tested (frontend-only run as requested)", "frontend": "100% of requested flows working" },
+  "test_credentials": "admin@octonvar.com / OctonAdmin2026! (from /app/memory/test_credentials.md — works, cookie auth)",
+  "seed_data_creation": "None — used existing seeded incidents (77 incidents already present).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Refactor verified green. The dompurify source-map warnings and initial recharts width(-1) warnings are pre-existing and cosmetic. Admin cookie-auth login works end-to-end. If revisiting: use data-testid='play-pause-button' (not 'play-pause') and data-testid='replay-scrubber-track' (not 'scrubber'). Connectome opens via data-testid='expand-connectome' button inside BrainPathway. SystemHealthPip data-testid='system-health-pip'. Backend WebSocket logs /api/ws show active connections from pip + ticker + live sync."
+}
