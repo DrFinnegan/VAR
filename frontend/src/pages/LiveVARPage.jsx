@@ -37,6 +37,7 @@ import { VideoStage } from "../components/VideoStage";
 import { DecisionComparisonMode } from "../components/DecisionComparisonMode";
 import { CameraAngleUploader, cameraAnglesToPayload } from "../components/CameraAngleUploader";
 import ShareableVerdictCard from "../components/ShareableVerdictCard";
+import { BoostConfidenceChip } from "../components/BoostConfidenceChip";
 
 export const LiveVARPage = () => {
   const { user } = useAuth();
@@ -496,6 +497,13 @@ export const LiveVARPage = () => {
                       <Share2 className="w-3.5 h-3.5" />
                       <span className="text-[9px] font-mono tracking-[0.15em]">SHARE</span>
                     </Button>
+                    <BoostConfidenceChip
+                      incident={selectedIncident}
+                      onBoosted={(updated) => {
+                        setSelectedIncident(updated);
+                        setIncidents((prev) => prev.map((i) => i.id === updated.id ? updated : i));
+                      }}
+                    />
                     {["confirmed", "overturned"].includes(selectedIncident?.decision_status) && (
                       <Button variant="ghost" size="sm" onClick={async () => {
                         try {

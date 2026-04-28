@@ -16,4 +16,5 @@ from . import (  # noqa: F401
     seed,
     dashboards,
     system_config,
+    boost,
 )
