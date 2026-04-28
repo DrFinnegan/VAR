@@ -15,6 +15,7 @@ import { Toaster, toast } from "sonner";
 import {
   Video, History, BarChart3, Settings, BookOpen, Brain, Trophy, Users,
   LogOut, LogIn, UserPlus, ThumbsUp, ThumbsDown, Lock, ArrowRight, Zap,
+  Radio, Award,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./components/ui/card";
@@ -41,6 +42,9 @@ import TrainingLibraryPage from "./TrainingLibraryPage";
 import { LiveVARPage } from "./pages/LiveVARPage";
 import { MatchesPage } from "./pages/MatchesPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
+import LiveMatchWallPage from "./pages/LiveMatchWallPage";
+import MobileOFRPage from "./pages/MobileOFRPage";
+import { RefereesIndexPage, RefereeScorecardPage } from "./pages/RefereeScorecardPage";
 
 // ── Voice widget mounting helper ──────────────────────────
 function MountedVoiceWidget() {
@@ -191,10 +195,12 @@ const Sidebar = () => {
 
   const navItems = [
     { path: "/", icon: Video, label: "Live VAR", roles: null, section: "var" },
+    { path: "/match-wall", icon: Radio, label: "Match Wall", roles: null, section: "var" },
     { path: "/history", icon: History, label: "Incident History", roles: null, section: "var" },
     { path: "/matches", icon: Trophy, label: "Matches", roles: ["admin"], section: "var" },
     { path: "/training", icon: BookOpen, label: "Training Library", roles: ["admin"], section: "var" },
     { path: "/analytics", icon: BarChart3, label: "VAR Analytics", roles: null, section: "system" },
+    { path: "/referees", icon: Award, label: "Referee Scorecards", roles: null, section: "system" },
     { path: "/feedback", icon: Brain, label: "AI Feedback", roles: ["admin", "var_operator"], section: "system" },
     { path: "/settings", icon: Settings, label: "Settings", roles: null, section: "system" },
   ].filter(item => !item.roles || (user && item.roles.includes(user.role)));
@@ -543,16 +549,20 @@ function App() {
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/ofr/:incidentId" element={<ProtectedRoute><MobileOFRPage /></ProtectedRoute>} />
               <Route path="/*" element={
                 <ProtectedRoute>
                   <div className="flex">
                     <Sidebar />
                     <Routes>
                       <Route path="/" element={<LiveVARPage />} />
+                      <Route path="/match-wall" element={<LiveMatchWallPage />} />
                       <Route path="/history" element={<HistoryPage />} />
                       <Route path="/matches" element={<ProtectedRoute roles={["admin"]}><MatchesPage /></ProtectedRoute>} />
                       <Route path="/training" element={<ProtectedRoute roles={["admin"]}><TrainingLibraryPage /></ProtectedRoute>} />
                       <Route path="/analytics" element={<AnalyticsPage />} />
+                      <Route path="/referees" element={<RefereesIndexPage />} />
+                      <Route path="/referees/:refereeId" element={<RefereeScorecardPage />} />
                       <Route path="/feedback" element={<ProtectedRoute roles={["admin", "var_operator"]}><FeedbackPage /></ProtectedRoute>} />
                       <Route path="/settings" element={<SettingsPage />} />
                     </Routes>

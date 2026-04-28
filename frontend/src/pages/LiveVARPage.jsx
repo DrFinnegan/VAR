@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import {
   Video, AlertTriangle, CheckCircle2, XCircle, Clock, RefreshCw, Upload,
   Brain, Target, Wifi, WifiOff, Image as ImageIcon, History, FileText,
-  Sparkles, BookOpen, GitBranch, Columns, Scale,
+  Sparkles, BookOpen, GitBranch, Columns, Scale, Share2,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -36,11 +36,13 @@ import { BrainPathway } from "../components/BrainPathway";
 import { VideoStage } from "../components/VideoStage";
 import { DecisionComparisonMode } from "../components/DecisionComparisonMode";
 import { CameraAngleUploader, cameraAnglesToPayload } from "../components/CameraAngleUploader";
+import ShareableVerdictCard from "../components/ShareableVerdictCard";
 
 export const LiveVARPage = () => {
   const { user } = useAuth();
   const [incidents, setIncidents] = useState([]);
   const [selectedIncident, setSelectedIncident] = useState(null);
+  const [shareOpen, setShareOpen] = useState(false);
   const { setId: setGlobalSelectedId, voiceActionHandler } = useSelectedIncidentId();
   useEffect(() => {
     setGlobalSelectedId(selectedIncident?.id || null);
@@ -443,6 +445,16 @@ export const LiveVARPage = () => {
                       <FileText className="w-3.5 h-3.5" />
                       <span className="text-[9px] font-mono tracking-[0.15em]">PDF</span>
                     </Button>
+                    <Button
+                      variant="ghost" size="sm"
+                      onClick={() => setShareOpen(true)}
+                      className="text-[#00E5FF] hover:text-[#00E5FF] hover:bg-[#00E5FF]/10 h-7 px-2 p-0 border border-[#00E5FF]/30 hover:border-[#00E5FF]/60 rounded-none transition-all flex items-center gap-1"
+                      data-testid="share-verdict-button"
+                      title="Share a referee-ready summary or verdict PNG"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span className="text-[9px] font-mono tracking-[0.15em]">SHARE</span>
+                    </Button>
                     {["confirmed", "overturned"].includes(selectedIncident?.decision_status) && (
                       <Button variant="ghost" size="sm" onClick={async () => {
                         try {
@@ -766,6 +778,12 @@ export const LiveVARPage = () => {
           </div>
         </div>
       </div>
+
+      <ShareableVerdictCard
+        incident={selectedIncident}
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+      />
     </div>
   );
 };

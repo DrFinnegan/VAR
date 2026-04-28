@@ -14,4 +14,5 @@ from . import (  # noqa: F401
     voice_routes,
     system,
     seed,
+    dashboards,
 )
