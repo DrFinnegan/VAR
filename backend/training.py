@@ -139,10 +139,10 @@ def compute_confidence_uplift(precedents: List[Dict]) -> Dict:
         if heads and heads.count(heads[0]) >= max(3, int(0.66 * len(heads))):
             consensus = True
 
-    raw = top_sim * 40.0 + (len(strong) - 1) * 2.0
+    raw = top_sim * 50.0 + (len(strong) - 1) * 2.5
     if consensus:
-        raw += 3.0
-    uplift = round(max(0.0, min(25.0, raw)), 1)
+        raw += 4.0
+    uplift = round(max(0.0, min(30.0, raw)), 1)
     return {
         "uplift": uplift,
         "strong_matches": len(strong),

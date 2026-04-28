@@ -563,13 +563,13 @@ class NeoCortexAnalyzer:
                     "When the operator's description matches a verbatim IFAB clause from the LAW REFERENCE "
                     "block (handball with arm above shoulder, attacker offside with daylight, hold/push inside "
                     "the area, DOGSO 4-criteria checklist met, two-footed lunge, etc.), you are NOT making a "
-                    "subjective call — you are applying settled law. Confidence MUST be >= 85 in these cases. "
+                    "subjective call — you are applying settled law. Confidence MUST be >= 88 in these cases. "
                     "Hedging to 60-70 on a textbook application is WRONG and dilutes referee trust in the system.\n"
-                    "  • Daylight offside (>30 cm clear) → 90+\n"
-                    "  • Arm extended above shoulder + ball contact → 88+\n"
-                    "  • Trip/hold/push inside area, no ball contact → 90+\n"
-                    "  • Stud-up over-the-top tackle → 95+\n"
-                    "  • Ball wholly over goal line on synced multi-cam → 95+\n"
+                    "  • Daylight offside (>30 cm clear) → 92+\n"
+                    "  • Arm extended above shoulder + ball contact → 90+\n"
+                    "  • Trip/hold/push inside area, no ball contact → 92+\n"
+                    "  • Stud-up over-the-top tackle → 96+\n"
+                    "  • Ball wholly over goal line on synced multi-cam → 96+\n"
                     "  • Contact with match official → 95+ (and floored at 92 by engine)\n\n"
                     "DECISION ACCURACY GUIDELINES:\n"
                     "- For OFFSIDE: focus on the exact moment the ball is played, not when received. "
@@ -619,7 +619,7 @@ class NeoCortexAnalyzer:
                     '  ]\n'
                     "}"
                 ),
-            ).with_model("openai", "gpt-5.2")
+            ).with_model("openai", "gpt-5.2" if (has_image or extra_images_b64 or incident_type in ("foul", "other")) else "gpt-4o")
 
             prompt = (
                 f"OCTON VAR FORENSIC ANALYSIS:\n\n"
@@ -975,21 +975,29 @@ class OctonBrainEngine:
         weighted_confidence = round(neo_conf * neo_weight + hip_conf * hip_weight, 1)
 
         # ── Hippocampus agreement bonus ──
-        # Separate transparent additive boost up to +6 % when the fast pathway
+        # Separate transparent additive boost up to +8 % when the fast pathway
         # both (a) has reasonable confidence AND (b) agrees with the Neo Cortex verdict.
         # Scales quadratically with Hippocampus confidence above 50 %.
         if divergence <= 20 and hip_conf >= 55:
-            hip_bonus = round(((hip_conf - 50) / 40.0) ** 1.1 * 6.0, 1)  # 0..6
+            hip_bonus = round(((hip_conf - 50) / 40.0) ** 1.1 * 8.0, 1)  # 0..8
         elif divergence <= 30 and hip_conf >= 50:
-            hip_bonus = round(((hip_conf - 50) / 40.0) ** 1.1 * 3.5, 1)  # 0..3.5
+            hip_bonus = round(((hip_conf - 50) / 40.0) ** 1.1 * 4.5, 1)  # 0..4.5
         else:
             hip_bonus = 0.0
-        hip_bonus = max(0.0, min(6.0, hip_bonus))
+        hip_bonus = max(0.0, min(8.0, hip_bonus))
 
-        # Apply precedent uplift + hippocampus bonus, both transparent & capped
+        # ── Strong dual-pathway agreement bonus ──
+        # When BOTH pathways are confident (>=70) AND nearly aligned (delta <=8)
+        # this is the "gut-check + deliberation both shout YES" signal —
+        # add an extra +3 % independent of the uplift/hip_bonus channels.
+        strong_agreement_bonus = 0.0
+        if hip_conf >= 70 and neo_conf >= 70 and divergence <= 8:
+            strong_agreement_bonus = 3.0
+
+        # Apply precedent uplift + hippocampus bonus + agreement bonus, all transparent & capped
         base_confidence = weighted_confidence
         final_confidence = round(
-            min(99.0, base_confidence + uplift_info["uplift"] + hip_bonus), 1
+            min(99.0, base_confidence + uplift_info["uplift"] + hip_bonus + strong_agreement_bonus), 1
         )
 
         # ── Critical-trigger floor ──
@@ -1039,6 +1047,7 @@ class OctonBrainEngine:
             "precedents_count": len(precedents),
             "confidence_uplift": uplift_info["uplift"],
             "hippocampus_bonus": hip_bonus,
+            "strong_agreement_bonus": strong_agreement_bonus,
             "precedent_strong_matches": uplift_info["strong_matches"],
             "precedent_avg_similarity": uplift_info["avg_similarity"],
             "precedent_consensus": uplift_info.get("consensus", False),
