@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import {
   BookOpen, Plus, Trash2, Upload, Sparkles, RefreshCw, Database,
   Search, Film, Image as ImageIcon, Check, Loader2, Globe, ExternalLink,
-  Clock, Power, Zap, TrendingUp
+  Clock, Power, Zap, TrendingUp, Scale
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -34,6 +34,7 @@ export default function TrainingLibraryPage() {
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState("all");
   const [search, setSearch] = useState("");
+  const [clauseFilter, setClauseFilter] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
@@ -144,6 +145,7 @@ export default function TrainingLibraryPage() {
       const params = {};
       if (filterType !== "all") params.incident_type = filterType;
       if (search) params.q = search;
+      if (clauseFilter) params.law_q = clauseFilter;
       const [listRes, statsRes] = await Promise.all([
         axios.get(`${API}/training/cases`, { params, withCredentials: true }),
         axios.get(`${API}/training/stats`, { withCredentials: true }),
@@ -155,7 +157,7 @@ export default function TrainingLibraryPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterType, search]);
+  }, [filterType, search, clauseFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -665,6 +667,53 @@ export default function TrainingLibraryPage() {
         <Button variant="ghost" onClick={load} className="h-9 w-9 p-0 text-gray-500 hover:text-white border border-white/[0.08] rounded-none"><RefreshCw className="w-3.5 h-3.5" /></Button>
       </div>
 
+      {/* IFAB Clause filter row */}
+      <div className="flex items-center gap-2 flex-wrap" data-testid="clause-filter-bar">
+        <span className="text-[9px] font-mono uppercase tracking-[0.22em] text-gray-500 flex items-center gap-1.5">
+          <Scale className="w-3 h-3 text-[#FFB800]" />
+          IFAB CLAUSE
+        </span>
+        <div className="relative flex-1 min-w-[180px] max-w-sm">
+          <Input
+            value={clauseFilter}
+            onChange={e => setClauseFilter(e.target.value)}
+            placeholder='e.g. "Law 12", "DOGSO", "encroachment", "APP"'
+            className="bg-[#0A0A0A] border-[#FFB800]/[0.18] hover:border-[#FFB800]/40 focus-visible:border-[#FFB800]/60 rounded-none pl-3 text-[#FFD466] text-xs font-mono placeholder:text-gray-600 h-8"
+            data-testid="clause-filter-input"
+          />
+          {clauseFilter && (
+            <button
+              onClick={() => setClauseFilter("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-[#FFB800] text-[10px] font-mono"
+              data-testid="clause-filter-clear"
+              title="Clear clause filter"
+            >×</button>
+          )}
+        </div>
+        {[
+          ["Law 10",  "goal-line"],
+          ["Law 11",  "offside"],
+          ["Law 12",  "fouls / handball / red"],
+          ["Law 14",  "penalty"],
+          ["DOGSO",   "denying obvious goal"],
+          ["APP",     "attacking possession"],
+          ["SFP",     "serious foul play"],
+        ].map(([k, hint]) => {
+          const active = clauseFilter.toLowerCase() === k.toLowerCase();
+          return (
+            <button
+              key={k}
+              onClick={() => setClauseFilter(active ? "" : k)}
+              className={`text-[9px] font-mono px-2 py-1 border transition-all ${active ? 'bg-[#FFB800]/15 text-[#FFB800] border-[#FFB800]/50' : 'text-gray-500 border-white/[0.08] hover:text-[#FFD466] hover:border-[#FFB800]/30'}`}
+              data-testid={`clause-preset-${k.replace(/\s+/g, '-').toLowerCase()}`}
+              title={`${k} — ${hint}`}
+            >
+              {k}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Cases table */}
       <div className="border border-white/[0.08] bg-[#0A0A0A]" data-testid="cases-table">
         <div className="px-4 py-2 flex items-center justify-between border-b border-white/[0.06]">
@@ -751,6 +800,19 @@ function CaseRow({ c, isUploading, onUpload, onDelete }) {
           </div>
           <p className="text-xs text-[#00FF88] mt-1 font-mono">→ {c.correct_decision}</p>
           <p className="text-xs text-gray-400 mt-1 leading-relaxed line-clamp-2">{c.rationale}</p>
+          {Array.isArray(c.law_references) && c.law_references.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1.5" data-testid={`law-refs-${c.id}`}>
+              {c.law_references.map((lr, i) => (
+                <span
+                  key={i}
+                  className="text-[9px] font-mono text-[#FFD466] bg-[#FFB800]/[0.06] px-1.5 py-0.5 border border-[#FFB800]/25"
+                  title={`IFAB clause: ${lr}`}
+                >
+                  <Scale className="inline w-2 h-2 mr-0.5 -mt-0.5" />{lr}
+                </span>
+              ))}
+            </div>
+          )}
           {allTags.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
               {allTags.map((t, i) => {

@@ -179,6 +179,35 @@ export function exportAnalysisPDF(incident, analysis, audit = null, opts = {}) {
     doc.text(metaBits.join("   ·   "), margin, y + 5);
   }
 
+  // ── IFAB Clause Cited (legal-grade traceability) ────────
+  // Renders directly under the incident meta row so any printed copy of
+  // the report carries the precise IFAB law/clause OCTON applied.
+  const citedClause = (analysis?.cited_clause || "").trim();
+  if (citedClause) {
+    const clauseY = y + 9.5;
+    const clauseBoxW = pageW - margin * 2 - 50; // leave room for the ring on the right
+    const clauseBoxH = 7;
+    doc.setFillColor(252, 247, 230);                // very pale amber wash
+    doc.setDrawColor(AMBER[0], AMBER[1], AMBER[2]);
+    doc.setLineWidth(0.25);
+    doc.rect(margin, clauseY, clauseBoxW, clauseBoxH, "FD");
+    // Vertical accent bar (amber) on the left edge to match the UI badge
+    doc.setFillColor(AMBER[0], AMBER[1], AMBER[2]);
+    doc.rect(margin, clauseY, 1.2, clauseBoxH, "F");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.setTextColor(AMBER[0], AMBER[1], AMBER[2]);
+    doc.text("IFAB CLAUSE CITED", margin + 3, clauseY + 2.6);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(80, 60, 0);
+    // jsPDF doesn't truncate, so cap to ~95 chars to keep it on one line
+    const safeClause = citedClause.length > 95 ? citedClause.slice(0, 92) + "…" : citedClause;
+    doc.text(safeClause, margin + 3, clauseY + 5.6);
+  }
+
   // ── Confidence Ring (right side of header zone) ─────────
   const ringCx = pageW - margin - 20;
   const ringCy = 50;
@@ -257,7 +286,9 @@ export function exportAnalysisPDF(incident, analysis, audit = null, opts = {}) {
   }
 
   // ── Decision block ──────────────────────────────────────
-  y = 48;
+  // Push the body down when the IFAB clause box is present so it doesn't
+  // collide with the amber strip in the header.
+  y = citedClause ? 52 : 48;
   sectionHeader(doc, margin, y, "Suggested Decision", CYAN);
   y += 5;
   doc.setFillColor(240, 250, 252);

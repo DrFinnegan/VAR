@@ -40,13 +40,18 @@ _MAX_TEXT_CHARS = 12000  # ~ 3k GPT tokens — well within the GPT-5.2 limit
 
 async def fetch_article_text(url: str) -> Dict:
     """Fetch a URL and return {title, text, fetched_at}. Raises on failure."""
+    # Wikipedia and a few publishers require a descriptive bot UA per their
+    # policy (https://meta.wikimedia.org/wiki/User-Agent_policy). We identify
+    # OCTON VAR explicitly and include a realistic browser-style fallback so
+    # we still pass anti-scrape checks elsewhere.
     headers = {
         "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "OctonVAR-LearningBot/2.1 (https://octonvar.com; contact=research@octonvar.com) "
+            "Mozilla/5.0 (compatible) httpx/0.27"
         ),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
     }
     async with httpx.AsyncClient(timeout=_FETCH_TIMEOUT, follow_redirects=True) as client:
         r = await client.get(url, headers=headers)

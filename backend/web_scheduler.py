@@ -57,6 +57,71 @@ DEFAULT_FEEDS: List[Dict] = [
 ]
 
 
+# ── Curated single-article URLs ─────────────────────────────────────────
+# Stable, encyclopedic / canonical resources that contain multiple unambiguous
+# VAR-reviewable decisions in a single page. The auto-extractor (see
+# web_learning.py — uses LLM with explicit "INCIDENT + FINAL OUTCOME" rule)
+# can usually pull 2-6 precedents per Wikipedia / IFAB / official-rules page.
+# These are added on every server boot via `seed_curated_articles()`; admins
+# can disable any individual entry from the Training Library UI.
+CURATED_ARTICLE_URLS: List[Dict] = [
+    {"url": "https://en.wikipedia.org/wiki/Video_assistant_referee",
+     "label": "Wikipedia · Video Assistant Referee (canonical reference)"},
+    {"url": "https://en.wikipedia.org/wiki/2018_FIFA_World_Cup_Final",
+     "label": "Wikipedia · 2018 World Cup Final (VAR penalty + handball precedent)"},
+    {"url": "https://en.wikipedia.org/wiki/2022_FIFA_World_Cup_Final",
+     "label": "Wikipedia · 2022 World Cup Final (multiple VAR reviews)"},
+    {"url": "https://en.wikipedia.org/wiki/Goal-line_technology",
+     "label": "Wikipedia · Goal-line Technology (Lampard 2010, Law 10)"},
+    {"url": "https://en.wikipedia.org/wiki/Hand_of_God_goal",
+     "label": "Wikipedia · Hand of God — handball-goal canonical precedent"},
+    {"url": "https://en.wikipedia.org/wiki/Luis_Su%C3%A1rez",
+     "label": "Wikipedia · Luis Suárez (handball-on-line + biting precedents)"},
+    {"url": "https://en.wikipedia.org/wiki/Diving_(association_football)",
+     "label": "Wikipedia · Simulation/Diving (Law 12 §3 examples)"},
+    {"url": "https://en.wikipedia.org/wiki/Offside_(association_football)",
+     "label": "Wikipedia · Offside (Law 11 — interfering, advantage, deliberate-play)"},
+    {"url": "https://en.wikipedia.org/wiki/Penalty_kick_(association_football)",
+     "label": "Wikipedia · Penalty Kick (Law 14 — encroachment, GK-line, retake)"},
+    {"url": "https://www.premierleague.com/var",
+     "label": "Premier League · Official VAR rules & decisions hub"},
+]
+
+
+async def seed_curated_articles(db) -> int:
+    """Idempotently seed the curated single-article URL list as feeds.
+
+    These are *enabled* by default (admin can flip off per-row in the UI).
+    Existing rows that have never been attempted get their label/enabled
+    flag aligned with the latest list — same idempotency contract as
+    `seed_default_feeds`.
+    """
+    inserted = 0
+    for f in CURATED_ARTICLE_URLS:
+        existing = await db.feeds.find_one({"url": f["url"]}, {"_id": 0})
+        if existing:
+            never_run = existing.get("last_attempted_at") is None
+            if never_run and not existing.get("enabled", False):
+                await db.feeds.update_one(
+                    {"url": f["url"]},
+                    {"$set": {"enabled": True, "label": f["label"]}},
+                )
+            continue
+        doc = {
+            "id": str(uuid.uuid4()),
+            "url": f["url"],
+            "label": f["label"],
+            "enabled": True,
+            "curated": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "last_attempted_at": None,
+            "last_inserted_count": 0,
+        }
+        await db.feeds.insert_one(doc.copy())
+        inserted += 1
+    return inserted
+
+
 # ── Config helpers ──────────────────────────────────────
 
 async def get_config(db) -> Dict:
@@ -223,6 +288,7 @@ async def start_scheduler(db) -> None:
     _db_ref = db
     cfg = await get_config(db)
     await seed_default_feeds(db)
+    await seed_curated_articles(db)
 
     if _scheduler and _scheduler.running:
         _scheduler.shutdown(wait=False)

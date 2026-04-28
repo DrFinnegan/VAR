@@ -1107,6 +1107,7 @@ async def create_training_case(data: TrainingCaseCreate, request: Request):
 async def list_training_cases(
     incident_type: Optional[str] = None,
     q: Optional[str] = None,
+    law_q: Optional[str] = None,
     limit: int = Query(100, ge=1, le=500),
 ):
     query: Dict = {}
@@ -1115,6 +1116,24 @@ async def list_training_cases(
     if q:
         rx = {"$regex": q, "$options": "i"}
         query["$or"] = [{"title": rx}, {"rationale": rx}, {"correct_decision": rx}]
+    if law_q:
+        # Match against the explicit `law_references` array OR free-text mentions
+        # in title / rationale / correct_decision (covers cases where the IFAB
+        # clause is mentioned only in prose, e.g. "Law 12 §1 — SFP").
+        lrx = {"$regex": law_q, "$options": "i"}
+        law_or = [
+            {"law_references": lrx},
+            {"title": lrx},
+            {"rationale": lrx},
+            {"correct_decision": lrx},
+        ]
+        if "$or" in query:
+            # Combine existing free-text $or with the law filter via $and so
+            # both filters must hit, not either-or.
+            existing_or = query.pop("$or")
+            query["$and"] = [{"$or": existing_or}, {"$or": law_or}]
+        else:
+            query["$or"] = law_or
     docs = await db.training_cases.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
     return docs
 
