@@ -4,7 +4,7 @@
  * the right-rail decision controls. Wires up the global voice-action
  * dispatcher so "Hey OCTON, confirm" can act on the selected incident.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
@@ -65,6 +65,43 @@ export const LiveVARPage = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []));
+
+  // ── Auto-OFR escalation toast ─────────────────────────────
+  // When the engine flags inter-angle disagreement (Δ ≥ 15%), nudge the
+  // operator to send the moment to the on-field monitor. We only fire
+  // once per selected incident to avoid toast spam.
+  const ofrFiredFor = useRef(new Set());
+  useEffect(() => {
+    const ana = selectedIncident?.ai_analysis;
+    if (!ana?.angle_disagreement || !selectedIncident?.id) return;
+    if (ofrFiredFor.current.has(selectedIncident.id)) return;
+    ofrFiredFor.current.add(selectedIncident.id);
+    const delta = Number(ana.angle_confidence_delta || 0).toFixed(1);
+    toast.warning(
+      `ANGLES DISAGREE · Δ ${delta}% — recommend OFR`,
+      {
+        duration: 12000,
+        description: "Camera-angle confidences diverge beyond the 15% clear-and-obvious threshold.",
+        action: {
+          label: "Send to On-Field Monitor",
+          onClick: async () => {
+            try {
+              const url = `${API}/incidents/${selectedIncident.id}/ofr-bookmark`;
+              await axios.post(url, {
+                reason: "angle_disagreement",
+                delta_pct: Number(ana.angle_confidence_delta || 0),
+                cited_clause: ana.cited_clause || null,
+                triggered_at: new Date().toISOString(),
+              }).catch(() => {/* endpoint optional — degrade silently */});
+              toast.success("OFR escalation queued — referee will be notified.");
+            } catch {
+              toast.error("Could not queue OFR escalation.");
+            }
+          },
+        },
+      }
+    );
+  }, [selectedIncident?.id, selectedIncident?.ai_analysis]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -351,7 +388,7 @@ export const LiveVARPage = () => {
           {showComparison ? (
             <DecisionComparisonMode incident={selectedIncident} onClose={() => setShowComparison(false)} />
           ) : (
-            <VideoStage incident={selectedIncident} onAnalyze={handleReanalyze} previewVideo={previewVideo} onActiveAngleChange={setActiveStageAngle} />
+            <VideoStage incident={selectedIncident} onAnalyze={handleReanalyze} previewVideo={previewVideo} onActiveAngleChange={setActiveStageAngle} angleAssessments={analysis?.angle_assessments || []} />
           )}
           {analysis && <BrainPathway analysis={analysis} />}
           <div className="border border-white/[0.08] bg-[#0A0A0A] p-4" data-testid="timeline-scrubber">
@@ -619,6 +656,59 @@ export const LiveVARPage = () => {
                             )}
                           </div>
                         ))}
+                      </div>
+                    </CurtainSection>
+                  )}
+                  {Array.isArray(analysis.angle_assessments) && analysis.angle_assessments.length > 0 && (
+                    <CurtainSection
+                      icon={Target}
+                      title="By-Angle Confidence"
+                      accent="#00E5FF"
+                      count={analysis.angle_assessments.length}
+                      defaultOpen={!!analysis.angle_disagreement}
+                      testId="angle-assessments-curtain"
+                    >
+                      <div className="space-y-1.5" data-testid="angle-assessments-rows">
+                        {(() => {
+                          const top = analysis.angle_assessments.reduce((b, c) => c.confidence > (b?.confidence ?? -1) ? c : b, null);
+                          return analysis.angle_assessments.map((aa, i) => {
+                            const isTop = top && aa.angle === top.angle && analysis.angle_assessments.length > 1;
+                            const col = aa.confidence >= 80 ? "#00FF88" : aa.confidence >= 55 ? "#00E5FF" : "#FFB800";
+                            return (
+                              <div
+                                key={aa.angle || i}
+                                className="flex items-center gap-2 px-2 py-1.5 border border-white/[0.06] bg-[#00E5FF]/[0.02] hover:bg-[#00E5FF]/[0.06] transition-colors"
+                                data-testid={`angle-row-${aa.angle}`}
+                              >
+                                <span className="text-[9px] font-mono uppercase tracking-[0.18em] text-gray-400 w-[80px] flex-none">
+                                  {(aa.angle || "").replace("_", " ")}
+                                </span>
+                                <div className="flex-1 h-1.5 bg-white/[0.06] relative overflow-hidden">
+                                  <div
+                                    className="absolute top-0 left-0 h-full transition-all"
+                                    style={{ width: `${Math.max(0, Math.min(100, aa.confidence))}%`, backgroundColor: col, boxShadow: `0 0 6px ${col}66` }}
+                                  />
+                                </div>
+                                <span className="text-[10px] font-mono font-bold tracking-tight w-9 text-right" style={{ color: col }}>
+                                  {aa.confidence.toFixed(0)}%
+                                </span>
+                                {isTop && (
+                                  <span className="text-[10px] text-[#FFD466] flex-none" title="Highest-weighted angle" style={{ filter: "drop-shadow(0 0 3px #FFD46688)" }}>★</span>
+                                )}
+                                {aa.decision && (
+                                  <span className="text-[9px] font-mono text-gray-500 truncate max-w-[140px]" title={aa.decision}>
+                                    {aa.decision}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()}
+                        {analysis.angle_disagreement && (
+                          <p className="text-[9px] font-mono text-[#FFB800] mt-1.5 leading-tight">
+                            ⚠ Δ {analysis.angle_confidence_delta?.toFixed?.(1)}% spread — angles disagree beyond the OFR threshold.
+                          </p>
+                        )}
                       </div>
                     </CurtainSection>
                   )}

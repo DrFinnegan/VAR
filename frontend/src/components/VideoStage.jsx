@@ -15,7 +15,7 @@ import { frameCaptureRef } from "../contexts/SelectedIncidentContext";
 import { AnnotationCanvas, ANNOTATION_TOOLS } from "./AnnotationCanvas";
 import { AnnotationToolbar } from "./AnnotationToolbar";
 
-export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, onSaveAnnotations, onActiveAngleChange }) => {
+export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, onSaveAnnotations, onActiveAngleChange, angleAssessments = [] }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(1847);
   const [totalFrames] = useState(3200);
@@ -350,11 +350,18 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
               />
             )}
             <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-[2px] bg-white/[0.08] z-10" data-testid="angle-grid-mosaic">
-            {["broadcast", "tactical", "tight", "goal_line"].map(angleKey => {
+            {(() => {
+              // Top-confidence angle (used to highlight the ring with a star)
+              const topAngle = angleAssessments.length > 0
+                ? angleAssessments.reduce((best, cur) => cur.confidence > (best?.confidence ?? -1) ? cur : best, null)
+                : null;
+              return ["broadcast", "tactical", "tight", "goal_line"].map(angleKey => {
               const entry = angles.find(a => a.angle === angleKey);
               const hasMedia = entry && (entry.storage_path || entry.video_storage_path);
               const tileImg = entry?.storage_path ? `${API}/files/${entry.storage_path}` : null;
               const tileVid = entry?.video_storage_path ? `${API}/files/${entry.video_storage_path}` : null;
+              const ass = angleAssessments.find(aa => aa.angle === angleKey);
+              const isTop = ass && topAngle && ass.angle === topAngle.angle && angleAssessments.length > 1;
               return (
                 <div key={angleKey} className="relative bg-black overflow-hidden" data-testid={`grid-tile-${angleKey}`}>
                   {tileVid ? (
@@ -381,10 +388,40 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
                   {hasMedia && entry?.has_video && (
                     <div className="absolute top-1 right-1 px-1 py-0.5 bg-black/75 text-[7px] font-mono text-[#00FF88] border border-[#00FF88]/40">CLIP</div>
                   )}
+                  {/* Confidence-by-angle mini ring (bottom-right). Only renders
+                      when Neo Cortex returned a per-angle assessment for this
+                      camera. Top-scoring angle gets a ★ glow + verdict tooltip. */}
+                  {ass && (
+                    <div
+                      className="absolute bottom-1.5 right-1.5 flex items-center gap-1 px-1 py-0.5 bg-black/80 backdrop-blur-sm border border-white/[0.12]"
+                      data-testid={`tile-conf-${angleKey}`}
+                      title={`${angleKey.replace("_"," ").toUpperCase()} — ${ass.confidence.toFixed(0)}%${ass.decision ? ' · ' + ass.decision : ''}${isTop ? '\n★ Highest-weighted angle' : ''}`}
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="9" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="2.5" />
+                        <circle
+                          cx="12" cy="12" r="9" fill="none"
+                          stroke={ass.confidence >= 80 ? "#00FF88" : ass.confidence >= 55 ? "#00E5FF" : "#FFB800"}
+                          strokeWidth="2.5"
+                          strokeDasharray={`${(ass.confidence / 100) * 56.5} 56.5`}
+                          strokeDashoffset="0"
+                          strokeLinecap="round"
+                          transform="rotate(-90 12 12)"
+                        />
+                      </svg>
+                      <span className={`text-[8px] font-mono leading-none ${ass.confidence >= 80 ? 'text-[#00FF88]' : ass.confidence >= 55 ? 'text-[#00E5FF]' : 'text-[#FFB800]'}`}>
+                        {ass.confidence.toFixed(0)}%
+                      </span>
+                      {isTop && (
+                        <span className="text-[10px] text-[#FFD466] -ml-0.5" style={{ filter: "drop-shadow(0 0 3px #FFD46688)" }}>★</span>
+                      )}
+                    </div>
+                  )}
                   <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#00E5FF]/40 to-transparent" />
                 </div>
               );
-            })}
+            });
+            })()}
             {/* Sync indicator — bottom-left of the mosaic */}
             <div
               className="absolute bottom-2 left-2 z-20 flex items-center gap-1 px-2 py-1 bg-black/75 border border-[#00FF88]/40 text-[#00FF88] text-[8px] font-mono uppercase tracking-[0.2em] pointer-events-none"

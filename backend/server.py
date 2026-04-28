@@ -538,6 +538,42 @@ async def get_incident(incident_id: str):
     return doc
 
 
+@api_router.post("/incidents/{incident_id}/ofr-bookmark")
+async def queue_ofr_bookmark(incident_id: str, payload: Dict, request: Request):
+    """Record an On-Field Review escalation request.
+
+    Triggered by the auto-OFR toast on the dashboard when Neo Cortex flags
+    inter-angle disagreement. We persist the bookmark on the incident doc
+    and broadcast a `ofr_bookmark` WS event so any connected referee
+    monitor surfaces it immediately.
+    """
+    inc = await db.incidents.find_one({"id": incident_id}, {"_id": 0, "id": 1})
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    bookmark = {
+        "id": str(uuid.uuid4()),
+        "incident_id": incident_id,
+        "reason": payload.get("reason", "manual"),
+        "delta_pct": payload.get("delta_pct"),
+        "cited_clause": payload.get("cited_clause"),
+        "triggered_at": payload.get("triggered_at") or datetime.now(timezone.utc).isoformat(),
+        "status": "queued",
+    }
+    await db.incidents.update_one(
+        {"id": incident_id},
+        {"$push": {"ofr_bookmarks": bookmark}, "$set": {"ofr_pending": True}},
+    )
+    try:
+        await ws_manager.broadcast({
+            "type": "ofr_bookmark",
+            "incident_id": incident_id,
+            "bookmark": bookmark,
+        })
+    except Exception:
+        pass
+    return {"status": "queued", "bookmark": bookmark}
+
+
 @api_router.put("/incidents/{incident_id}/decision")
 async def update_decision(incident_id: str, decision: DecisionUpdate, request: Request):
     # Fetch current incident to compare AI suggestion with operator decision

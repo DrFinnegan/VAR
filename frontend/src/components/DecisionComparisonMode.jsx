@@ -201,18 +201,25 @@ export const DecisionComparisonMode = ({ incident, onClose }) => {
     });
 
     return pairs;
-  }, [beforeAnnotations, afterAnnotations]);
+  }, [beforeAnnotations, afterAnnotations, beforeAngle, afterAngle]);
 
   useEffect(() => {
     let rafId;
+    let pollId;
     const recalc = () => {
+      // Use rAF to batch layout reads, then poll for two more frames so we
+      // catch the moment the new <img> finishes loading and resizes the
+      // panel after the operator picks a different angle.
       rafId = requestAnimationFrame(() => setTrailPairs(computePairs()));
     };
     recalc();
+    // Re-run after image load finishes (panel size may change slightly)
+    pollId = setTimeout(recalc, 350);
     window.addEventListener("resize", recalc);
     return () => {
       window.removeEventListener("resize", recalc);
       if (rafId) cancelAnimationFrame(rafId);
+      if (pollId) clearTimeout(pollId);
     };
   }, [computePairs]);
 
