@@ -14,10 +14,11 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   CheckCircle2, XCircle, ChevronLeft, ChevronRight, Scale, Camera,
-  Aperture, Crosshair, Goal, AlertTriangle, ArrowLeft,
+  Aperture, Crosshair, Goal, AlertTriangle, ArrowLeft, Wifi, WifiOff,
 } from "lucide-react";
 import { API, BACKEND_URL, formatApiError } from "../lib/api";
 import { useAuth } from "../contexts/AuthContext";
+import { useWebSocket } from "../hooks/useWebSocket";
 
 const ANGLE_META = {
   broadcast: { label: "BROADCAST", Icon: Camera },
@@ -44,6 +45,21 @@ export default function MobileOFRPage() {
   }, [incidentId]);
 
   useEffect(() => { fetchIncident(); }, [fetchIncident]);
+
+  // Live updates via WS — refetch when this incident is touched server-side.
+  const handleWsMessage = useCallback((msg) => {
+    if (!msg || !msg.type) return;
+    const targets = ["incident_updated", "decision_made", "analysis_complete", "ofr_bookmark"];
+    if (!targets.includes(msg.type)) return;
+    const matchedId = msg.incident_id || msg.id || msg.incident?.id;
+    if (matchedId === incidentId) {
+      if (msg.type === "ofr_bookmark") toast.warning("Updated OFR bookmark from VAR booth");
+      if (msg.type === "decision_made") toast.success("Decision pushed from VAR booth");
+      if (msg.type === "analysis_complete") toast.info("Re-analysis complete");
+      fetchIncident();
+    }
+  }, [incidentId, fetchIncident]);
+  const wsConnected = useWebSocket(handleWsMessage);
 
   const angles = (incident?.camera_angles || []).filter(a => a.storage_path);
   const activeAngle = angles[activeAngleIdx] || null;
@@ -94,7 +110,12 @@ export default function MobileOFRPage() {
             <span className="font-mono text-[10px] tracking-[0.25em] uppercase">DASH</span>
           </Link>
           <div className="text-center">
-            <p className="text-[8px] font-mono tracking-[0.3em] text-[#00E5FF]/70">ON-FIELD REVIEW</p>
+            <p className="text-[8px] font-mono tracking-[0.3em] text-[#00E5FF]/70 flex items-center justify-center gap-1.5">
+              <span>ON-FIELD REVIEW</span>
+              {wsConnected
+                ? <Wifi className="w-2.5 h-2.5 text-[#00FF88]" />
+                : <WifiOff className="w-2.5 h-2.5 text-[#FFB800]" />}
+            </p>
             <p className="text-[10px] font-mono uppercase text-white/80">
               {incident.incident_type?.replace("_", " ")} · {incident.timestamp_in_match || "—"}
             </p>

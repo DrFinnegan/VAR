@@ -15,4 +15,5 @@ from . import (  # noqa: F401
     system,
     seed,
     dashboards,
+    system_config,
 )

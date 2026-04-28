@@ -131,6 +131,82 @@ async def referee_scorecard(referee_id: str):
     }
 
 
+# ── Per-referee historical comparison vs league average ──
+@api_router.get("/analytics/referee/{referee_id}/comparison")
+async def referee_comparison(referee_id: str, days: int = Query(30, ge=7, le=180)):
+    """Day-by-day AI-agreement % time series for ONE referee vs the LEAGUE
+    AVERAGE over the same window. Powers the comparison line chart on the
+    scorecard."""
+    from datetime import timedelta
+    ref = await db.referees.find_one({"id": referee_id}, {"_id": 0})
+    if not ref:
+        raise HTTPException(status_code=404, detail="Referee not found")
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=days - 1)
+    start_iso = start.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+    # Pull ALL decided incidents in window in one shot (cheaper than 2x query)
+    all_incs = await db.incidents.find(
+        {"updated_at": {"$gte": start_iso}, "decision_status": {"$in": ["confirmed", "overturned"]}},
+        {"_id": 0, "decided_by": 1, "decision_status": 1, "updated_at": 1},
+    ).to_list(5000)
+
+    def day_key(iso):
+        return (iso or "")[:10]
+
+    series = {}
+    for i in range(days):
+        d = (start + timedelta(days=i)).date().isoformat()
+        series[d] = {
+            "date": d,
+            "referee_decisions": 0, "referee_confirmed": 0,
+            "league_decisions": 0, "league_confirmed": 0,
+        }
+
+    for inc in all_incs:
+        k = day_key(inc.get("updated_at"))
+        if k not in series:
+            continue
+        st = inc.get("decision_status")
+        bucket = series[k]
+        bucket["league_decisions"] += 1
+        if st == "confirmed":
+            bucket["league_confirmed"] += 1
+        if inc.get("decided_by") == referee_id:
+            bucket["referee_decisions"] += 1
+            if st == "confirmed":
+                bucket["referee_confirmed"] += 1
+
+    ordered = []
+    for d in sorted(series.keys()):
+        b = series[d]
+        ordered.append({
+            "date": d,
+            "referee_agreement_pct": round((b["referee_confirmed"] / b["referee_decisions"] * 100), 1) if b["referee_decisions"] else None,
+            "league_agreement_pct": round((b["league_confirmed"] / b["league_decisions"] * 100), 1) if b["league_decisions"] else None,
+            "referee_decisions": b["referee_decisions"],
+            "league_decisions": b["league_decisions"],
+        })
+
+    # Headline numbers for the chart caption
+    ref_total = sum(d["referee_decisions"] for d in ordered)
+    ref_conf = sum(series[d["date"]]["referee_confirmed"] for d in ordered)
+    league_total = sum(d["league_decisions"] for d in ordered)
+    league_conf = sum(series[d["date"]]["league_confirmed"] for d in ordered)
+    return {
+        "referee_id": referee_id,
+        "referee_name": ref.get("name"),
+        "days": days,
+        "series": ordered,
+        "totals": {
+            "referee_decisions": ref_total,
+            "referee_agreement_pct": round((ref_conf / ref_total * 100), 1) if ref_total else 0.0,
+            "league_decisions": league_total,
+            "league_agreement_pct": round((league_conf / league_total * 100), 1) if league_total else 0.0,
+        },
+    }
+
+
 # ── Team-level decision history CSV export ────────────────
 @api_router.get("/exports/team-incidents.csv")
 async def export_team_incidents_csv(

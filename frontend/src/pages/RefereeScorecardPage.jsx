@@ -6,8 +6,11 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { Link, useParams } from "react-router-dom";
 import {
-  Users, ArrowLeft, Award, Activity, Clock, Scale, Download, ChevronRight,
+  Users, ArrowLeft, Award, Activity, Clock, Scale, Download, ChevronRight, TrendingUp,
 } from "lucide-react";
+import {
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
+} from "recharts";
 import { API, BACKEND_URL } from "../lib/api";
 
 // ───────────────────────────────────────────────────────────
@@ -87,6 +90,8 @@ export function RefereesIndexPage() {
 export function RefereeScorecardPage() {
   const { refereeId } = useParams();
   const [card, setCard] = useState(null);
+  const [comparison, setComparison] = useState(null);
+  const [comparisonDays, setComparisonDays] = useState(30);
   const [csvTeam, setCsvTeam] = useState("");
   const [csvDownloading, setCsvDownloading] = useState(false);
 
@@ -96,6 +101,15 @@ export function RefereeScorecardPage() {
       setCard(data);
     })();
   }, [refereeId]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await axios.get(`${API}/analytics/referee/${refereeId}/comparison?days=${comparisonDays}`);
+        setComparison(data);
+      } catch { /* swallow */ }
+    })();
+  }, [refereeId, comparisonDays]);
 
   const downloadTeamCSV = async () => {
     if (!csvTeam.trim()) return;
@@ -144,6 +158,65 @@ export function RefereeScorecardPage() {
             <p className="font-mono text-xl mt-1" style={{ color }}>{value}</p>
           </div>
         ))}
+      </section>
+
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-heading text-sm tracking-[0.2em] uppercase text-[#00E5FF]/80 flex items-center gap-2">
+            <TrendingUp className="w-3.5 h-3.5" />Agreement vs League · Last {comparisonDays}d
+          </h2>
+          <div className="flex items-center gap-1">
+            {[14, 30, 90].map((d) => (
+              <button
+                key={d}
+                onClick={() => setComparisonDays(d)}
+                className={`px-2 py-1 border font-mono text-[9px] tracking-[0.2em] uppercase transition ${
+                  comparisonDays === d
+                    ? "border-[#00E5FF]/60 bg-[#00E5FF]/10 text-[#00E5FF]"
+                    : "border-white/10 text-gray-500 hover:text-white"
+                }`}
+                data-testid={`comparison-days-${d}`}
+              >{d}D</button>
+            ))}
+          </div>
+        </div>
+        {comparison ? (
+          <div className="border border-white/10 p-4">
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="border-l-2 border-[#00E5FF]/60 pl-3">
+                <p className="text-[8px] font-mono uppercase tracking-[0.2em] text-gray-500">{comparison.referee_name?.toUpperCase() || "REFEREE"}</p>
+                <p className="font-mono text-2xl text-[#00E5FF]" data-testid="comparison-referee-pct">{comparison.totals.referee_agreement_pct}%</p>
+                <p className="text-[9px] font-mono text-gray-600">{comparison.totals.referee_decisions} decisions</p>
+              </div>
+              <div className="border-l-2 border-[#FFB800]/60 pl-3">
+                <p className="text-[8px] font-mono uppercase tracking-[0.2em] text-gray-500">LEAGUE AVG</p>
+                <p className="font-mono text-2xl text-[#FFB800]" data-testid="comparison-league-pct">{comparison.totals.league_agreement_pct}%</p>
+                <p className="text-[9px] font-mono text-gray-600">{comparison.totals.league_decisions} decisions</p>
+              </div>
+            </div>
+            <div style={{ width: "100%", height: 220 }} data-testid="comparison-chart">
+              <ResponsiveContainer>
+                <LineChart data={comparison.series} margin={{ top: 10, right: 10, left: -16, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis dataKey="date" tick={{ fill: "#6B7280", fontSize: 9, fontFamily: "JetBrains Mono" }}
+                         tickFormatter={(d) => d.slice(5)} />
+                  <YAxis domain={[0, 100]} tick={{ fill: "#6B7280", fontSize: 9, fontFamily: "JetBrains Mono" }}
+                         tickFormatter={(v) => `${v}%`} />
+                  <Tooltip
+                    contentStyle={{ background: "#0a0a0a", border: "1px solid rgba(255,255,255,0.1)", fontSize: 11, fontFamily: "JetBrains Mono" }}
+                    labelStyle={{ color: "#9CA3AF", fontSize: 10 }}
+                    formatter={(value, name) => value === null ? ["—", name] : [`${value}%`, name]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: "JetBrains Mono" }} />
+                  <Line type="monotone" dataKey="referee_agreement_pct" name="Referee" stroke="#00E5FF" strokeWidth={2} dot={false} connectNulls />
+                  <Line type="monotone" dataKey="league_agreement_pct" name="League avg" stroke="#FFB800" strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        ) : (
+          <p className="text-[11px] font-mono text-gray-500">Loading comparison…</p>
+        )}
       </section>
 
       <section>

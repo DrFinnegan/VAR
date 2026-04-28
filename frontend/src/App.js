@@ -15,7 +15,7 @@ import { Toaster, toast } from "sonner";
 import {
   Video, History, BarChart3, Settings, BookOpen, Brain, Trophy, Users,
   LogOut, LogIn, UserPlus, ThumbsUp, ThumbsDown, Lock, ArrowRight, Zap,
-  Radio, Award,
+  Radio, Award, AlertTriangle,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./components/ui/card";
@@ -350,11 +350,41 @@ const HistoryPage = () => {
 const SettingsPage = () => {
   const { user } = useAuth();
   const [seeding, setSeeding] = useState(false);
+  const [config, setConfig] = useState(null);
+  const [thresholdInput, setThresholdInput] = useState("15");
+  const [savingThreshold, setSavingThreshold] = useState(false);
 
   const seedDemo = async () => {
     setSeeding(true);
     try { await axios.post(`${API}/seed-demo`); toast.success("OCTON demo data seeded!"); } catch { toast.error("Failed to seed"); }
     finally { setSeeding(false); }
+  };
+
+  useEffect(() => {
+    if (user?.role !== "admin") return;
+    (async () => {
+      try {
+        const { data } = await axios.get(`${API}/system/config`);
+        setConfig(data);
+        setThresholdInput(String(data.ofr_threshold_pct ?? 15));
+      } catch { /* */ }
+    })();
+  }, [user?.role]);
+
+  const saveThreshold = async () => {
+    const v = parseFloat(thresholdInput);
+    if (isNaN(v) || v < 5 || v > 40) {
+      toast.error("Threshold must be between 5 and 40");
+      return;
+    }
+    setSavingThreshold(true);
+    try {
+      const { data } = await axios.put(`${API}/system/config`, { ofr_threshold_pct: v });
+      setConfig(data);
+      toast.success(`OFR threshold set to ${v}%`);
+    } catch (e) {
+      toast.error("Failed to update threshold");
+    } finally { setSavingThreshold(false); }
   };
 
   return (
@@ -410,6 +440,50 @@ const SettingsPage = () => {
         </TabsContent>
 
         <TabsContent value="admin" className="mt-6 space-y-6">
+          <Card className="bg-[#121212] border-[#FFB800]/20 rounded-none" data-testid="ofr-threshold-card">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-[#FFB800]" />
+                OFR Disagreement Threshold
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                When the inter-angle confidence delta crosses this percentage, OCTON
+                flags <span className="text-[#FFB800]">angle_disagreement</span> and the
+                dashboard fires an On-Field Review escalation toast. Lower it for
+                tournaments / international finals (stricter), raise it for league play.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-end gap-4">
+                <div className="flex-1">
+                  <Label className="text-xs font-mono text-gray-400 uppercase tracking-[0.2em]">Current threshold</Label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Input
+                      type="number" min="5" max="40" step="0.5"
+                      value={thresholdInput}
+                      onChange={(e) => setThresholdInput(e.target.value)}
+                      className="bg-[#050505] border-white/10 text-white rounded-none w-32 font-mono"
+                      data-testid="ofr-threshold-input"
+                    />
+                    <span className="text-2xl font-mono text-[#FFB800]">%</span>
+                  </div>
+                  <p className="text-[10px] font-mono text-gray-500 mt-2">
+                    Range 5–40%. {config?.updated_at && (
+                      <>Last updated by <span className="text-[#FFB800]">{config.updated_by || "—"}</span> at {new Date(config.updated_at).toLocaleString()}</>
+                    )}
+                  </p>
+                </div>
+                <Button
+                  onClick={saveThreshold} disabled={savingThreshold}
+                  className="bg-[#FFB800] text-black hover:bg-[#FFB800]/80 rounded-none"
+                  data-testid="ofr-threshold-save"
+                >
+                  {savingThreshold ? "SAVING..." : "SAVE"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="bg-[#121212] border-white/10 rounded-none">
             <CardHeader><CardTitle className="text-white">Admin Tools</CardTitle><CardDescription className="text-gray-400">Administrative functions for league officials</CardDescription></CardHeader>
             <CardContent className="space-y-4">

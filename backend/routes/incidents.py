@@ -191,6 +191,12 @@ async def create_incident(data: IncidentCreate, request: Request):
     if angle_images_b64:
         analysis_result["camera_angles_analyzed"] = len(angle_images_b64)
         analysis_result["visual_evidence_source"] = "multi_angle"
+    # Re-evaluate angle_disagreement against the admin-tunable threshold.
+    from .system_config import get_ofr_threshold
+    threshold = await get_ofr_threshold()
+    delta = float(analysis_result.get("angle_confidence_delta") or 0.0)
+    analysis_result["angle_disagreement"] = bool(delta >= threshold and delta > 0)
+    analysis_result["ofr_threshold_pct"] = threshold
 
     incident_doc = {
         "id": incident_id,
@@ -405,6 +411,12 @@ async def reanalyze_incident(incident_id: str, request: Request):
         image_base64=image_b64,
     )
     analysis["visual_evidence_source"] = visual_source
+    # Re-evaluate angle_disagreement against the admin-tunable threshold.
+    from .system_config import get_ofr_threshold
+    threshold = await get_ofr_threshold()
+    delta = float(analysis.get("angle_confidence_delta") or 0.0)
+    analysis["angle_disagreement"] = bool(delta >= threshold and delta > 0)
+    analysis["ofr_threshold_pct"] = threshold
 
     result = await db.incidents.find_one_and_update(
         {"id": incident_id},
