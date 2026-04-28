@@ -103,3 +103,28 @@ Pure football VAR audit system. ID PROTECTION module has been separated into its
   3. **`angle_assessments` 4-row breakdown** — New `By-Angle Confidence` curtain in the OCTON Analysis panel (auto-opens when disagreement is flagged). Each row shows the angle name, a horizontal confidence bar (color-coded), the percentage, the ★ marker on the top-weighted angle, and a truncated decision summary. Includes a footer ⚠ note when disagreement crosses the 15% OFR threshold.
   4. **Comparison-mode trail recalc on angle pick** — `computePairs` now lists `beforeAngle` and `afterAngle` in its dependency array, and the `useEffect` schedules a follow-up rAF + 350 ms `setTimeout` after every recalc to catch the moment the new `<img>` finishes loading and the panel resizes. Trail SVGs realign cleanly across angle switches.
   - **Tested end-to-end**: 4-angle synthetic POST persisted all 4 storage paths, returned `visual_evidence_source=multi_angle`, `camera_angles_analyzed=4`, cited the correct IFAB clause, and the angle-switcher screenshot confirmed all 5 tabs render with active-state highlighting on click.
+
+- 2026-02: **Backend modular refactor (server.py 2,277 → 70 lines)** — Split the monolithic `backend/server.py` into a thin app-shell + a `routes/` package:
+  - `core.py` (115) — single source of truth for the Mongo client/db, enums, helpers (`set_auth_cookies`, `user_response`, `format_incident`), the cross-route `_HEALTH_CACHE`, and the `VOICE_SAMPLE_WHITELIST`.
+  - `routes/auth_routes.py` (118) — register, login, logout, me, refresh.
+  - `routes/incidents.py` (509) — full incident lifecycle, OFR bookmarks, decisions, annotations, reanalyze, file serving (with HTTP Range), text-only AI, multi-angle ingestion, promote-to-training.
+  - `routes/matches_referees.py` (138) — referees + matches CRUD, assignment, status updates.
+  - `routes/analytics.py` (195) — overview, patterns, per-referee, learning-velocity time series.
+  - `routes/feedback.py` (109) — operator feedback loop, stats, calibration, admin user list.
+  - `routes/training.py` (345) — Training Library CRUD + media upload + auto-tag, RAG retrieve, web ingestion + scheduler + feeds.
+  - `routes/audit_routes.py` (36) — SHA-256 audit hash chain register / verify / per-incident.
+  - `routes/voice_routes.py` (217) — Whisper transcribe, voice-chat (intent + reply + TTS), speak, voice sample (cached), per-user preferences.
+  - `routes/system.py` (97) — system health pip, websocket endpoint, root.
+  - `routes/seed.py` (195) — `/seed-demo` payload only (kept verbatim).
+  - New `server.py` (70) — wires the FastAPI app, mounts `core.api_router`, attaches CORS, and owns startup/shutdown (admin seed, storage init, scheduler boot, test_credentials.md write).
+  - **Verification**: lint clean, backend boots in <1 s, every existing endpoint returns identical payloads (root / health / incidents / analytics / training stats curl-checked), and all 32 tests still pass (12 base regression + 13 new edge-case + 7 web-learning).
+
+- 2026-02: **IFAB rule coverage expansion (+14 edge-case precedents, +13 regression tests)** — Brought the corpus to 54 ground-truth precedents covering complex IFAB edge cases the seed was thin on:
+  1. **Offside interference** (4) — line-of-sight blocking, rebound from goalkeeper save (no reset), deliberate-play reset (2022 IFAB clarification), active challenge-for-ball interference.
+  2. **DOGSO vs SPA distinction** (3) — DOGSO inside PA with genuine attempt (yellow + penalty per 2017 amendment), DOGSO with holding/pulling (full red, exception does not apply), SPA outside box (yellow only, 4-point checklist not met).
+  3. **Handball nuances** (3) — arm supporting body in slide/jump (no offence), accidental handball by team-mate then different scorer (2021+ APP only applies to scorer/creator), goalkeeper handling outside own PA (DFK + YC).
+  4. **Penalty encroachment 2024** (2) — attacker encroachment + first-to-rebound (retake/IFK), defender encroachment (retake-if-missed).
+  5. **Second yellow / cumulative cautions** (1) — two cautions in same match → red.
+  6. **Reckless vs SFP threshold** (1) — hard-but-not-excessive challenge stays yellow.
+  - **New regression suite** `tests/test_edge_cases.py` (13 scenarios, all pass at avg ~95% confidence) — every scenario also returns the precise IFAB clause citation (e.g. `Law 12 — DOGSO in PA, genuine attempt to play ball => YC`).
+  - Existing 12-case base regression + 7-case web-learning suites still pass with no regressions.
