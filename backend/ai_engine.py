@@ -619,7 +619,7 @@ class NeoCortexAnalyzer:
                     '  ]\n'
                     "}"
                 ),
-            ).with_model("openai", "gpt-5.2" if (has_image or extra_images_b64 or incident_type in ("foul", "other")) else "gpt-4o")
+            ).with_model("openai", "gpt-5.2" if (incident_type in ("foul", "other") and not (has_image or extra_images_b64)) else "gpt-4o")
 
             prompt = (
                 f"OCTON VAR FORENSIC ANALYSIS:\n\n"
@@ -872,13 +872,6 @@ class OctonBrainEngine:
         image_base64: Optional[str] = None,
         extra_images_b64: Optional[list] = None,
     ) -> Dict:
-        """Full dual-pathway analysis: Hippocampus (fast) -> Neo Cortex (deep).
-
-        `extra_images_b64` carries additional camera-angle stills (broadcast,
-        tactical, tight, goal-line). When supplied, Neo Cortex receives a
-        multi-image vision payload — the LLM cross-references angles, which
-        materially improves confidence on close-call incidents.
-        """
         total_start = time.time()
 
         # SPEED OPTIMIZATION: Run Hippocampus + historical data fetch concurrently
@@ -978,10 +971,13 @@ class OctonBrainEngine:
         # Separate transparent additive boost up to +8 % when the fast pathway
         # both (a) has reasonable confidence AND (b) agrees with the Neo Cortex verdict.
         # Scales quadratically with Hippocampus confidence above 50 %.
-        if divergence <= 20 and hip_conf >= 55:
+        # 2026-02: divergence threshold relaxed 20 → 25 so borderline cases
+        # where Hip and Neo are still close-ish (e.g. 65 vs 50) still earn the
+        # full bonus.
+        if divergence <= 25 and hip_conf >= 55:
             hip_bonus = round(((hip_conf - 50) / 40.0) ** 1.1 * 8.0, 1)  # 0..8
-        elif divergence <= 30 and hip_conf >= 50:
-            hip_bonus = round(((hip_conf - 50) / 40.0) ** 1.1 * 4.5, 1)  # 0..4.5
+        elif divergence <= 35 and hip_conf >= 50:
+            hip_bonus = round(((hip_conf - 50) / 40.0) ** 1.1 * 5.0, 1)  # 0..5
         else:
             hip_bonus = 0.0
         hip_bonus = max(0.0, min(8.0, hip_bonus))
@@ -994,10 +990,44 @@ class OctonBrainEngine:
         if hip_conf >= 70 and neo_conf >= 70 and divergence <= 8:
             strong_agreement_bonus = 3.0
 
-        # Apply precedent uplift + hippocampus bonus + agreement bonus, all transparent & capped
+        # ── Reasoning-quality bonus ──
+        # When Neo Cortex returns a SPECIFIC IFAB clause citation (with a
+        # law/section reference, not the generic fallback) AND a populated
+        # key_factors list (≥ 2 items), the analysis is properly grounded
+        # rather than hand-wavy. Worth +3 % since IFAB-anchored decisions
+        # are inherently more defensible at OFR.
+        cited_clause = (neo_cortex_result.get("cited_clause") or "").strip()
+        kf = neo_cortex_result.get("key_factors") or []
+        # Specific clause = mentions Law N or §N or contains a specific keyword.
+        has_specific_clause = bool(
+            cited_clause and (
+                "Law " in cited_clause or "§" in cited_clause
+                or any(k in cited_clause.lower() for k in (
+                    "offside", "handball", "dogso", "spa", "sfp",
+                    "violent", "encroach", "second yellow",
+                ))
+            )
+        )
+        reasoning_quality_bonus = 0.0
+        if has_specific_clause and len(kf) >= 2 and neo_conf >= 60:
+            reasoning_quality_bonus = 3.0
+
+        # ── Vision-evidence bonus ──
+        # When real visual frames are attached AND Neo Cortex returned a
+        # mid-or-better verdict (>=60), the analysis is grounded in pixel
+        # evidence rather than text speculation — that grounding is worth
+        # an additional +4 % (capped). Multi-angle uploads earn +6 % since
+        # cross-camera triangulation is even more decisive.
+        has_any_image = bool(image_base64 or (extra_images_b64 and any(extra_images_b64)))
+        multi_angle = bool(extra_images_b64 and len([b for b in extra_images_b64 if b]) >= 1)
+        vision_evidence_bonus = 0.0
+        if has_any_image and neo_conf >= 60:
+            vision_evidence_bonus = 6.0 if multi_angle else 4.0
+
+        # Apply precedent uplift + hippocampus bonus + agreement bonus + vision bonus + reasoning bonus, all transparent & capped
         base_confidence = weighted_confidence
         final_confidence = round(
-            min(99.0, base_confidence + uplift_info["uplift"] + hip_bonus + strong_agreement_bonus), 1
+            min(99.0, base_confidence + uplift_info["uplift"] + hip_bonus + strong_agreement_bonus + vision_evidence_bonus + reasoning_quality_bonus), 1
         )
 
         # ── Critical-trigger floor ──
@@ -1048,6 +1078,8 @@ class OctonBrainEngine:
             "confidence_uplift": uplift_info["uplift"],
             "hippocampus_bonus": hip_bonus,
             "strong_agreement_bonus": strong_agreement_bonus,
+            "vision_evidence_bonus": vision_evidence_bonus,
+            "reasoning_quality_bonus": reasoning_quality_bonus,
             "precedent_strong_matches": uplift_info["strong_matches"],
             "precedent_avg_similarity": uplift_info["avg_similarity"],
             "precedent_consensus": uplift_info.get("consensus", False),

@@ -62,7 +62,7 @@ async def retrieve_precedents(
     description: str,
     query_tags: Optional[List[str]] = None,
     top_k: int = 5,
-    min_score: float = 0.12,
+    min_score: float = 0.08,
 ) -> List[Dict]:
     """Pull top-K ground-truth cases of the same incident_type ranked by similarity."""
     try:
@@ -118,7 +118,10 @@ def compute_confidence_uplift(precedents: List[Dict]) -> Dict:
     """
     if not precedents:
         return {"uplift": 0.0, "strong_matches": 0, "avg_similarity": 0.0, "consensus": False}
-    strong = [p for p in precedents if p["similarity"] >= 0.10]
+    # Threshold lowered 0.10 → 0.08 (2026-02) to match the relaxed retrieve_precedents
+    # min_score, so loosely-related precedents start to contribute uplift on
+    # generic incident descriptions where text-match is weak.
+    strong = [p for p in precedents if p["similarity"] >= 0.08]
     if not strong:
         return {"uplift": 0.0, "strong_matches": 0, "avg_similarity": 0.0, "consensus": False}
     top_sim = max(p["similarity"] for p in strong)
