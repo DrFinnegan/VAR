@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import {
   Video, AlertTriangle, CheckCircle2, XCircle, Clock, RefreshCw, Upload,
   Brain, Target, Wifi, WifiOff, Image as ImageIcon, History, FileText,
-  Sparkles, BookOpen, GitBranch, Columns,
+  Sparkles, BookOpen, GitBranch, Columns, Scale,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -418,6 +418,7 @@ export const LiveVARPage = () => {
                     neo={analysis.neo_cortex?.confidence_score || 0}
                     divergence={analysis.pathway_divergence || 0}
                     weighting={analysis.weighting || null}
+                    consensus={!!analysis.precedent_consensus}
                   />
                 </div>
 
@@ -463,6 +464,26 @@ export const LiveVARPage = () => {
                     )}
                   </div>
                   <p className="text-sm font-body text-white leading-relaxed" data-testid="suggested-decision">{analysis.suggested_decision}</p>
+                  {analysis.cited_clause && (
+                    <div
+                      className="mt-2 flex items-start gap-2 px-2 py-1.5 border-l-2 border-[#FFB800]/60 bg-[#FFB800]/[0.04]"
+                      data-testid="ifab-clause-badge"
+                      title={`OCTON cites this IFAB clause as the legal basis for the verdict: ${analysis.cited_clause}`}
+                    >
+                      <Scale className="w-3 h-3 text-[#FFB800] flex-none mt-0.5" />
+                      <div className="min-w-0">
+                        <span className="block text-[8px] font-mono uppercase tracking-[0.25em] text-[#FFB800]/70">
+                          IFAB CLAUSE CITED
+                        </span>
+                        <span
+                          className="block text-[10.5px] font-mono text-[#FFD466] leading-snug mt-0.5 break-words"
+                          data-testid="ifab-clause-text"
+                        >
+                          {analysis.cited_clause}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-3 space-y-2">

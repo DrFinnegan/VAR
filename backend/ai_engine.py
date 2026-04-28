@@ -31,6 +31,26 @@ from typing import Optional, Dict
 logger = logging.getLogger(__name__)
 
 
+# ── Default IFAB clause references per incident type ───────────────────
+# Used when Neo Cortex (LLM) fails to populate `cited_clause` or when the
+# heuristic fallback runs. Kept short (~70 chars) so it fits in a single
+# UI badge line on the right-rail Analysis panel.
+_DEFAULT_CITED_CLAUSE = {
+    "offside":   "IFAB Law 11 — Offside (interfering with play / gaining advantage)",
+    "handball":  "IFAB Law 12 — Handball (deliberate / unnatural arm position / APP)",
+    "foul":      "IFAB Law 12 — Fouls & Misconduct (careless / reckless / excessive force)",
+    "penalty":   "IFAB Law 14 — Penalty Kick (direct-FK offence inside the penalty area)",
+    "goal_line": "IFAB Law 10 — Goal (whole ball over whole goal line)",
+    "red_card":  "IFAB Law 12 — Sending Off (Serious Foul Play / Violent Conduct / DOGSO)",
+    "other":     "VAR Protocol — clear and obvious error / serious missed incident",
+}
+
+
+def _default_clause_for(incident_type: str) -> str:
+    """Fallback citation when the LLM doesn't populate `cited_clause`."""
+    return _DEFAULT_CITED_CLAUSE.get(incident_type, _DEFAULT_CITED_CLAUSE["other"])
+
+
 class HippocampusAnalyzer:
     """
     HIPPOCAMPUS - Lightning Speed Pattern Matcher
@@ -580,6 +600,7 @@ class NeoCortexAnalyzer:
                     '  "suggested_decision": "specific decision string",\n'
                     '  "reasoning": "detailed step-by-step reasoning applying the relevant law",\n'
                     '  "key_factors": ["specific factual factors from the description"],\n'
+                    '  "cited_clause": "Short reference to the IFAB law/clause applied (e.g. \'Law 12 §1 — Serious Foul Play, two-footed lunge\', \'Law 11 — Offside, daylight beyond second-last defender\', \'Law 14 — DOGSO inside area, no attempt to play ball\'). Max 90 chars.",\n'
                     '  "risk_level": "low|medium|high|critical",\n'
                     '  "neo_cortex_notes": "any caveats, what additional evidence would help"\n'
                     "}"
@@ -642,11 +663,16 @@ class NeoCortexAnalyzer:
                     "suggested_decision": hippocampus_result["initial_decision"],
                     "reasoning": response[:500] if response else "Neo Cortex analysis completed",
                     "key_factors": ["Analysis performed - JSON parsing fallback"],
+                    "cited_clause": _default_clause_for(incident_type),
                     "risk_level": "medium",
                     "neo_cortex_notes": "Response required manual extraction",
                 }
 
             processing_ms = int((time.time() - start) * 1000)
+
+            cited_clause = str(
+                analysis_data.get("cited_clause") or _default_clause_for(incident_type)
+            ).strip()[:120]
 
             return {
                 "stage": "neo_cortex",
@@ -662,6 +688,7 @@ class NeoCortexAnalyzer:
                 "key_factors": analysis_data.get(
                     "key_factors", ["Analysis performed"]
                 ),
+                "cited_clause": cited_clause,
                 "risk_level": analysis_data.get("risk_level", "medium"),
                 "neo_cortex_notes": analysis_data.get("neo_cortex_notes", ""),
                 "processing_time_ms": processing_ms,
@@ -729,6 +756,7 @@ class NeoCortexAnalyzer:
                 "IFAB Law interpretation",
                 "Heuristic confidence calibration",
             ],
+            "cited_clause": _default_clause_for(incident_type),
             "risk_level": "medium" if final_conf >= 50 else "high",
             "neo_cortex_notes": "Heuristic mode - GPT-5.2 unavailable. Results less reliable.",
             "processing_time_ms": processing_ms,
@@ -902,6 +930,9 @@ class OctonBrainEngine:
             "suggested_decision": suggested_decision,
             "reasoning": neo_cortex_result["reasoning"],
             "key_factors": neo_cortex_result["key_factors"],
+            "cited_clause": neo_cortex_result.get(
+                "cited_clause", _default_clause_for(incident_type)
+            ),
             "risk_level": neo_cortex_result.get("risk_level", "medium"),
             "neo_cortex_notes": neo_cortex_result.get("neo_cortex_notes", ""),
             "similar_historical_cases": historical_data["total_similar"],
