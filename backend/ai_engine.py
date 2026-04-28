@@ -519,9 +519,17 @@ class NeoCortexAnalyzer:
         precedent_block: str = "",
         has_image: bool = False,
         image_base64: Optional[str] = None,
+        extra_images_b64: Optional[list] = None,
     ) -> Dict:
-        """Deep analysis with full reasoning via GPT-5.2."""
+        """Deep analysis with full reasoning via GPT-5.2.
+
+        When `extra_images_b64` is non-empty, Neo Cortex receives a
+        multi-image vision payload. The LLM is told which camera angle
+        each image came from (in slot order: broadcast, tactical, tight,
+        goal-line) so it can cross-reference angles in its reasoning.
+        """
         start = time.time()
+        extra_images_b64 = [b for b in (extra_images_b64 or []) if b]
 
         try:
             from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
@@ -641,12 +649,44 @@ class NeoCortexAnalyzer:
                 "Respond in JSON format only."
             )
 
+            # ── Build multi-image vision payload ───────────────────────
+            # Slot order matches the operator's upload tiles: broadcast,
+            # tactical, tight, goal-line. We tell the LLM the slot order so
+            # it can cross-reference angles in its reasoning.
+            all_images: list = []
             if has_image and image_base64:
-                image_content = ImageContent(image_base64=image_base64)
-                user_message = UserMessage(
-                    text=prompt + "\n\nMatch frame attached. Analyze visual evidence carefully.",
-                    file_contents=[image_content],
-                )
+                all_images.append(image_base64)
+            for b in extra_images_b64:
+                if b and b not in all_images:
+                    all_images.append(b)
+            all_images = all_images[:4]   # vision payload cap
+
+            if all_images:
+                image_contents = [ImageContent(image_base64=b) for b in all_images]
+                if len(all_images) > 1:
+                    angle_lines = "\n".join(
+                        f"  - Image {i+1}: {label}"
+                        for i, label in enumerate([
+                            "BROADCAST (main wide angle)",
+                            "TACTICAL (high-behind-the-goal)",
+                            "TIGHT (close-up of action)",
+                            "GOAL-LINE (offside/goal-line view)",
+                        ][:len(all_images)])
+                    )
+                    text = (
+                        f"{prompt}\n\n"
+                        f"MULTI-CAMERA EVIDENCE — {len(all_images)} synchronised camera angles attached:\n"
+                        f"{angle_lines}\n\n"
+                        "Cross-reference the angles before concluding. Resolve occlusions or "
+                        "parallax disagreements by citing which angle is most authoritative for "
+                        "the specific question (e.g. goal-line camera for offside line, tight "
+                        "for point-of-contact, broadcast for context). When all angles agree, "
+                        "raise your confidence. When they disagree, name the disagreement in "
+                        "`neo_cortex_notes` and lower confidence accordingly."
+                    )
+                else:
+                    text = prompt + "\n\nMatch frame attached. Analyze visual evidence carefully."
+                user_message = UserMessage(text=text, file_contents=image_contents)
             else:
                 user_message = UserMessage(text=prompt)
 
@@ -788,8 +828,15 @@ class OctonBrainEngine:
         description: str,
         db,
         image_base64: Optional[str] = None,
+        extra_images_b64: Optional[list] = None,
     ) -> Dict:
-        """Full dual-pathway analysis: Hippocampus (fast) -> Neo Cortex (deep)."""
+        """Full dual-pathway analysis: Hippocampus (fast) -> Neo Cortex (deep).
+
+        `extra_images_b64` carries additional camera-angle stills (broadcast,
+        tactical, tight, goal-line). When supplied, Neo Cortex receives a
+        multi-image vision payload — the LLM cross-references angles, which
+        materially improves confidence on close-call incidents.
+        """
         total_start = time.time()
 
         # SPEED OPTIMIZATION: Run Hippocampus + historical data fetch concurrently
@@ -863,6 +910,7 @@ class OctonBrainEngine:
             precedent_block=precedent_block,
             has_image=bool(image_base64),
             image_base64=image_base64,
+            extra_images_b64=[b for b in (extra_images_b64 or []) if b],
         )
 
         total_time_ms = int((time.time() - total_start) * 1000)
@@ -940,6 +988,8 @@ class OctonBrainEngine:
             "weighting": {"neo_cortex": neo_weight, "hippocampus": hip_weight},
             "pathway_divergence": round(divergence, 1),
             "divergence_flag": divergence_flag,
+            # Multi-angle metadata (0 means single-image / text-only flow).
+            "camera_angles_analyzed": len([b for b in (extra_images_b64 or []) if b]) + (1 if image_base64 else 0),
             "precedents_used": precedents,
             "precedents_count": len(precedents),
             "confidence_uplift": uplift_info["uplift"],

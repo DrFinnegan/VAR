@@ -115,6 +115,15 @@ class IncidentCreate(BaseModel):
     player_involved: Optional[str] = None
     image_base64: Optional[str] = None
     video_base64: Optional[str] = None
+    # NEW (2026-02): Multi-camera-angle ingestion. Each entry carries the
+    # angle tag + (optional) base64 image and/or video for that view. When
+    # provided, OCTON uploads each separately to object storage and feeds
+    # *all* available stills to Neo Cortex's vision pathway in a single
+    # multi-image prompt for richer cross-angle reasoning.
+    # Schema per entry:
+    #   { "angle": "broadcast|tactical|tight|goal_line",
+    #     "image_base64": str?, "video_base64": str? }
+    camera_angles: Optional[List[Dict]] = None
 
 
 class DecisionUpdate(BaseModel):
@@ -342,16 +351,109 @@ async def create_incident(data: IncidentCreate, request: Request):
         except Exception as e:
             logger.warning(f"Frame extraction failed: {e}")
 
+    # ── Multi-camera-angle ingestion ──────────────────────────
+    # Each angle entry is independently uploaded; the resulting list of
+    # stills (one per angle that had an image OR a video frame) becomes the
+    # multi-image vision payload to Neo Cortex. This is the core "in-depth
+    # analyses" lever — vision LLM reasoning improves substantially with
+    # cross-angle evidence (parallax, occlusion resolution, off-ball view).
+    ALLOWED_ANGLES = {"broadcast", "tactical", "tight", "goal_line"}
+    persisted_angles: List[Dict] = []   # stored on the incident doc
+    angle_images_b64: List[str] = []    # fed to Neo Cortex vision
+
+    if data.camera_angles:
+        from video_utils import extract_frame_b64 as _extract_frame_b64
+        user_id = user.get("_id", "anonymous") if user else "anonymous"
+        for entry in data.camera_angles[:4]:    # cap at 4 angles
+            angle = (entry or {}).get("angle", "").lower().strip()
+            if angle not in ALLOWED_ANGLES:
+                continue
+            ang_img_b64 = (entry or {}).get("image_base64")
+            ang_vid_b64 = (entry or {}).get("video_base64")
+            ang_img_path = None
+            ang_vid_path = None
+            ang_vid_bytes = None
+
+            # Image upload
+            if ang_img_b64:
+                try:
+                    p = generate_upload_path(user_id, f"{incident_id}__{angle}.jpg")
+                    put_object(p, base64.b64decode(ang_img_b64), "image/jpeg")
+                    ang_img_path = p
+                except Exception as e:
+                    logger.warning(f"[angle {angle}] image upload failed: {e}")
+                    storage_warnings.append({
+                        "type": "image_storage_unavailable",
+                        "message": f"Storage failed for {angle.upper()} angle still — analysis ran on the in-memory frame.",
+                    })
+
+            # Video upload
+            if ang_vid_b64:
+                try:
+                    vp = generate_upload_path(user_id, f"{incident_id}__{angle}.mp4")
+                    ang_vid_bytes = base64.b64decode(ang_vid_b64)
+                    put_object(vp, ang_vid_bytes, "video/mp4")
+                    ang_vid_path = vp
+                except Exception as e:
+                    logger.warning(f"[angle {angle}] video upload failed: {e}")
+                    storage_warnings.append({
+                        "type": "video_storage_unavailable",
+                        "message": f"Storage failed for {angle.upper()} angle clip.",
+                    })
+
+            # If only video given for this angle, extract a frame so we
+            # still get a still to feed the Neo Cortex vision pathway.
+            ang_frame_for_ai = ang_img_b64
+            if not ang_frame_for_ai and ang_vid_bytes:
+                try:
+                    ang_frame_for_ai = await _extract_frame_b64(ang_vid_bytes)
+                except Exception as e:
+                    logger.warning(f"[angle {angle}] frame extraction failed: {e}")
+
+            persisted_angles.append({
+                "angle": angle,
+                "storage_path": ang_img_path,
+                "video_storage_path": ang_vid_path,
+                "has_image": bool(ang_img_path or ang_img_b64),
+                "has_video": bool(ang_vid_path or ang_vid_b64),
+            })
+            if ang_frame_for_ai:
+                angle_images_b64.append(ang_frame_for_ai)
+
+        # If the operator only supplied multi-angle data (no legacy
+        # image_base64), promote the BROADCAST angle (or first available)
+        # as the primary still so the existing UI keeps rendering.
+        if not image_b64 and angle_images_b64:
+            image_b64 = angle_images_b64[0]
+        if not storage_path and persisted_angles:
+            primary = next(
+                (a for a in persisted_angles if a["angle"] == "broadcast" and a.get("storage_path")),
+                next((a for a in persisted_angles if a.get("storage_path")), None),
+            )
+            if primary:
+                storage_path = primary["storage_path"]
+        if not video_storage_path:
+            primary_v = next(
+                (a for a in persisted_angles if a.get("video_storage_path")), None
+            )
+            if primary_v:
+                video_storage_path = primary_v["video_storage_path"]
+
     # Run OCTON Brain analysis (Hippocampus -> Neo Cortex)
     analysis_result = await brain_engine.analyze_incident(
         incident_type=data.incident_type.value,
         description=data.description,
         db=db,
         image_base64=image_b64,
+        # NEW: multi-angle vision payload. Empty list => single-image flow.
+        extra_images_b64=[b for b in angle_images_b64 if b and b != image_b64],
     )
     analysis_result["visual_evidence_source"] = (
         "image" if data.image_base64 else ("video_frame" if video_bytes_buf else None)
     )
+    if angle_images_b64:
+        analysis_result["camera_angles_analyzed"] = len(angle_images_b64)
+        analysis_result["visual_evidence_source"] = "multi_angle"
 
     incident_doc = {
         "id": incident_id,
@@ -364,7 +466,8 @@ async def create_incident(data: IncidentCreate, request: Request):
         "storage_path": storage_path,
         "video_storage_path": video_storage_path,
         "has_image": bool(image_b64),
-        "has_video": bool(data.video_base64),
+        "has_video": bool(data.video_base64) or any(a.get("has_video") for a in persisted_angles),
+        "camera_angles": persisted_angles,
         "ai_analysis": analysis_result,
         "decision_status": "pending",
         "final_decision": None,

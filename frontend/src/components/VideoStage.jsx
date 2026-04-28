@@ -30,8 +30,27 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
   const [isAnnotating, setIsAnnotating] = useState(false);
   const [activeFormations, setActiveFormations] = useState({});
   const stageRef = useRef(null);
-  const imgSrc = previewImage || (incident?.has_image && incident?.storage_path ? `${API}/files/${incident.storage_path}` : null);
-  const videoSrc = previewVideo || (incident?.has_video && incident?.video_storage_path ? `${API}/files/${incident.video_storage_path}` : null);
+
+  // ── Multi-camera-angle support ───────────────────────────
+  // `incident.camera_angles` is an array of { angle, storage_path,
+  // video_storage_path }. The "primary" tab represents the legacy
+  // top-level still/video. When the operator clicks a tab, we re-derive
+  // imgSrc / videoSrc from that angle's storage paths.
+  const angles = Array.isArray(incident?.camera_angles) ? incident.camera_angles : [];
+  const [activeAngle, setActiveAngle] = useState("primary");
+  // Reset to primary whenever the incident itself changes.
+  useEffect(() => { setActiveAngle("primary"); }, [incident?.id]);
+
+  const activeAngleEntry = activeAngle === "primary"
+    ? null
+    : angles.find(a => a.angle === activeAngle);
+
+  const imgSrc = previewImage
+    || (activeAngleEntry?.storage_path ? `${API}/files/${activeAngleEntry.storage_path}` : null)
+    || (activeAngle === "primary" && incident?.has_image && incident?.storage_path ? `${API}/files/${incident.storage_path}` : null);
+  const videoSrc = previewVideo
+    || (activeAngleEntry?.video_storage_path ? `${API}/files/${activeAngleEntry.video_storage_path}` : null)
+    || (activeAngle === "primary" && incident?.has_video && incident?.video_storage_path ? `${API}/files/${incident.video_storage_path}` : null);
 
   useEffect(() => {
     if (incident?.annotations) setAnnotations(incident.annotations);
@@ -245,6 +264,33 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
 
   return (
     <div ref={stageRef} className="relative border border-white/[0.08] bg-black overflow-hidden" data-testid="video-player-container">
+      {/* ── Camera-angle switcher ───────────────────────────────
+          Shown only when the incident has 1+ explicit angle uploads.
+          "PRIMARY" toggles back to the legacy top-level still/video. */}
+      {angles.length > 0 && (
+        <div className="absolute top-2 right-2 z-30 flex items-center gap-0.5 bg-black/70 backdrop-blur-sm border border-white/[0.12] p-0.5" data-testid="camera-angle-switcher">
+          <button
+            onClick={() => setActiveAngle("primary")}
+            className={`text-[8px] font-mono px-1.5 py-0.5 transition-all ${activeAngle === "primary" ? "bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/40" : "text-gray-500 hover:text-white border border-transparent"}`}
+            data-testid="angle-tab-primary"
+            title="Primary view (legacy still/video)"
+          >
+            PRIMARY
+          </button>
+          {angles.map(a => (
+            <button
+              key={a.angle}
+              onClick={() => setActiveAngle(a.angle)}
+              className={`text-[8px] font-mono px-1.5 py-0.5 transition-all uppercase ${activeAngle === a.angle ? "bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/40" : "text-gray-500 hover:text-white border border-transparent"} ${!a.storage_path && !a.video_storage_path ? "opacity-50" : ""}`}
+              data-testid={`angle-tab-${a.angle}`}
+              title={`${a.angle.replace("_"," ").toUpperCase()} — ${a.has_video ? "still+clip" : a.has_image ? "still" : "no media"}`}
+              disabled={!a.storage_path && !a.video_storage_path}
+            >
+              {a.angle.replace("_", " ")}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="aspect-video relative">
         {videoSrc && !videoBroken ? (
           <video ref={videoRef} src={videoSrc} className="w-full h-full object-cover" onTimeUpdate={handleVideoTimeUpdate} onEnded={() => setIsPlaying(false)} onError={() => setVideoBroken(true)} onLoadedMetadata={() => { if (videoRef.current) videoRef.current.playbackRate = playbackSpeed; }} playsInline muted />

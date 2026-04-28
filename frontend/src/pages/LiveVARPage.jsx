@@ -35,6 +35,7 @@ import { DecisionTicker } from "../components/DecisionTicker";
 import { BrainPathway } from "../components/BrainPathway";
 import { VideoStage } from "../components/VideoStage";
 import { DecisionComparisonMode } from "../components/DecisionComparisonMode";
+import { CameraAngleUploader, cameraAnglesToPayload } from "../components/CameraAngleUploader";
 
 export const LiveVARPage = () => {
   const { user } = useAuth();
@@ -48,6 +49,7 @@ export const LiveVARPage = () => {
   const [loading, setLoading] = useState(true);
   const [showNewIncident, setShowNewIncident] = useState(false);
   const [newIncident, setNewIncident] = useState({ incident_type: "foul", description: "", timestamp_in_match: "", team_involved: "", player_involved: "", image_base64: null, video_base64: null });
+  const [cameraAngles, setCameraAngles] = useState({});
   const [previewImage, setPreviewImage] = useState(null);
   const [previewVideo, setPreviewVideo] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -112,7 +114,10 @@ export const LiveVARPage = () => {
     if (!newIncident.description) { toast.error("Provide a description"); return; }
     setSubmitting(true);
     try {
-      const res = await axios.post(`${API}/incidents`, newIncident);
+      const payload = { ...newIncident };
+      const ang = cameraAnglesToPayload(cameraAngles);
+      if (ang.length > 0) payload.camera_angles = ang;
+      const res = await axios.post(`${API}/incidents`, payload);
       toast.success("OCTON analysis complete!");
       const warnings = res.data?.storage_warnings || [];
       warnings.forEach(w => {
@@ -121,6 +126,7 @@ export const LiveVARPage = () => {
       setSelectedIncident(res.data);
       setShowNewIncident(false);
       setNewIncident({ incident_type: "foul", description: "", timestamp_in_match: "", team_involved: "", player_involved: "", image_base64: null, video_base64: null });
+      setCameraAngles({});
       setPreviewImage(null);
       fetchData();
     } catch { toast.error("Failed to create incident"); }
@@ -259,32 +265,39 @@ export const LiveVARPage = () => {
                   <div className="space-y-2"><Label className="text-gray-300">Team</Label><Input placeholder="Team name" value={newIncident.team_involved} onChange={e => setNewIncident({...newIncident, team_involved: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-none" /></div>
                 </div>
                 <div className="space-y-2"><Label className="text-gray-300">Player Involved</Label><Input placeholder="Player name" value={newIncident.player_involved} onChange={e => setNewIncident({...newIncident, player_involved: e.target.value})} className="bg-[#050505] border-white/10 text-white rounded-none" /></div>
-                <div className="space-y-2">
-                  <Label className="text-gray-300">Upload Frame / Image</Label>
-                  <div className="border border-dashed border-white/20 rounded-none p-4 text-center hover:border-[#00E5FF]/50 transition-colors">
-                    <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageChange} className="hidden" id="image-upload" data-testid="image-upload-input" />
-                    <label htmlFor="image-upload" className="cursor-pointer">
-                      {previewImage ? (
-                        <img src={previewImage} alt="Preview" className="max-h-32 mx-auto rounded-none" />
-                      ) : (
-                        <div className="space-y-2"><ImageIcon className="w-8 h-8 text-gray-400 mx-auto" /><p className="text-xs text-gray-400">Click to upload JPEG, PNG, or WebP</p></div>
-                      )}
-                    </label>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-gray-300">Video Clip (optional)</Label>
-                  <div className="border border-dashed border-white/20 p-4 text-center hover:border-[#00E5FF]/50 transition-colors">
-                    <input type="file" accept="video/mp4,video/webm" onChange={handleVideoChange} className="hidden" id="video-upload" data-testid="video-upload-input" />
-                    <label htmlFor="video-upload" className="cursor-pointer">
-                      {previewVideo ? (
-                        <video src={previewVideo} className="max-h-24 mx-auto" muted />
-                      ) : (
-                        <div className="space-y-2"><Video className="w-8 h-8 text-gray-400 mx-auto" /><p className="text-xs text-gray-400">Upload MP4 or WebM video clip</p></div>
-                      )}
-                    </label>
-                  </div>
-                </div>
+
+                <CameraAngleUploader value={cameraAngles} onChange={setCameraAngles} />
+
+                {Object.keys(cameraAngles).length === 0 && (
+                  <>
+                    <div className="space-y-2">
+                      <Label className="text-gray-300">Single still (legacy)</Label>
+                      <div className="border border-dashed border-white/20 rounded-none p-4 text-center hover:border-[#00E5FF]/50 transition-colors">
+                        <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageChange} className="hidden" id="image-upload" data-testid="image-upload-input" />
+                        <label htmlFor="image-upload" className="cursor-pointer">
+                          {previewImage ? (
+                            <img src={previewImage} alt="Preview" className="max-h-32 mx-auto rounded-none" />
+                          ) : (
+                            <div className="space-y-2"><ImageIcon className="w-8 h-8 text-gray-400 mx-auto" /><p className="text-xs text-gray-400">Or upload one frame here (the multi-angle grid above is preferred for in-depth analysis)</p></div>
+                          )}
+                        </label>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-gray-300">Single video clip (legacy)</Label>
+                      <div className="border border-dashed border-white/20 p-4 text-center hover:border-[#00E5FF]/50 transition-colors">
+                        <input type="file" accept="video/mp4,video/webm" onChange={handleVideoChange} className="hidden" id="video-upload" data-testid="video-upload-input" />
+                        <label htmlFor="video-upload" className="cursor-pointer">
+                          {previewVideo ? (
+                            <video src={previewVideo} className="max-h-24 mx-auto" muted />
+                          ) : (
+                            <div className="space-y-2"><Video className="w-8 h-8 text-gray-400 mx-auto" /><p className="text-xs text-gray-400">Single MP4/WebM clip</p></div>
+                          )}
+                        </label>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
               <DialogFooter>
                 <Button variant="ghost" onClick={() => { setShowNewIncident(false); setPreviewImage(null); setPreviewVideo(null); }} className="text-gray-400 hover:text-white">Cancel</Button>
@@ -452,14 +465,28 @@ export const LiveVARPage = () => {
                       <span
                         className="ml-auto text-[8px] font-mono uppercase tracking-[0.15em] px-1.5 py-0.5 border"
                         style={{
-                          color: analysis.visual_evidence_source === "video_frame" ? "#00FF88" : analysis.visual_evidence_source === "image" ? "#00E5FF" : "#FFB800",
-                          borderColor: analysis.visual_evidence_source ? "rgba(0,229,255,0.3)" : "rgba(255,184,0,0.3)",
-                          backgroundColor: "rgba(0,229,255,0.05)",
+                          color: analysis.visual_evidence_source === "multi_angle" ? "#B366FF" : analysis.visual_evidence_source === "video_frame" ? "#00FF88" : analysis.visual_evidence_source === "image" ? "#00E5FF" : "#FFB800",
+                          borderColor: analysis.visual_evidence_source === "multi_angle" ? "rgba(179,102,255,0.4)" : "rgba(0,229,255,0.3)",
+                          backgroundColor: analysis.visual_evidence_source === "multi_angle" ? "rgba(179,102,255,0.06)" : "rgba(0,229,255,0.05)",
                         }}
                         data-testid="visual-evidence-badge"
-                        title={analysis.visual_evidence_source === "video_frame" ? "Neo Cortex analysed an extracted video frame" : analysis.visual_evidence_source === "image" ? "Neo Cortex analysed the uploaded still frame" : "Text-only analysis — no visual evidence"}
+                        title={
+                          analysis.visual_evidence_source === "multi_angle"
+                            ? `Neo Cortex cross-referenced ${analysis.camera_angles_analyzed || "multiple"} synchronised camera angles`
+                            : analysis.visual_evidence_source === "video_frame"
+                              ? "Neo Cortex analysed an extracted video frame"
+                              : analysis.visual_evidence_source === "image"
+                                ? "Neo Cortex analysed the uploaded still frame"
+                                : "Text-only analysis — no visual evidence"
+                        }
                       >
-                        {analysis.visual_evidence_source === "video_frame" ? "VIDEO FRAME" : analysis.visual_evidence_source === "image" ? "STILL FRAME" : "TEXT ONLY"}
+                        {analysis.visual_evidence_source === "multi_angle"
+                          ? `MULTI-ANGLE · ${analysis.camera_angles_analyzed || "?"} CAMS`
+                          : analysis.visual_evidence_source === "video_frame"
+                            ? "VIDEO FRAME"
+                            : analysis.visual_evidence_source === "image"
+                              ? "STILL FRAME"
+                              : "TEXT ONLY"}
                       </span>
                     )}
                   </div>
