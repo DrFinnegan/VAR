@@ -15,7 +15,7 @@ import { frameCaptureRef } from "../contexts/SelectedIncidentContext";
 import { AnnotationCanvas, ANNOTATION_TOOLS } from "./AnnotationCanvas";
 import { AnnotationToolbar } from "./AnnotationToolbar";
 
-export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, onSaveAnnotations }) => {
+export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, onSaveAnnotations, onActiveAngleChange }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(1847);
   const [totalFrames] = useState(3200);
@@ -40,6 +40,14 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
   const [activeAngle, setActiveAngle] = useState("primary");
   // Reset to primary whenever the incident itself changes.
   useEffect(() => { setActiveAngle("primary"); }, [incident?.id]);
+  // Notify parent so the PDF export / analysis panel know which angle is on screen
+  useEffect(() => {
+    if (onActiveAngleChange) onActiveAngleChange(activeAngle);
+  }, [activeAngle, onActiveAngleChange]);
+  // Grid view: render all 4 angles simultaneously in a 2×2 mosaic
+  const [gridView, setGridView] = useState(false);
+  // Auto-disable grid when the incident has no angles
+  useEffect(() => { if (angles.length === 0) setGridView(false); }, [angles.length]);
 
   const activeAngleEntry = activeAngle === "primary"
     ? null
@@ -266,12 +274,14 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
     <div ref={stageRef} className="relative border border-white/[0.08] bg-black overflow-hidden" data-testid="video-player-container">
       {/* ── Camera-angle switcher ───────────────────────────────
           Shown only when the incident has 1+ explicit angle uploads.
-          "PRIMARY" toggles back to the legacy top-level still/video. */}
+          "PRIMARY" toggles back to the legacy top-level still/video.
+          GRID toggle renders all 4 angles simultaneously in a 2×2 mosaic. */}
       {angles.length > 0 && (
         <div className="absolute top-2 right-2 z-30 flex items-center gap-0.5 bg-black/70 backdrop-blur-sm border border-white/[0.12] p-0.5" data-testid="camera-angle-switcher">
           <button
-            onClick={() => setActiveAngle("primary")}
-            className={`text-[8px] font-mono px-1.5 py-0.5 transition-all ${activeAngle === "primary" ? "bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/40" : "text-gray-500 hover:text-white border border-transparent"}`}
+            onClick={() => { setGridView(false); setActiveAngle("primary"); }}
+            disabled={gridView}
+            className={`text-[8px] font-mono px-1.5 py-0.5 transition-all ${!gridView && activeAngle === "primary" ? "bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/40" : "text-gray-500 hover:text-white border border-transparent"} ${gridView ? "opacity-40 cursor-not-allowed" : ""}`}
             data-testid="angle-tab-primary"
             title="Primary view (legacy still/video)"
           >
@@ -280,19 +290,63 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
           {angles.map(a => (
             <button
               key={a.angle}
-              onClick={() => setActiveAngle(a.angle)}
-              className={`text-[8px] font-mono px-1.5 py-0.5 transition-all uppercase ${activeAngle === a.angle ? "bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/40" : "text-gray-500 hover:text-white border border-transparent"} ${!a.storage_path && !a.video_storage_path ? "opacity-50" : ""}`}
+              onClick={() => { setGridView(false); setActiveAngle(a.angle); }}
+              className={`text-[8px] font-mono px-1.5 py-0.5 transition-all uppercase ${!gridView && activeAngle === a.angle ? "bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/40" : "text-gray-500 hover:text-white border border-transparent"} ${(!a.storage_path && !a.video_storage_path) || gridView ? "opacity-50" : ""}`}
               data-testid={`angle-tab-${a.angle}`}
               title={`${a.angle.replace("_"," ").toUpperCase()} — ${a.has_video ? "still+clip" : a.has_image ? "still" : "no media"}`}
-              disabled={!a.storage_path && !a.video_storage_path}
+              disabled={(!a.storage_path && !a.video_storage_path) || gridView}
             >
               {a.angle.replace("_", " ")}
             </button>
           ))}
+          <div className="h-3 w-[1px] bg-white/[0.08] mx-0.5" />
+          <button
+            onClick={() => setGridView(g => !g)}
+            className={`text-[8px] font-mono px-1.5 py-0.5 transition-all flex items-center gap-1 ${gridView ? "bg-[#B366FF]/25 text-[#B366FF] border border-[#B366FF]/50" : "text-gray-500 hover:text-[#B366FF] border border-transparent"}`}
+            data-testid="angle-tab-grid"
+            title="Toggle 2×2 mosaic of all 4 angles"
+          >
+            <span className="inline-block w-2 h-2 grid grid-cols-2 grid-rows-2 gap-[1px]">
+              <span className="bg-current opacity-70" /><span className="bg-current opacity-70" />
+              <span className="bg-current opacity-70" /><span className="bg-current opacity-70" />
+            </span>
+            GRID
+          </button>
         </div>
       )}
       <div className="aspect-video relative">
-        {videoSrc && !videoBroken ? (
+        {gridView ? (
+          <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-[2px] bg-white/[0.08] z-10" data-testid="angle-grid-mosaic">
+            {["broadcast", "tactical", "tight", "goal_line"].map(angleKey => {
+              const entry = angles.find(a => a.angle === angleKey);
+              const hasMedia = entry && (entry.storage_path || entry.video_storage_path);
+              const tileImg = entry?.storage_path ? `${API}/files/${entry.storage_path}` : null;
+              const tileVid = entry?.video_storage_path ? `${API}/files/${entry.video_storage_path}` : null;
+              return (
+                <div key={angleKey} className="relative bg-black overflow-hidden" data-testid={`grid-tile-${angleKey}`}>
+                  {tileVid ? (
+                    <video src={tileVid} className="w-full h-full object-cover" muted loop autoPlay playsInline />
+                  ) : tileImg ? (
+                    <img src={tileImg} alt={angleKey} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <img src="https://images.pexels.com/photos/12201296/pexels-photo-12201296.jpeg" alt="Stadium" className="w-full h-full object-cover opacity-30" />
+                      <div className="absolute inset-0 bg-black/60" />
+                      <span className="absolute text-[9px] font-mono uppercase tracking-[0.2em] text-gray-500">no feed</span>
+                    </div>
+                  )}
+                  <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/75 border-l-2 border-[#00E5FF] text-[8px] font-mono uppercase tracking-[0.2em] text-[#00E5FF]">
+                    {angleKey.replace("_", " ")}
+                  </div>
+                  {hasMedia && entry?.has_video && (
+                    <div className="absolute top-1 right-1 px-1 py-0.5 bg-black/75 text-[7px] font-mono text-[#00FF88] border border-[#00FF88]/40">CLIP</div>
+                  )}
+                  <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#00E5FF]/40 to-transparent" />
+                </div>
+              );
+            })}
+          </div>
+        ) : (videoSrc && !videoBroken ? (
           <video ref={videoRef} src={videoSrc} className="w-full h-full object-cover" onTimeUpdate={handleVideoTimeUpdate} onEnded={() => setIsPlaying(false)} onError={() => setVideoBroken(true)} onLoadedMetadata={() => { if (videoRef.current) videoRef.current.playbackRate = playbackSpeed; }} playsInline muted />
         ) : imgSrc && !imgBroken ? (
           <img src={imgSrc} alt="Incident" className="w-full h-full object-cover" onError={() => setImgBroken(true)} />
@@ -306,7 +360,7 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
               </div>
             )}
           </>
-        )}
+        ))}
         <div className="absolute inset-0 grid-overlay opacity-50" />
         <AnnotationCanvas width={100} height={100} annotations={annotations} setAnnotations={setAnnotations} activeTool={activeTool} activeColor={activeColor} isDrawing={isAnnotating} setIsDrawing={setIsAnnotating} formations={Object.values(activeFormations)} />
         <div className="absolute inset-0 pointer-events-none overflow-hidden"><div className="w-full h-[2px] bg-gradient-to-r from-transparent via-[#00E5FF]/60 to-transparent animate-scan" /></div>

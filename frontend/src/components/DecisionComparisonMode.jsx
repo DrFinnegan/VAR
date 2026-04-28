@@ -8,10 +8,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Columns, Download, XCircle, ArrowRight, Minus, Circle, Crosshair, Undo2, Trash2 } from "lucide-react";
 import { AnnotationCanvas, ANNOTATION_TOOLS, FORMATIONS } from "./AnnotationCanvas";
+import { API } from "../lib/api";
 
-const ComparisonPanel = ({ label, color, time, annotations, setAnnotations, activeColor, activeFormations, setActiveFormations, panelId }) => {
+const ComparisonPanel = ({ label, color, time, annotations, setAnnotations, activeColor, activeFormations, setActiveFormations, panelId, angles = [], selectedAngle, onSelectAngle, incident }) => {
   const [activeTool, setActiveTool] = useState(ANNOTATION_TOOLS.NONE);
   const [isDrawing, setIsDrawing] = useState(false);
+
+  // Resolve image source from the picked angle (falls back to the legacy
+  // primary still on the incident, then to the stock stadium image).
+  const angleEntry = selectedAngle && selectedAngle !== "primary"
+    ? angles.find(a => a.angle === selectedAngle)
+    : null;
+  const angleImg = angleEntry?.storage_path
+    ? `${API}/files/${angleEntry.storage_path}`
+    : null;
+  const primaryImg = (selectedAngle === "primary" && incident?.has_image && incident?.storage_path)
+    ? `${API}/files/${incident.storage_path}`
+    : null;
+  const fallbackImg = "https://images.pexels.com/photos/12201296/pexels-photo-12201296.jpeg";
+  const imgSrc = angleImg || primaryImg || fallbackImg;
+  const isFallback = imgSrc === fallbackImg;
 
   const placeFormation = (formationKey, team) => {
     const f = FORMATIONS[formationKey];
@@ -30,16 +46,38 @@ const ComparisonPanel = ({ label, color, time, annotations, setAnnotations, acti
   return (
     <div className="flex-1 min-w-0">
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/[0.06] bg-[#0A0A0A]">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2" style={{ backgroundColor: color }} />
-          <span className="text-[10px] font-heading font-bold uppercase tracking-[0.2em]" style={{ color }}>{label}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-2 h-2 flex-none" style={{ backgroundColor: color }} />
+          <span className="text-[10px] font-heading font-bold uppercase tracking-[0.2em] flex-none" style={{ color }}>{label}</span>
+          {/* Angle picker — only when the incident has multi-angle uploads */}
+          {angles.length > 0 && (
+            <select
+              value={selectedAngle || "primary"}
+              onChange={e => onSelectAngle?.(e.target.value)}
+              className="bg-black/60 border border-white/10 text-[9px] font-mono text-[#00E5FF] px-1 py-0.5 outline-none hover:border-[#00E5FF]/40 focus:border-[#00E5FF]/60 max-w-[110px] truncate"
+              data-testid={`comparison-angle-${panelId}`}
+              title="Pick which camera angle to compare"
+            >
+              <option value="primary">PRIMARY</option>
+              {angles.map(a => (
+                <option key={a.angle} value={a.angle} disabled={!a.storage_path && !a.video_storage_path}>
+                  {a.angle.replace("_", " ").toUpperCase()}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
-        <span className="text-[10px] font-mono text-gray-500">{time}</span>
+        <span className="text-[10px] font-mono text-gray-500 flex-none ml-2">{time}</span>
       </div>
 
       <div className="aspect-video relative bg-black" data-panel={panelId}>
-        <img src="https://images.pexels.com/photos/12201296/pexels-photo-12201296.jpeg" alt="Match frame" className="w-full h-full object-cover opacity-40" />
+        <img src={imgSrc} alt={`${label} frame · ${selectedAngle || "primary"}`} className={`w-full h-full object-cover ${isFallback ? "opacity-40" : ""}`} />
         <div className="absolute inset-0 grid-overlay opacity-30" />
+        {isFallback && (
+          <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-[#FFB800]/15 border border-[#FFB800]/40 text-[#FFB800] text-[8px] font-mono uppercase tracking-[0.2em]">
+            ⚠ stadium fallback
+          </div>
+        )}
         <AnnotationCanvas width={100} height={100} annotations={annotations} setAnnotations={setAnnotations} activeTool={activeTool} activeColor={activeColor} isDrawing={isDrawing} setIsDrawing={setIsDrawing} formations={Object.values(activeFormations)} />
       </div>
 
@@ -77,6 +115,23 @@ export const DecisionComparisonMode = ({ incident, onClose }) => {
   const [trailEnabled, setTrailEnabled] = useState(true);
   const [trailPairs, setTrailPairs] = useState([]);
   const framesWrapRef = useRef(null);
+  // Per-panel camera-angle picks (defaults: BEFORE→broadcast, AFTER→tight,
+  // a typical "wide-context vs close-action" forensic comparison).
+  const incidentAngles = Array.isArray(incident?.camera_angles) ? incident.camera_angles : [];
+  const defaultAngle = (preferred) => {
+    const hit = incidentAngles.find(a => a.angle === preferred && (a.storage_path || a.video_storage_path));
+    if (hit) return preferred;
+    const any = incidentAngles.find(a => a.storage_path || a.video_storage_path);
+    return any ? any.angle : "primary";
+  };
+  const [beforeAngle, setBeforeAngle] = useState(() => defaultAngle("broadcast"));
+  const [afterAngle, setAfterAngle] = useState(() => defaultAngle("tight"));
+  // Re-default whenever the incident changes
+  useEffect(() => {
+    setBeforeAngle(defaultAngle("broadcast"));
+    setAfterAngle(defaultAngle("tight"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incident?.id]);
 
   // ── Player Tracking Trail: match players between BEFORE and AFTER ──
   const computePairs = useCallback(() => {
@@ -302,8 +357,8 @@ export const DecisionComparisonMode = ({ incident, onClose }) => {
       </div>
 
       <div ref={framesWrapRef} className="relative flex gap-[1px] bg-white/[0.04]">
-        <ComparisonPanel panelId="before" label="BEFORE" color="#FFB800" time={beforeTime} annotations={beforeAnnotations} setAnnotations={setBeforeAnnotations} activeColor={activeColor} activeFormations={beforeFormations} setActiveFormations={setBeforeFormations} />
-        <ComparisonPanel panelId="after" label="AFTER" color="#00FF88" time={afterTime} annotations={afterAnnotations} setAnnotations={setAfterAnnotations} activeColor={activeColor} activeFormations={afterFormations} setActiveFormations={setAfterFormations} />
+        <ComparisonPanel panelId="before" label="BEFORE" color="#FFB800" time={beforeTime} annotations={beforeAnnotations} setAnnotations={setBeforeAnnotations} activeColor={activeColor} activeFormations={beforeFormations} setActiveFormations={setBeforeFormations} angles={incidentAngles} selectedAngle={beforeAngle} onSelectAngle={setBeforeAngle} incident={incident} />
+        <ComparisonPanel panelId="after" label="AFTER" color="#00FF88" time={afterTime} annotations={afterAnnotations} setAnnotations={setAfterAnnotations} activeColor={activeColor} activeFormations={afterFormations} setActiveFormations={setAfterFormations} angles={incidentAngles} selectedAngle={afterAngle} onSelectAngle={setAfterAngle} incident={incident} />
 
         {trailEnabled && trailPairs.length > 0 && (
           <svg className="pointer-events-none absolute inset-0 w-full h-full z-20" data-testid="player-tracking-overlay">

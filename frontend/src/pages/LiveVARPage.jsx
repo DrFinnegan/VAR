@@ -54,6 +54,9 @@ export const LiveVARPage = () => {
   const [previewVideo, setPreviewVideo] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
+  // VideoStage tells us which angle is on screen so the PDF export can label
+  // the thumbnail with the camera view that drove the verdict.
+  const [activeStageAngle, setActiveStageAngle] = useState("primary");
 
   const wsConnected = useWebSocket(useCallback((msg) => {
     if (msg.type === "incident_created" || msg.type === "decision_made" || msg.type === "analysis_complete") {
@@ -183,7 +186,7 @@ export const LiveVARPage = () => {
         let audit = null;
         try { const r = await axios.post(`${API}/audit/register`, { incident_id: selectedIncident.id }); audit = r.data; } catch { /* degrade */ }
         const frame = (typeof frameCaptureRef.current === "function") ? frameCaptureRef.current() : null;
-        try { exportAnalysisPDF(selectedIncident, analysis, audit, { frameImage: frame }); toast.success("Report exported"); } catch { toast.error("Export failed"); }
+        try { exportAnalysisPDF(selectedIncident, analysis, audit, { frameImage: frame, activeAngle: activeStageAngle }); toast.success("Report exported"); } catch { toast.error("Export failed"); }
         break;
       }
       case "promote_training":
@@ -348,7 +351,7 @@ export const LiveVARPage = () => {
           {showComparison ? (
             <DecisionComparisonMode incident={selectedIncident} onClose={() => setShowComparison(false)} />
           ) : (
-            <VideoStage incident={selectedIncident} onAnalyze={handleReanalyze} previewVideo={previewVideo} />
+            <VideoStage incident={selectedIncident} onAnalyze={handleReanalyze} previewVideo={previewVideo} onActiveAngleChange={setActiveStageAngle} />
           )}
           {analysis && <BrainPathway analysis={analysis} />}
           <div className="border border-white/[0.08] bg-[#0A0A0A] p-4" data-testid="timeline-scrubber">
@@ -397,7 +400,7 @@ export const LiveVARPage = () => {
                         audit = res.data;
                       } catch (e) { /* degrade to unsigned export */ }
                       const frame = (typeof frameCaptureRef.current === "function") ? frameCaptureRef.current() : null;
-                      try { const fn = exportAnalysisPDF(selectedIncident, analysis, audit, { frameImage: frame }); toast.success(audit ? `Signed report exported · ${fn}` : `Report exported · ${fn}`); }
+                      try { const fn = exportAnalysisPDF(selectedIncident, analysis, audit, { frameImage: frame, activeAngle: activeStageAngle }); toast.success(audit ? `Signed report exported · ${fn}` : `Report exported · ${fn}`); }
                       catch (e) { toast.error("PDF export failed"); }
                     }} className="text-[#FFB800] hover:text-[#FFB800] hover:bg-[#FFB800]/10 h-7 px-2 p-0 border border-[#FFB800]/30 hover:border-[#FFB800]/60 rounded-none transition-all flex items-center gap-1" data-testid="export-pdf-button" title="Export signed forensic PDF report">
                       <FileText className="w-3.5 h-3.5" />

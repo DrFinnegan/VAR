@@ -102,7 +102,7 @@ function sectionHeader(doc, x, y, title, accent = CYAN) {
 
 // ── Main export ──────────────────────────────────────────
 export function exportAnalysisPDF(incident, analysis, audit = null, opts = {}) {
-  const { frameImage = null } = opts;
+  const { frameImage = null, activeAngle = null } = opts;
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   const pageW = 210;
   const pageH = 297;
@@ -384,6 +384,20 @@ export function exportAnalysisPDF(incident, analysis, audit = null, opts = {}) {
     doc.setDrawColor(AMBER[0], AMBER[1], AMBER[2]);
     doc.setLineWidth(0.3);
     doc.rect(margin, y, imgW, imgH, "S");
+
+    // ── Active-angle ribbon — top-left of the thumbnail ────────────
+    // Tells the reader which camera view drove the verdict (legal-grade
+    // traceability when multiple angles were ingested).
+    const ang = (activeAngle || "primary").toString().replace(/_/g, " ").toUpperCase();
+    const angleLabel = ang === "PRIMARY" ? "PRIMARY VIEW" : `${ang} ANGLE`;
+    const ribbonW = Math.max(28, doc.getTextWidth(angleLabel) * 1.2 + 6);
+    doc.setFillColor(AMBER[0], AMBER[1], AMBER[2]);
+    doc.rect(margin, y, ribbonW, 4.2, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6);
+    doc.setTextColor(15, 12, 0);
+    doc.text(angleLabel, margin + 2, y + 3);
+
     doc.setFont("helvetica", "normal");
     doc.setFontSize(6.5);
     doc.setTextColor(GRAY_MUTED[0], GRAY_MUTED[1], GRAY_MUTED[2]);
@@ -403,7 +417,11 @@ export function exportAnalysisPDF(incident, analysis, audit = null, opts = {}) {
     doc.setFontSize(6.5);
     doc.setTextColor(GRAY_TEXT[0], GRAY_TEXT[1], GRAY_TEXT[2]);
     const evSrc = analysis?.visual_evidence_source;
-    const srcLabel = evSrc === "video_frame" ? "Extracted video still" : evSrc === "image" ? "Uploaded still frame" : "Text-only analysis";
+    const srcLabel = evSrc === "multi_angle"
+      ? `Multi-angle (${analysis?.camera_angles_analyzed || "?"} cameras analysed)`
+      : evSrc === "video_frame" ? "Extracted video still"
+      : evSrc === "image" ? "Uploaded still frame"
+      : "Text-only analysis";
     doc.text(srcLabel, noteX, y + 7);
     doc.setFontSize(6);
     doc.setTextColor(GRAY_MUTED[0], GRAY_MUTED[1], GRAY_MUTED[2]);
