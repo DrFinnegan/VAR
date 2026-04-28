@@ -48,6 +48,9 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
   const [gridView, setGridView] = useState(false);
   // Auto-disable grid when the incident has no angles
   useEffect(() => { if (angles.length === 0) setGridView(false); }, [angles.length]);
+  // Refs to each tile's <video> element so the master scrubber can seek
+  // all 4 simultaneously. Indexed by angle key.
+  const gridVideoRefs = useRef({ broadcast: null, tactical: null, tight: null, goal_line: null });
 
   const activeAngleEntry = activeAngle === "primary"
     ? null
@@ -148,10 +151,9 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
   };
 
   useEffect(() => {
-    if (videoRef.current && videoSrc) {
-      videoRef.current.playbackRate = playbackSpeed;
-    }
-  }, [playbackSpeed, videoSrc]);
+    eachVideo((v) => { v.playbackRate = playbackSpeed; });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbackSpeed, videoSrc, gridView]);
 
   // Expose frame capture to the module-level ref so PDF export can embed
   // the exact annotated scrubber frame the operator is viewing.
@@ -196,10 +198,19 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
     };
   }, [annotations]);
 
-  const handleVideoPlay = () => {
-    if (videoRef.current) {
-      if (isPlaying) { videoRef.current.pause(); } else { videoRef.current.play(); }
+  // Apply an action across all tile videos in grid mode (and the master
+  // <video> in single mode). Used by play/pause/seek/step/speed handlers
+  // so the operator's interaction stays in sync across angles.
+  const eachVideo = (fn) => {
+    if (gridView) {
+      Object.values(gridVideoRefs.current || {}).forEach((v) => { if (v) try { fn(v); } catch {} });
+    } else if (videoRef.current) {
+      fn(videoRef.current);
     }
+  };
+
+  const handleVideoPlay = () => {
+    eachVideo((v) => { if (isPlaying) v.pause(); else { v.play().catch(() => {}); } });
     setIsPlaying(!isPlaying);
   };
 
@@ -210,18 +221,25 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
     setCurrentFrame(Math.floor(pct * totalFrames));
     const totalSec = v.currentTime;
     setMatchTime({ min: Math.floor(totalSec / 60), sec: Math.floor(totalSec % 60), ms: Math.floor((totalSec % 1) * 1000) });
+    // Re-align grid tiles if the master is more than 0.25 s out of phase
+    // with any tile. Cheap drift correction without spamming `currentTime`.
+    if (gridView) {
+      Object.values(gridVideoRefs.current || {}).forEach((tile) => {
+        if (tile && Math.abs((tile.currentTime || 0) - v.currentTime) > 0.25) {
+          try { tile.currentTime = v.currentTime; } catch {}
+        }
+      });
+    }
   };
 
   const handleVideoScrub = (pct) => {
-    if (videoRef.current && videoRef.current.duration) {
-      videoRef.current.currentTime = pct * videoRef.current.duration;
-    }
+    eachVideo((v) => {
+      if (v.duration) try { v.currentTime = pct * v.duration; } catch {}
+    });
   };
 
   const stepVideoFrame = (delta) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime + (delta * 0.033));
-    }
+    eachVideo((v) => { try { v.currentTime = Math.max(0, v.currentTime + delta * 0.033); } catch {} });
   };
 
   useEffect(() => {
@@ -316,7 +334,22 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
       )}
       <div className="aspect-video relative">
         {gridView ? (
-          <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-[2px] bg-white/[0.08] z-10" data-testid="angle-grid-mosaic">
+          <>
+            {/* Hidden master video — drives the scrubber timeline (currentFrame
+                state) while the visible 2×2 mosaic mirrors its currentTime. */}
+            {(videoSrc || (angles[0] && angles[0].video_storage_path)) && (
+              <video
+                ref={videoRef}
+                src={videoSrc || `${API}/files/${angles.find(a => a.video_storage_path)?.video_storage_path}`}
+                className="absolute opacity-0 pointer-events-none"
+                style={{ width: 1, height: 1, top: 0, left: 0 }}
+                onTimeUpdate={handleVideoTimeUpdate}
+                onLoadedMetadata={() => { if (videoRef.current) videoRef.current.playbackRate = playbackSpeed; }}
+                muted
+                playsInline
+              />
+            )}
+            <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-[2px] bg-white/[0.08] z-10" data-testid="angle-grid-mosaic">
             {["broadcast", "tactical", "tight", "goal_line"].map(angleKey => {
               const entry = angles.find(a => a.angle === angleKey);
               const hasMedia = entry && (entry.storage_path || entry.video_storage_path);
@@ -325,7 +358,14 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
               return (
                 <div key={angleKey} className="relative bg-black overflow-hidden" data-testid={`grid-tile-${angleKey}`}>
                   {tileVid ? (
-                    <video src={tileVid} className="w-full h-full object-cover" muted loop autoPlay playsInline />
+                    <video
+                      ref={(el) => { gridVideoRefs.current[angleKey] = el; }}
+                      src={tileVid}
+                      className="w-full h-full object-cover"
+                      muted
+                      playsInline
+                      onLoadedMetadata={(e) => { try { e.currentTarget.playbackRate = playbackSpeed; } catch {} }}
+                    />
                   ) : tileImg ? (
                     <img src={tileImg} alt={angleKey} className="w-full h-full object-cover" />
                   ) : (
@@ -345,7 +385,17 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
                 </div>
               );
             })}
+            {/* Sync indicator — bottom-left of the mosaic */}
+            <div
+              className="absolute bottom-2 left-2 z-20 flex items-center gap-1 px-2 py-1 bg-black/75 border border-[#00FF88]/40 text-[#00FF88] text-[8px] font-mono uppercase tracking-[0.2em] pointer-events-none"
+              data-testid="grid-sync-indicator"
+              title="All 4 angles seek together when the master scrubber moves"
+            >
+              <span className="w-1.5 h-1.5 bg-[#00FF88] animate-pulse" />
+              SYNC LOCK · 4 CAMS
+            </div>
           </div>
+          </>
         ) : (videoSrc && !videoBroken ? (
           <video ref={videoRef} src={videoSrc} className="w-full h-full object-cover" onTimeUpdate={handleVideoTimeUpdate} onEnded={() => setIsPlaying(false)} onError={() => setVideoBroken(true)} onLoadedMetadata={() => { if (videoRef.current) videoRef.current.playbackRate = playbackSpeed; }} playsInline muted />
         ) : imgSrc && !imgBroken ? (
@@ -362,7 +412,7 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
           </>
         ))}
         <div className="absolute inset-0 grid-overlay opacity-50" />
-        <AnnotationCanvas width={100} height={100} annotations={annotations} setAnnotations={setAnnotations} activeTool={activeTool} activeColor={activeColor} isDrawing={isAnnotating} setIsDrawing={setIsAnnotating} formations={Object.values(activeFormations)} />
+        <AnnotationCanvas width={100} height={100} annotations={annotations} setAnnotations={setAnnotations} activeTool={activeTool} activeColor={activeColor} isDrawing={isAnnotating} setIsDrawing={setIsAnnotating} formations={Object.values(activeFormations)} activeAngle={activeAngle} />
         <div className="absolute inset-0 pointer-events-none overflow-hidden"><div className="w-full h-[2px] bg-gradient-to-r from-transparent via-[#00E5FF]/60 to-transparent animate-scan" /></div>
         {incident?.ai_analysis && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
@@ -387,7 +437,7 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
         <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#00E5FF]/40 to-transparent" />
       </div>
 
-      <AnnotationToolbar activeTool={activeTool} setActiveTool={setActiveTool} activeColor={activeColor} setActiveColor={setActiveColor} annotations={annotations} setAnnotations={setAnnotations} onSave={incident?.id ? handleSaveAnnotations : null} onExport={handleExport} activeFormations={activeFormations} setActiveFormations={setActiveFormations} />
+      <AnnotationToolbar activeTool={activeTool} setActiveTool={setActiveTool} activeColor={activeColor} setActiveColor={setActiveColor} annotations={annotations} setAnnotations={setAnnotations} onSave={incident?.id ? handleSaveAnnotations : null} onExport={handleExport} activeFormations={activeFormations} setActiveFormations={setActiveFormations} activeAngle={activeAngle} />
 
       <div className="bg-[#050505] border-t border-white/[0.06]">
         <div className="px-3 pt-2 pb-1">

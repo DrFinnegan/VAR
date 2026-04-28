@@ -438,6 +438,22 @@ export const LiveVARPage = () => {
                   />
                 </div>
 
+                {analysis.angle_disagreement && (
+                  <div
+                    className="mx-auto -mt-1 mb-2 flex items-center gap-2 px-3 py-1.5 border border-[#FFB800]/60 bg-[#FFB800]/[0.08] w-fit octon-pulse-amber"
+                    data-testid="angles-disagree-chip"
+                    title={`Camera angles diverge by ${analysis.angle_confidence_delta?.toFixed?.(1) || analysis.angle_confidence_delta}%. Recommend OFR review.`}
+                  >
+                    <AlertTriangle className="w-3 h-3 text-[#FFB800]" />
+                    <span className="text-[9px] font-heading font-bold tracking-[0.2em] text-[#FFB800] uppercase">
+                      ANGLES DISAGREE · Δ {analysis.angle_confidence_delta?.toFixed?.(1) || analysis.angle_confidence_delta}%
+                    </span>
+                    <span className="text-[8px] font-mono text-[#FFD466] uppercase tracking-[0.15em]">
+                      · recommend OFR
+                    </span>
+                  </div>
+                )}
+
                 {analysis.critical_trigger && (
                   <div
                     className="mx-auto -mt-1 mb-2 flex items-center gap-2 px-3 py-1.5 border border-[#FF2A2A]/60 bg-[#FF2A2A]/[0.08] w-fit octon-pulse-red"

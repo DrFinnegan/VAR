@@ -42,7 +42,7 @@ export const FORMATIONS = {
   ]},
 };
 
-export const AnnotationCanvas = ({ width, height, annotations, setAnnotations, activeTool, activeColor, isDrawing, setIsDrawing, formations }) => {
+export const AnnotationCanvas = ({ width, height, annotations, setAnnotations, activeTool, activeColor, isDrawing, setIsDrawing, formations, activeAngle = "primary" }) => {
   const canvasRef = useRef(null);
   const [startPos, setStartPos] = useState(null);
   const [currentPos, setCurrentPos] = useState(null);
@@ -64,7 +64,7 @@ export const AnnotationCanvas = ({ width, height, annotations, setAnnotations, a
     setStartPos(pos);
     setCurrentPos(pos);
     if (activeTool === ANNOTATION_TOOLS.MARKER) {
-      setAnnotations(prev => [...prev, { type: "marker", x: pos.x, y: pos.y, color: activeColor, id: Date.now() }]);
+      setAnnotations(prev => [...prev, { type: "marker", x: pos.x, y: pos.y, color: activeColor, id: Date.now(), angle: activeAngle }]);
       setIsDrawing(false);
     }
   };
@@ -84,11 +84,11 @@ export const AnnotationCanvas = ({ width, height, annotations, setAnnotations, a
     if (draggingPlayer !== null) { setDraggingPlayer(null); return; }
     if (!isDrawing || !startPos || !currentPos) { setIsDrawing(false); return; }
     if (activeTool === ANNOTATION_TOOLS.LINE) {
-      setAnnotations(prev => [...prev, { type: "line", x1: startPos.x, y1: startPos.y, x2: currentPos.x, y2: currentPos.y, color: activeColor, id: Date.now() }]);
+      setAnnotations(prev => [...prev, { type: "line", x1: startPos.x, y1: startPos.y, x2: currentPos.x, y2: currentPos.y, color: activeColor, id: Date.now(), angle: activeAngle }]);
     } else if (activeTool === ANNOTATION_TOOLS.CIRCLE) {
       const dx = currentPos.x - startPos.x, dy = currentPos.y - startPos.y;
       const r = Math.sqrt(dx * dx + dy * dy);
-      setAnnotations(prev => [...prev, { type: "circle", cx: startPos.x, cy: startPos.y, r, color: activeColor, id: Date.now() }]);
+      setAnnotations(prev => [...prev, { type: "circle", cx: startPos.x, cy: startPos.y, r, color: activeColor, id: Date.now(), angle: activeAngle }]);
     }
     setIsDrawing(false);
     setStartPos(null);
@@ -116,6 +116,11 @@ export const AnnotationCanvas = ({ width, height, annotations, setAnnotations, a
       data-testid="annotation-canvas"
     >
       {annotations.map(a => {
+        // Per-angle visibility: legacy untagged annotations always render;
+        // tagged ones only render when the operator is on that angle. The
+        // "primary" view also shows untagged annotations for backwards
+        // compatibility with incidents created before per-angle was added.
+        if (a.angle && a.angle !== activeAngle) return null;
         if (a.type === "line") return <line key={a.id} x1={a.x1} y1={a.y1} x2={a.x2} y2={a.y2} stroke={a.color} strokeWidth="0.4" strokeLinecap="round" />;
         if (a.type === "circle") return <circle key={a.id} cx={a.cx} cy={a.cy} r={a.r} stroke={a.color} strokeWidth="0.4" fill="none" />;
         if (a.type === "marker") return (

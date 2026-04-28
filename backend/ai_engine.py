@@ -610,7 +610,13 @@ class NeoCortexAnalyzer:
                     '  "key_factors": ["specific factual factors from the description"],\n'
                     '  "cited_clause": "Short reference to the IFAB law/clause applied (e.g. \'Law 12 §1 — Serious Foul Play, two-footed lunge\', \'Law 11 — Offside, daylight beyond second-last defender\', \'Law 14 — DOGSO inside area, no attempt to play ball\'). Max 90 chars.",\n'
                     '  "risk_level": "low|medium|high|critical",\n'
-                    '  "neo_cortex_notes": "any caveats, what additional evidence would help"\n'
+                    '  "neo_cortex_notes": "any caveats, what additional evidence would help",\n'
+                    '  "angle_assessments": [\n'
+                    '     // OPTIONAL — only populate when 2+ camera angles are attached.\n'
+                    '     // One object per angle in the order provided (broadcast, tactical, tight, goal_line).\n'
+                    '     // confidence is what THIS angle alone supports, decision is the verdict it suggests.\n'
+                    '     {"angle": "broadcast", "confidence": number, "decision": "string"}\n'
+                    '  ]\n'
                     "}"
                 ),
             ).with_model("openai", "gpt-5.2")
@@ -714,6 +720,39 @@ class NeoCortexAnalyzer:
                 analysis_data.get("cited_clause") or _default_clause_for(incident_type)
             ).strip()[:120]
 
+            # ── Per-angle confidence assessments (multi-camera analyses) ──
+            # Compute the spread between the most/least confident angles so
+            # the UI can flag inter-angle disagreement (a useful forensic
+            # signal — when the broadcast and the tight cameras disagree
+            # by >15%, the operator should look closer rather than trust
+            # the headline number).
+            angle_assessments = []
+            try:
+                raw_aa = analysis_data.get("angle_assessments") or []
+                for a in raw_aa[:4]:
+                    if not isinstance(a, dict):
+                        continue
+                    ang = str(a.get("angle", "")).lower().strip()
+                    if not ang:
+                        continue
+                    conf = float(a.get("confidence", 0))
+                    angle_assessments.append({
+                        "angle": ang,
+                        "confidence": round(min(100.0, max(0.0, conf)), 1),
+                        "decision": str(a.get("decision", ""))[:140],
+                    })
+            except (TypeError, ValueError):
+                angle_assessments = []
+            angle_confidence_delta = 0.0
+            angle_disagreement = False
+            if len(angle_assessments) >= 2:
+                confs = [aa["confidence"] for aa in angle_assessments]
+                angle_confidence_delta = round(max(confs) - min(confs), 1)
+                # Threshold tuned against IFAB "clear and obvious" doctrine —
+                # 15% spread roughly matches the moment a referee should call
+                # for an OFR rather than trust the on-field call.
+                angle_disagreement = angle_confidence_delta >= 15.0
+
             return {
                 "stage": "neo_cortex",
                 "confidence_score": min(
@@ -731,6 +770,9 @@ class NeoCortexAnalyzer:
                 "cited_clause": cited_clause,
                 "risk_level": analysis_data.get("risk_level", "medium"),
                 "neo_cortex_notes": analysis_data.get("neo_cortex_notes", ""),
+                "angle_assessments": angle_assessments,
+                "angle_confidence_delta": angle_confidence_delta,
+                "angle_disagreement": angle_disagreement,
                 "processing_time_ms": processing_ms,
             }
 
@@ -982,6 +1024,9 @@ class OctonBrainEngine:
                 "cited_clause", _default_clause_for(incident_type)
             ),
             "risk_level": neo_cortex_result.get("risk_level", "medium"),
+            "angle_assessments": neo_cortex_result.get("angle_assessments", []),
+            "angle_confidence_delta": neo_cortex_result.get("angle_confidence_delta", 0.0),
+            "angle_disagreement": neo_cortex_result.get("angle_disagreement", False),
             "neo_cortex_notes": neo_cortex_result.get("neo_cortex_notes", ""),
             "similar_historical_cases": historical_data["total_similar"],
             "historical_accuracy": historical_data.get("accuracy_rate", 0),

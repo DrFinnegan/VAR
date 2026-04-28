@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Minus, Circle, Crosshair, Users2, Layers, Undo2, Trash2, Save, Download } from "lucide-react";
 import { ANNOTATION_TOOLS, ANNOTATION_COLORS, FORMATIONS } from "./AnnotationCanvas";
 
-export const AnnotationToolbar = ({ activeTool, setActiveTool, activeColor, setActiveColor, annotations, setAnnotations, onSave, onExport, activeFormations, setActiveFormations }) => {
+export const AnnotationToolbar = ({ activeTool, setActiveTool, activeColor, setActiveColor, annotations, setAnnotations, onSave, onExport, activeFormations, setActiveFormations, activeAngle = "primary" }) => {
   const [showFormations, setShowFormations] = useState(false);
 
   const placeFormation = (formationKey, team) => {
@@ -66,7 +66,15 @@ export const AnnotationToolbar = ({ activeTool, setActiveTool, activeColor, setA
         {onExport && (
           <button onClick={onExport} className="h-7 px-2 flex items-center gap-1 text-[#FFB800] text-[9px] font-mono border border-[#FFB800]/30 bg-[#FFB800]/10 hover:bg-[#FFB800]/20 transition-all" title="Export to PNG" data-testid="annotation-export"><Download className="w-3 h-3" />PNG</button>
         )}
-        {annotations.length > 0 && <span className="text-[9px] font-mono text-gray-600 ml-1">{annotations.length}</span>}
+        {annotations.length > 0 && <span className="text-[9px] font-mono text-gray-600 ml-1" title={`${annotations.filter(a => !a.angle || a.angle === activeAngle).length} visible on ${activeAngle.replace("_"," ").toUpperCase()} · ${annotations.length} total across all angles`}>{annotations.filter(a => !a.angle || a.angle === activeAngle).length}/{annotations.length}</span>}
+        <span
+          className="ml-auto flex items-center gap-1 text-[8px] font-mono uppercase tracking-[0.18em] px-1.5 py-0.5 border border-[#00E5FF]/30 bg-[#00E5FF]/[0.05] text-[#00E5FF]"
+          data-testid="annotation-angle-lock"
+          title={`New annotations will be tagged to the ${activeAngle.replace("_"," ").toUpperCase()} view and only render there.`}
+        >
+          <span className="w-1 h-1 bg-[#00E5FF]" />
+          ANGLE · {activeAngle.replace("_", " ")}
+        </span>
       </div>
 
       {showFormations && (

@@ -78,7 +78,7 @@ const ComparisonPanel = ({ label, color, time, annotations, setAnnotations, acti
             ⚠ stadium fallback
           </div>
         )}
-        <AnnotationCanvas width={100} height={100} annotations={annotations} setAnnotations={setAnnotations} activeTool={activeTool} activeColor={activeColor} isDrawing={isDrawing} setIsDrawing={setIsDrawing} formations={Object.values(activeFormations)} />
+        <AnnotationCanvas width={100} height={100} annotations={annotations} setAnnotations={setAnnotations} activeTool={activeTool} activeColor={activeColor} isDrawing={isDrawing} setIsDrawing={setIsDrawing} formations={Object.values(activeFormations)} activeAngle={selectedAngle || "primary"} />
       </div>
 
       <div className="flex items-center gap-0.5 p-1 bg-[#050505] border-t border-white/[0.06]">
