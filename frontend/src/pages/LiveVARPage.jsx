@@ -75,7 +75,7 @@ export const LiveVARPage = () => {
       if (msg.type === "incident_created") toast.info(msg.message);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []));
+  }, []), matchFilterId);
 
   // ── Auto-OFR escalation toast ─────────────────────────────
   // When the engine flags inter-angle disagreement (Δ ≥ 15%), nudge the

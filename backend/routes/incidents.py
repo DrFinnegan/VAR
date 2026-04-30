@@ -233,7 +233,7 @@ async def create_incident(data: IncidentCreate, request: Request):
         "description": data.description[:100],
         "confidence": analysis_result.get("final_confidence", 0),
     }
-    await ws_manager.send_incident_created(ws_data)
+    await ws_manager.send_incident_created(ws_data, match_id=incident_doc.get("match_id"))
 
     if storage_warnings:
         try:
@@ -278,7 +278,7 @@ async def get_incident(incident_id: str):
 
 @api_router.post("/incidents/{incident_id}/ofr-bookmark")
 async def queue_ofr_bookmark(incident_id: str, payload: Dict, request: Request):
-    inc = await db.incidents.find_one({"id": incident_id}, {"_id": 0, "id": 1})
+    inc = await db.incidents.find_one({"id": incident_id}, {"_id": 0, "id": 1, "match_id": 1})
     if not inc:
         raise HTTPException(status_code=404, detail="Incident not found")
     bookmark = {
@@ -299,7 +299,7 @@ async def queue_ofr_bookmark(incident_id: str, payload: Dict, request: Request):
             "type": "ofr_bookmark",
             "incident_id": incident_id,
             "bookmark": bookmark,
-        })
+        }, match_id=inc.get("match_id") if isinstance(inc, dict) else None)
     except Exception:
         pass
     return {"status": "queued", "bookmark": bookmark}
@@ -348,7 +348,8 @@ async def update_decision(incident_id: str, decision: DecisionUpdate, request: R
         )
 
     await ws_manager.send_decision_made(
-        incident_id, decision.final_decision, decision.decision_status.value
+        incident_id, decision.final_decision, decision.decision_status.value,
+        match_id=current.get("match_id"),
     )
     return result
 
@@ -429,7 +430,8 @@ async def reanalyze_incident(incident_id: str, request: Request):
     )
 
     await ws_manager.send_analysis_complete(
-        incident_id, analysis.get("final_confidence", 0)
+        incident_id, analysis.get("final_confidence", 0),
+        match_id=doc.get("match_id"),
     )
     return result
 

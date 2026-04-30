@@ -223,7 +223,8 @@ async def boost_confidence_answer(
 
     try:
         await ws_manager.send_analysis_complete(
-            incident_id, analysis.get("final_confidence", 0)
+            incident_id, analysis.get("final_confidence", 0),
+            match_id=(result or {}).get("match_id"),
         )
     except Exception:
         pass

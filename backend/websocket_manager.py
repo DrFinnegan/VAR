@@ -2,9 +2,16 @@
 OCTON VAR WebSocket Manager
 Real-time incident feed for live match monitoring.
 Designed by Dr Finnegan for lightning speed event propagation.
+
+Tournament-mode isolation:
+    Each connection registers an optional `match_id`. Events tagged with a
+    match_id are only delivered to subscribers of that match plus
+    "global" subscribers (those that connected with no match_id, e.g. the
+    Match Wall and admin views). This lets multiple VAR booths run in
+    parallel during tournaments without seeing each other's traffic.
 """
 import logging
-from typing import List
+from typing import Dict, Optional
 from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
@@ -14,39 +21,71 @@ class ConnectionManager:
     """Manages WebSocket connections for real-time VAR feed."""
 
     def __init__(self):
-        self.active_connections: List[WebSocket] = []
+        # WebSocket -> match_id (None = global / all-matches subscriber)
+        self.subscriptions: Dict[WebSocket, Optional[str]] = {}
 
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket, match_id: Optional[str] = None):
         await websocket.accept()
-        self.active_connections.append(websocket)
-        logger.info(f"WS connected. Active: {len(self.active_connections)}")
+        self.subscriptions[websocket] = match_id
+        logger.info(
+            "WS connected (match_id=%s). Active: %d",
+            match_id or "*GLOBAL*",
+            len(self.subscriptions),
+        )
 
     def disconnect(self, websocket: WebSocket):
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
-        logger.info(f"WS disconnected. Active: {len(self.active_connections)}")
+        self.subscriptions.pop(websocket, None)
+        logger.info("WS disconnected. Active: %d", len(self.subscriptions))
 
-    async def broadcast(self, message: dict):
+    @property
+    def active_connections(self):
+        # Backwards-compatible accessor (some legacy code reads this).
+        return list(self.subscriptions.keys())
+
+    async def broadcast(self, message: dict, match_id: Optional[str] = None):
+        """Send `message` to:
+        - All global subscribers (subscribed match_id == None)
+        - Subscribers whose match_id matches the broadcast match_id
+        If `match_id` is None the broadcast goes to ALL connections (legacy
+        behaviour for non-incident events like system_health).
+        """
+        # Stamp the match_id on the payload so clients can do client-side
+        # secondary filtering when needed.
+        if match_id and "match_id" not in message:
+            message = {**message, "match_id": match_id}
+
         disconnected = []
-        for connection in self.active_connections:
-            try:
-                await connection.send_json(message)
-            except Exception:
-                disconnected.append(connection)
+        for connection, sub_match in self.subscriptions.items():
+            # Routing rules:
+            #   broadcast match_id is None  -> deliver to everyone
+            #   sub is global (None)        -> deliver everything
+            #   else                        -> deliver only when ids match
+            if match_id is None or sub_match is None or sub_match == match_id:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    disconnected.append(connection)
         for conn in disconnected:
             self.disconnect(conn)
 
-    async def send_incident_created(self, incident_data: dict):
+    async def send_incident_created(
+        self, incident_data: dict, match_id: Optional[str] = None
+    ):
         await self.broadcast(
             {
                 "type": "incident_created",
                 "data": incident_data,
                 "message": "New incident submitted for OCTON analysis",
-            }
+            },
+            match_id=match_id,
         )
 
     async def send_decision_made(
-        self, incident_id: str, decision: str, status: str
+        self,
+        incident_id: str,
+        decision: str,
+        status: str,
+        match_id: Optional[str] = None,
     ):
         await self.broadcast(
             {
@@ -57,28 +96,36 @@ class ConnectionManager:
                     "status": status,
                 },
                 "message": f"Decision recorded: {decision}",
-            }
+            },
+            match_id=match_id,
         )
 
-    async def send_analysis_complete(self, incident_id: str, confidence: float):
+    async def send_analysis_complete(
+        self,
+        incident_id: str,
+        confidence: float,
+        match_id: Optional[str] = None,
+    ):
         await self.broadcast(
             {
                 "type": "analysis_complete",
                 "data": {"incident_id": incident_id, "confidence": confidence},
                 "message": f"OCTON analysis complete - {confidence:.1f}% confidence",
-            }
+            },
+            match_id=match_id,
         )
 
     async def send_system_health(self, payload: dict):
         """Push a real-time system-health update to all connected clients.
-        Called whenever an upstream service flips state (e.g. storage 500)."""
-        await self.broadcast({
-            "type": "system_health",
-            "data": payload,
-            "message": "OCTON system health update",
-        })
-
-
+        Called whenever an upstream service flips state (e.g. storage 500).
+        Always global — every booth needs to know storage is degraded."""
+        await self.broadcast(
+            {
+                "type": "system_health",
+                "data": payload,
+                "message": "OCTON system health update",
+            }
+        )
 
 
 ws_manager = ConnectionManager()
