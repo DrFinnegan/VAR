@@ -194,6 +194,33 @@ async def boost_confidence_answer(
         projection={"_id": 0},
     )
 
+    # ── Auto-archive the Q&A as a self-learning training case ──
+    # When the boosted analysis is high-confidence (>= 75%) AND carries a
+    # specific IFAB clause, this interaction has produced a forensic-quality
+    # precedent. Silently ingest it into the Training Library tagged
+    # `from-boost` so the next similar borderline case retrieves it via RAG
+    # and skips the boost step entirely. Zero manual curation — the platform
+    # literally learns from every referee deliberation.
+    archived_case = None
+    try:
+        archived_case = await _archive_boost_to_training(
+            db=db,
+            incident=inc,
+            analysis=analysis,
+            qa_pairs=[a.model_dump() for a in answered],
+        )
+        if archived_case:
+            # Tag the analysis with the case id so the UI can surface it.
+            analysis["training_case_archived_id"] = archived_case["id"]
+            await db.incidents.update_one(
+                {"id": incident_id},
+                {"$set": {"ai_analysis.training_case_archived_id": archived_case["id"]}},
+            )
+            # refresh response doc so client sees the linkage
+            result = await db.incidents.find_one({"id": incident_id}, {"_id": 0})
+    except Exception as e:
+        logger.warning(f"Boost → training archival skipped: {e}")
+
     try:
         await ws_manager.send_analysis_complete(
             incident_id, analysis.get("final_confidence", 0)
@@ -202,3 +229,77 @@ async def boost_confidence_answer(
         pass
 
     return result
+
+
+async def _archive_boost_to_training(
+    db, incident: Dict, analysis: Dict, qa_pairs: List[Dict],
+) -> Dict:
+    """Turn a boosted high-confidence incident + Q&A into a training case.
+
+    Returns the new case document on success, or None when quality threshold
+    isn't met / this incident has already been archived from boost.
+    """
+    import uuid
+    final_conf = float(analysis.get("final_confidence", 0))
+    cited_clause = (analysis.get("cited_clause") or "").strip()
+    suggested = (analysis.get("suggested_decision") or "").strip()
+    if final_conf < 75.0 or not cited_clause or not suggested:
+        return None
+    existing = await db.training_cases.find_one(
+        {"source_incident_id": incident["id"], "tags": "from-boost"},
+        {"_id": 0, "id": 1},
+    )
+    if existing:
+        return None
+
+    kf = analysis.get("key_factors") or []
+    qa_keywords = [qa.get("answer", "")[:40] for qa in qa_pairs if qa.get("answer")]
+    keywords = [str(k)[:60] for k in kf][:8] + qa_keywords[:4]
+
+    # Derive a readable title.
+    itype = incident.get("incident_type", "incident").replace("_", " ").title()
+    team = incident.get("team_involved") or "match"
+    date = datetime.now(timezone.utc).date().isoformat()
+    title = f"{itype} — {team} — {date} (boost-ingested)"[:160]
+
+    now = datetime.now(timezone.utc).isoformat()
+    rationale = (analysis.get("reasoning") or "")[:1100]
+    if qa_pairs:
+        qa_trailer = "\n\nOPERATOR CLARIFICATIONS (boosted):\n" + "\n".join(
+            f"• {qa.get('question','')[:90]} → {qa.get('answer','')[:140]}"
+            for qa in qa_pairs
+        )
+        rationale = (rationale + qa_trailer)[:1800]
+
+    case = {
+        "id": str(uuid.uuid4()),
+        "title": title,
+        "incident_type": incident.get("incident_type", "other"),
+        "correct_decision": suggested,
+        "rationale": rationale,
+        "keywords": keywords,
+        "tags": ["from-boost", "auto-learned", f"conf:{int(final_conf)}"],
+        "match_context": {
+            "teams": incident.get("team_involved"),
+            "competition": incident.get("match_id"),
+            "year": datetime.now(timezone.utc).year,
+        },
+        "law_references": [cited_clause[:90]],
+        "outcome": f"boosted to {final_conf:.1f}%",
+        "visual_tags": [],
+        "media_storage_path": incident.get("storage_path"),
+        "thumbnail_storage_path": incident.get("storage_path"),
+        "source_incident_id": incident["id"],
+        "boost_qa": qa_pairs,
+        "boost_confidence_lift": analysis.get("confidence_lift_from_boost", 0),
+        "created_by": "boost-archiver",
+        "created_by_name": "OCTON Self-Learning",
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.training_cases.insert_one(case.copy())
+    logger.info(
+        f"[boost→training] archived '{title}' conf={final_conf} "
+        f"clause='{cited_clause[:40]}' for incident {incident['id']}"
+    )
+    return case

@@ -35,6 +35,7 @@ export default function TrainingLibraryPage() {
   const [filterType, setFilterType] = useState("all");
   const [search, setSearch] = useState("");
   const [clauseFilter, setClauseFilter] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
@@ -146,6 +147,7 @@ export default function TrainingLibraryPage() {
       if (filterType !== "all") params.incident_type = filterType;
       if (search) params.q = search;
       if (clauseFilter) params.law_q = clauseFilter;
+      if (tagFilter) params.tag = tagFilter;
       const [listRes, statsRes] = await Promise.all([
         axios.get(`${API}/training/cases`, { params, withCredentials: true }),
         axios.get(`${API}/training/stats`, { withCredentials: true }),
@@ -157,7 +159,7 @@ export default function TrainingLibraryPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterType, search, clauseFilter]);
+  }, [filterType, search, clauseFilter, tagFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -712,6 +714,28 @@ export default function TrainingLibraryPage() {
             </button>
           );
         })}
+        <span className="ml-auto flex items-center gap-1.5">
+          {[
+            ["from-boost", "Self-learned from operator Q&A", "#B366FF"],
+            ["promoted", "Promoted confirmed incidents", "#00FF88"],
+            ["web-ingested", "Scraped precedents", "#00E5FF"],
+          ].map(([k, hint, color]) => {
+            const active = tagFilter === k;
+            return (
+              <button
+                key={k}
+                onClick={() => setTagFilter(active ? "" : k)}
+                className={`text-[9px] font-mono px-2 py-1 border transition-all flex items-center gap-1 ${active ? 'bg-white/10' : 'text-gray-500 border-white/[0.08] hover:text-white'}`}
+                style={active ? { color, borderColor: `${color}80`, background: `${color}15` } : undefined}
+                data-testid={`tag-preset-${k}`}
+                title={hint}
+              >
+                {k === "from-boost" && <span>🧠</span>}
+                {k}
+              </button>
+            );
+          })}
+        </span>
       </div>
 
       {/* Cases table */}

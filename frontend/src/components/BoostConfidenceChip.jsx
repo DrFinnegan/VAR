@@ -84,10 +84,12 @@ function BoostConfidenceModal({ incident, open, onClose, onBoosted }) {
       );
       const lift = data.ai_analysis?.confidence_lift_from_boost || 0;
       const newConf = data.ai_analysis?.final_confidence || 0;
+      const archived = !!data.ai_analysis?.training_case_archived_id;
+      const liftMsg = lift > 0
+        ? `Confidence boosted to ${newConf}% (+${lift.toFixed(1)})`
+        : `Re-analysed — confidence now ${newConf}%`;
       toast.success(
-        lift > 0
-          ? `Confidence boosted to ${newConf}% (+${lift.toFixed(1)})`
-          : `Re-analysed — confidence now ${newConf}%`,
+        archived ? `${liftMsg} · archived to Training Library` : liftMsg,
       );
       if (onBoosted) onBoosted(data);
     } catch (e) {

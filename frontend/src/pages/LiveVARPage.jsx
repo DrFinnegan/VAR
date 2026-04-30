@@ -628,6 +628,23 @@ export const LiveVARPage = () => {
                       </div>
                     </div>
                   )}
+                  {analysis.training_case_archived_id && (
+                    <div
+                      className="mt-2 flex items-start gap-2 px-2 py-1.5 border-l-2 border-[#B366FF]/60 bg-[#B366FF]/[0.04]"
+                      data-testid="training-archived-badge"
+                      title="OCTON archived this boosted verdict into the Training Library — future similar incidents will auto-retrieve it via RAG."
+                    >
+                      <Sparkles className="w-3 h-3 text-[#B366FF] flex-none mt-0.5" />
+                      <div className="min-w-0">
+                        <span className="block text-[8px] font-mono uppercase tracking-[0.25em] text-[#B366FF]/70">
+                          SELF-LEARNED PRECEDENT
+                        </span>
+                        <span className="block text-[10px] font-mono text-[#C98AFF] leading-snug mt-0.5">
+                          Archived to Training Library · future similar calls will reference this.
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-3 space-y-2">

@@ -113,11 +113,14 @@ async def list_training_cases(
     incident_type: Optional[str] = None,
     q: Optional[str] = None,
     law_q: Optional[str] = None,
+    tag: Optional[str] = None,
     limit: int = Query(100, ge=1, le=500),
 ):
     query: Dict = {}
     if incident_type:
         query["incident_type"] = incident_type
+    if tag:
+        query["tags"] = tag
     if q:
         rx = {"$regex": q, "$options": "i"}
         query["$or"] = [{"title": rx}, {"rationale": rx}, {"correct_decision": rx}]
