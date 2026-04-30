@@ -187,6 +187,54 @@ async def seed_demo():
     for inc in demo_incidents:
         await db.incidents.insert_one(inc)
 
+    # Guaranteed low-confidence pending incident so the Boost-Confidence
+    # chip is always visible for the e2e suite (`boost.spec.js`). Keyed
+    # off a stable marker so reseeds never create duplicates.
+    BOOST_DEMO_MARKER = "OCTON-BOOST-DEMO"
+    existing_boost = await db.incidents.find_one({"description": {"$regex": BOOST_DEMO_MARKER}})
+    if not existing_boost:
+        boost_demo = {
+            "id": str(uuid.uuid4()),
+            "incident_type": "handball",
+            "description": f"{BOOST_DEMO_MARKER} — Attacker's arm brushes the ball at chest height on the edge of the box; camera angle partially obstructed by defender.",
+            "timestamp_in_match": "78:04",
+            "team_involved": "Manchester City",
+            "player_involved": "E. Haaland",
+            "decision_status": "pending",
+            "final_decision": None,
+            "has_image": False,
+            "storage_path": None,
+            "ai_analysis": {
+                "hippocampus": {
+                    "stage": "hippocampus", "initial_confidence": 58.0,
+                    "initial_decision": "Handball — Undetermined",
+                    "matched_keywords": ["handball", "arm", "ball"],
+                    "keyword_match_ratio": 0.18, "severity_weight": 0.62,
+                    "historical_boost": 2.0, "processing_time_ms": 2,
+                },
+                "neo_cortex": {
+                    "stage": "neo_cortex", "confidence_score": 62.5,
+                    "suggested_decision": "Penalty — Handball (marginal)",
+                    "reasoning": "Arm-to-ball contact visible but arm position and intent unclear from primary angle; would benefit from tight replay and operator confirmation.",
+                    "key_factors": ["Arm position", "Angle obstruction", "Ball trajectory"],
+                    "risk_level": "high",
+                    "neo_cortex_notes": "Borderline — operator Q&A recommended to push past 80% threshold.",
+                    "processing_time_ms": 1420,
+                },
+                "final_confidence": 62.5,
+                "suggested_decision": "Penalty — Handball (marginal)",
+                "reasoning": "Arm-to-ball contact visible but arm position and intent unclear from primary angle; would benefit from tight replay and operator confirmation.",
+                "key_factors": ["Arm position", "Angle obstruction", "Ball trajectory"],
+                "risk_level": "high", "similar_historical_cases": 47,
+                "historical_accuracy": 71.0, "total_processing_time_ms": 1422,
+                "pathway": "hippocampus -> neo_cortex",
+                "engine_version": "OCTON v2.3 - Dr Finnegan (seed)",
+            },
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.incidents.insert_one(boost_demo)
+
     return {
         "message": "OCTON VAR demo data seeded - Dr Finnegan's system ready",
         "referees": len(demo_referees),

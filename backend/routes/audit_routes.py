@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from audit import register_audit, verify_chain
 from auth import get_current_user
+from booth import get_booth_id, get_booth_label
 from core import api_router, db
 
 
@@ -19,7 +20,12 @@ async def audit_register(body: AuditRegisterRequest, request: Request):
     if not inc:
         raise HTTPException(status_code=404, detail="Incident not found")
     analysis = inc.get("ai_analysis") or {}
-    return await register_audit(db, body.incident_id, analysis, user_id=user.get("id"))
+    return await register_audit(
+        db, body.incident_id, analysis,
+        user_id=user.get("id"),
+        booth_id=get_booth_id(request),
+        booth_label=get_booth_label(request),
+    )
 
 
 @api_router.get("/audit/verify")

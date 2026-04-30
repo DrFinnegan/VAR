@@ -21,15 +21,21 @@ class ConnectionManager:
     """Manages WebSocket connections for real-time VAR feed."""
 
     def __init__(self):
-        # WebSocket -> match_id (None = global / all-matches subscriber)
-        self.subscriptions: Dict[WebSocket, Optional[str]] = {}
+        # WebSocket -> {"match_id": Optional[str], "booth_id": Optional[str]}
+        self.subscriptions: Dict[WebSocket, dict] = {}
 
-    async def connect(self, websocket: WebSocket, match_id: Optional[str] = None):
+    async def connect(
+        self,
+        websocket: WebSocket,
+        match_id: Optional[str] = None,
+        booth_id: Optional[str] = None,
+    ):
         await websocket.accept()
-        self.subscriptions[websocket] = match_id
+        self.subscriptions[websocket] = {"match_id": match_id, "booth_id": booth_id}
         logger.info(
-            "WS connected (match_id=%s). Active: %d",
+            "WS connected (match_id=%s booth=%s). Active: %d",
             match_id or "*GLOBAL*",
+            booth_id or "-",
             len(self.subscriptions),
         )
 
@@ -41,6 +47,16 @@ class ConnectionManager:
     def active_connections(self):
         # Backwards-compatible accessor (some legacy code reads this).
         return list(self.subscriptions.keys())
+
+    def booths_for_match(self, match_id: str) -> list:
+        """Return the list of distinct booth_ids currently scoped to a
+        given match. Powers the "presence" pip on the Match Wall."""
+        ids = []
+        for sub in self.subscriptions.values():
+            if sub.get("match_id") == match_id and sub.get("booth_id"):
+                if sub["booth_id"] not in ids:
+                    ids.append(sub["booth_id"])
+        return ids
 
     async def broadcast(self, message: dict, match_id: Optional[str] = None):
         """Send `message` to:
@@ -55,7 +71,8 @@ class ConnectionManager:
             message = {**message, "match_id": match_id}
 
         disconnected = []
-        for connection, sub_match in self.subscriptions.items():
+        for connection, sub in self.subscriptions.items():
+            sub_match = sub.get("match_id")
             # Routing rules:
             #   broadcast match_id is None  -> deliver to everyone
             #   sub is global (None)        -> deliver everything

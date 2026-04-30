@@ -1,0 +1,92 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  playwright:
+    name: Playwright (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium]
+    env:
+      # Point the suite at the deployed preview. Override in GitHub repo
+      # secrets for private forks or staging environments.
+      REACT_APP_BACKEND_URL: ${{ secrets.REACT_APP_BACKEND_URL || 'https://smart-var-audit.preview.emergentagent.com' }}
+      OCTON_ADMIN_EMAIL: ${{ secrets.OCTON_ADMIN_EMAIL || 'admin@octonvar.com' }}
+      OCTON_ADMIN_PASSWORD: ${{ secrets.OCTON_ADMIN_PASSWORD || 'OctonAdmin2026!' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: yarn install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Seed demo data
+        run: |
+          curl -fsS -X POST "$REACT_APP_BACKEND_URL/api/seed-demo" || true
+
+      - name: Run Playwright suite
+        working-directory: frontend
+        run: yarn e2e --project=${{ matrix.browser }}
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.browser }}
+          path: frontend/e2e/report/
+          retention-days: 14
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-${{ matrix.browser }}
+          path: frontend/e2e/results/
+          retention-days: 14
+
+  backend-tests:
+    name: Backend unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.txt
+      - name: Run pytest
+        working-directory: backend
+        env:
+          MONGO_URL: 'mongodb://localhost:27017'
+          DB_NAME: 'octon_test'
+        run: |
+          # Isolated unit tests — no Mongo / network dependencies.
+          python -m pytest \
+            tests/test_ws_tournament_isolation.py \
+            tests/test_booth_identity.py \
+            -v

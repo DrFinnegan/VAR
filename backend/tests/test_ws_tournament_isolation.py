@@ -44,6 +44,21 @@ def test_global_broadcast_reaches_everyone():
     asyncio.run(run())
 
 
+def test_booths_for_match_lists_distinct_booth_ids():
+    async def run():
+        mgr = ConnectionManager()
+        a, b, c, d = _fake_ws(), _fake_ws(), _fake_ws(), _fake_ws()
+        await mgr.connect(a, match_id="match-A", booth_id="booth-1")
+        await mgr.connect(b, match_id="match-A", booth_id="booth-2")
+        await mgr.connect(c, match_id="match-A", booth_id="booth-1")  # same booth, second tab
+        await mgr.connect(d, match_id="match-B", booth_id="booth-9")
+        booths = mgr.booths_for_match("match-A")
+        assert set(booths) == {"booth-1", "booth-2"}
+        assert mgr.booths_for_match("match-B") == ["booth-9"]
+        assert mgr.booths_for_match("match-Z") == []
+    asyncio.run(run())
+
+
 def test_disconnect_removes_subscription():
     async def run():
         mgr = ConnectionManager()

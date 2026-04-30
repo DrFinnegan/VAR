@@ -37,6 +37,12 @@ module.exports = defineConfig({
     ignoreHTTPSErrors: true,
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "chromium",
+      use: {
+        browserName: "chromium",
+        viewport: { width: 1440, height: 900 },
+      },
+    },
   ],
 });

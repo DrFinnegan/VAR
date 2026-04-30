@@ -36,8 +36,19 @@ async def get_last_hash(db) -> str:
     return last["entry_hash"] if last else GENESIS_HASH
 
 
-async def register_audit(db, incident_id: str, analysis: dict, user_id: str | None = None) -> dict:
-    """Append a new entry to the chain; returns {entry_hash, prev_hash, content_hash, audit_id, created_at}."""
+async def register_audit(
+    db,
+    incident_id: str,
+    analysis: dict,
+    user_id: str | None = None,
+    booth_id: str | None = None,
+    booth_label: str | None = None,
+) -> dict:
+    """Append a new entry to the chain; returns {entry_hash, prev_hash, content_hash, audit_id, created_at}.
+
+    `booth_id` / `booth_label` are stamped on the entry so two VAR booths
+    watching the same match can be told apart in the audit trail.
+    """
     prev_hash = await get_last_hash(db)
     content_hash = _sha256(_canonical({"incident_id": incident_id, "analysis": analysis}))
     created_at = datetime.now(timezone.utc).isoformat()
@@ -52,6 +63,8 @@ async def register_audit(db, incident_id: str, analysis: dict, user_id: str | No
         "entry_hash": entry_hash,
         "created_at": created_at,
         "user_id": user_id,
+        "booth_id": booth_id,
+        "booth_label": booth_label,
     }
     await db.audit_chain.insert_one(doc.copy())
     return {
@@ -61,6 +74,8 @@ async def register_audit(db, incident_id: str, analysis: dict, user_id: str | No
         "content_hash": content_hash,
         "entry_hash": entry_hash,
         "created_at": created_at,
+        "booth_id": booth_id,
+        "booth_label": booth_label,
     }
 
 

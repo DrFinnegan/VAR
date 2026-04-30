@@ -76,12 +76,19 @@ async def system_health(force: bool = False):
 
 
 @api_router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, match_id: str = None):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    match_id: str = None,
+    booth_id: str = None,
+):
     """Tournament isolation: clients pass `?match_id=<id>` to scope the
-    feed to a single fixture. Global subscribers (no match_id) still
-    receive every event — used by the Match Wall and admin views."""
+    feed to a single fixture. `?booth_id=<id>` identifies which VAR
+    booth is connecting so server-side audit logs can distinguish
+    multiple operators watching the same match.
+    Global subscribers (no match_id) still receive every event — used by
+    the Match Wall and admin views."""
     sub_match = match_id if match_id and match_id != "all" else None
-    await ws_manager.connect(websocket, match_id=sub_match)
+    await ws_manager.connect(websocket, match_id=sub_match, booth_id=booth_id)
     try:
         while True:
             data = await websocket.receive_text()

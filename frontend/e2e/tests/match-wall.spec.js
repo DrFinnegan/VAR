@@ -7,14 +7,19 @@ const { test, expect } = require("@playwright/test");
 const { loginAsAdmin } = require("../helpers/auth");
 
 test.describe("match-wall deep-link", () => {
-  test("clicking a tile scopes LiveVAR to that match", async ({ page }) => {
+  test("clicking a tile scopes LiveVAR to that match", async ({ page, request, baseURL }) => {
+    // Ensure demo matches exist (idempotent on backend).
+    await request.post(`${baseURL}/api/seed-demo`).catch(() => {});
+
     await loginAsAdmin(page);
     await page.goto("/match-wall");
     await page.waitForSelector('[data-testid="live-match-wall-page"]');
 
     const tiles = page.locator('[data-testid^="match-tile-"]');
+    // Wait up to 10s for tiles to hydrate after the initial API fetch.
+    await expect(tiles.first()).toBeVisible({ timeout: 10_000 });
     const count = await tiles.count();
-    test.skip(count === 0, "No matches seeded — skipping deep-link regression.");
+    expect(count).toBeGreaterThan(0);
 
     const firstTile = tiles.first();
     const testId = await firstTile.getAttribute("data-testid");

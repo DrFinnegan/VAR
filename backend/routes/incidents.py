@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from ai_engine import brain_engine
 from auth import get_current_user, get_optional_user, require_role
+from booth import get_booth_id, get_booth_label
 from core import (
     DecisionStatus,
     IncidentType,
@@ -315,6 +316,8 @@ async def update_decision(incident_id: str, decision: DecisionUpdate, request: R
         "decision_status": decision.decision_status.value,
         "final_decision": decision.final_decision,
         "decided_by": decision.decided_by,
+        "decided_by_booth": get_booth_id(request),
+        "decided_by_booth_label": get_booth_label(request),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     result = await db.incidents.find_one_and_update(
@@ -337,6 +340,8 @@ async def update_decision(incident_id: str, decision: DecisionUpdate, request: R
         "decision_status": decision.decision_status.value,
         "was_ai_correct": was_confirmed,
         "decided_by": decision.decided_by,
+        "decided_by_booth": get_booth_id(request),
+        "decided_by_booth_label": get_booth_label(request),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.ai_feedback.insert_one(feedback_doc)
