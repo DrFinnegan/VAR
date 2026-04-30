@@ -85,6 +85,27 @@ async def retrieve_precedents(
         ])
         all_tags = list(set((c.get("keywords") or []) + (c.get("tags") or []) + (c.get("visual_tags") or [])))
         score = _similarity(description, query_tags or [], case_text, all_tags)
+
+        # Landmark-precedent boost — iconic cases (Hand of God, Lampard ghost
+        # goal, Henry vs Ireland, etc.) are universally recognised legal
+        # anchors. Even a weak token overlap should still retrieve them so
+        # the reasoning can demonstrate institutional knowledge.
+        landmark = any(
+            t in (c.get("tags") or []) for t in (
+                "landmark", "landmark-precedent", "iconic", "iconic-precedent",
+            )
+        )
+        # Also auto-detect iconic titles to avoid hand-tagging every case.
+        title_lower = (c.get("title") or "").lower()
+        iconic_phrases = (
+            "hand of god", "lampard ghost", "henry vs ireland", "ghost goal",
+            "zidane headbutt", "battle of santiago", "maradona",
+        )
+        if not landmark and any(phrase in title_lower for phrase in iconic_phrases):
+            landmark = True
+        if landmark:
+            score = max(score, 0.18)  # floor so landmark precedents always retrieve
+
         if score >= min_score:
             scored.append({
                 "id": c["id"],
@@ -170,12 +191,18 @@ def build_precedent_prompt(precedents: List[Dict]) -> str:
         date = ctx.get("date") or ""
         referee = ctx.get("referee") or ""
         minute = ctx.get("minute") or ""
-        if teams: ctx_parts.append(str(teams))
-        if comp: ctx_parts.append(str(comp))
-        if date: ctx_parts.append(str(date))
-        elif year: ctx_parts.append(str(year))
-        if referee: ctx_parts.append(f"referee {referee}")
-        if minute: ctx_parts.append(f"min {minute}")
+        if teams:
+            ctx_parts.append(str(teams))
+        if comp:
+            ctx_parts.append(str(comp))
+        if date:
+            ctx_parts.append(str(date))
+        elif year:
+            ctx_parts.append(str(year))
+        if referee:
+            ctx_parts.append(f"referee {referee}")
+        if minute:
+            ctx_parts.append(f"min {minute}")
         ctx_line = f" [{' · '.join(ctx_parts)}]" if ctx_parts else ""
         laws = ", ".join(p.get("law_references") or [])
         lines.append(

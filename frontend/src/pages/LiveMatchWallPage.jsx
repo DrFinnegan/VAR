@@ -4,13 +4,14 @@
  * One tile per active match: latest verdict, confidence ring, OFR-pending
  * pulse, status counts. Click a tile to deep-link into LiveVAR for that match.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 import {
   Trophy, Activity, AlertTriangle, ChevronRight, Radio, MapPin, Calendar, Scale,
 } from "lucide-react";
 import { API } from "../lib/api";
+import { useWebSocket } from "../hooks/useWebSocket";
 
 function ConfidenceRing({ value = 0, size = 44 }) {
   const v = Math.max(0, Math.min(100, value));
@@ -33,20 +34,29 @@ function ConfidenceRing({ value = 0, size = 44 }) {
 }
 
 export default function LiveMatchWallPage() {
-  const [data, setData] = useState({ matches: [], live_count: 0 });
+  const [data, setData] = useState({ matches: [], live_count: 0, scheduled_count: 0, completed_count: 0 });
   const [loading, setLoading] = useState(true);
 
+  const load = useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${API}/matches/live`);
+      setData(data);
+    } finally { setLoading(false); }
+  }, []);
+
   useEffect(() => {
-    const load = async () => {
-      try {
-        const { data } = await axios.get(`${API}/matches/live`);
-        setData(data);
-      } finally { setLoading(false); }
-    };
     load();
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
-  }, []);
+  }, [load]);
+
+  // Real-time refresh — any new incident / decision / OFR → refetch
+  useWebSocket(useCallback((msg) => {
+    if (!msg || !msg.type) return;
+    if (["incident_created", "decision_made", "ofr_bookmark", "analysis_complete"].includes(msg.type)) {
+      load();
+    }
+  }, [load]));
 
   return (
     <div className="min-h-screen bg-[#050505] text-white p-6" data-testid="live-match-wall-page">
@@ -55,7 +65,11 @@ export default function LiveMatchWallPage() {
           <p className="text-[9px] font-mono tracking-[0.35em] text-[#00E5FF]/80 mb-1">OCTON · MATCH WALL</p>
           <h1 className="font-heading font-black text-3xl tracking-tight">LIVE MATCHES</h1>
           <p className="text-xs text-gray-500 mt-1 font-mono tracking-[0.2em] uppercase">
-            {data.live_count} live · {data.matches.length} tracked
+            <span className="text-[#FF3B30]">{data.live_count} LIVE</span>
+            {" · "}
+            <span className="text-[#FFB800]">{data.scheduled_count || 0} UPCOMING</span>
+            {" · "}
+            <span className="text-gray-400">{data.completed_count || 0} COMPLETED</span>
           </p>
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 border border-[#00E5FF]/30 bg-[#00E5FF]/[0.04]">
@@ -92,6 +106,16 @@ export default function LiveMatchWallPage() {
                   <span className="absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 bg-[#FF3B30]/20 border border-[#FF3B30]/40">
                     <span className="w-1.5 h-1.5 bg-[#FF3B30] rounded-full animate-pulse" />
                     <span className="font-mono text-[8px] tracking-[0.25em] text-[#FF3B30]">LIVE</span>
+                  </span>
+                )}
+                {mt.status === "scheduled" && (
+                  <span className="absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 bg-[#FFB800]/10 border border-[#FFB800]/30">
+                    <span className="font-mono text-[8px] tracking-[0.25em] text-[#FFB800]">UPCOMING</span>
+                  </span>
+                )}
+                {mt.status === "completed" && (
+                  <span className="absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 bg-white/[0.04] border border-white/10">
+                    <span className="font-mono text-[8px] tracking-[0.25em] text-gray-400">FULL TIME</span>
                   </span>
                 )}
                 {m.ofr_pending && (

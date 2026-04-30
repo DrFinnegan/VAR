@@ -13,22 +13,57 @@ from core import api_router, db
 
 # ── Live multi-match dashboard ────────────────────────────
 @api_router.get("/matches/live")
-async def matches_live(limit: int = Query(20, ge=1, le=100)):
+async def matches_live(limit: int = Query(30, ge=1, le=100)):
     """Aggregate live + recently-active matches with their latest VAR verdict
     summary. Each tile carries: match meta, incident counts, last verdict, OFR
-    pending flag, average confidence over the last 5 incidents."""
+    pending flag, average confidence over the last 5 incidents.
+
+    Sort order: LIVE first (ongoing matches always surface at the top),
+    then SCHEDULED today/soon, then COMPLETED by recency. De-duplicated by
+    (team_home, team_away, date) so repeated seed-demo calls don't pollute
+    the wall.
+    """
     matches = await db.matches.find(
-        {"status": {"$in": ["live", "completed"]}},
+        {"status": {"$in": ["live", "completed", "scheduled"]}},
         {"_id": 0},
-    ).sort("created_at", -1).to_list(limit)
+    ).sort("created_at", -1).to_list(200)
+
+    # De-dupe by (team_home, team_away, date) — keep the first (latest).
+    # Normalise whitespace/casing so "Chelsea" and " Chelsea " are treated
+    # as the same team.
+    def _norm(v):
+        return (v or "").strip().lower()
+    seen = set()
+    unique = []
+    for m in matches:
+        key = (_norm(m.get("team_home")), _norm(m.get("team_away")), _norm(m.get("date")))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(m)
+
+    # Priority-sort: live > scheduled > completed, then created_at desc
+    priority = {"live": 0, "scheduled": 1, "completed": 2}
+    unique.sort(
+        key=lambda m: (priority.get(m.get("status", "scheduled"), 3), -(hash(m.get("created_at", ""))))
+    )
+
+    matches = unique[:limit]
 
     out = []
     for m in matches:
         mid = m.get("id")
-        # Pull last 8 incidents for this match
+        # Pull last 8 incidents for this match; fall back to team-name match
+        # when incidents haven't been wired to a match_id yet.
+        query = {"$or": [{"match_id": mid}]}
+        tn = m.get("team_home")
+        if tn:
+            query["$or"].append({"team_involved": tn})
+        ta = m.get("team_away")
+        if ta:
+            query["$or"].append({"team_involved": ta})
         incs = await db.incidents.find(
-            {"match_id": mid},
-            {"_id": 0},
+            query, {"_id": 0},
         ).sort("created_at", -1).to_list(8)
 
         confidences = [i.get("ai_analysis", {}).get("final_confidence", 0) for i in incs[:5] if i.get("ai_analysis")]
@@ -61,7 +96,12 @@ async def matches_live(limit: int = Query(20, ge=1, le=100)):
                 "created_at": last.get("created_at"),
             } if last else None,
         })
-    return {"matches": out, "live_count": sum(1 for m in matches if m.get("status") == "live")}
+    return {
+        "matches": out,
+        "live_count": sum(1 for m in matches if m.get("status") == "live"),
+        "scheduled_count": sum(1 for m in matches if m.get("status") == "scheduled"),
+        "completed_count": sum(1 for m in matches if m.get("status") == "completed"),
+    }
 
 
 # ── Extended per-referee scorecard ────────────────────────
