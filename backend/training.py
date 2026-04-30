@@ -163,12 +163,20 @@ def build_precedent_prompt(precedents: List[Dict]) -> str:
     ]
     for i, p in enumerate(precedents, 1):
         ctx = p.get("match_context") or {}
-        ctx_line = ""
-        if ctx:
-            teams = ctx.get("teams") or ""
-            comp = ctx.get("competition") or ""
-            year = ctx.get("year") or ""
-            ctx_line = f" [{teams} · {comp} · {year}]" if any([teams, comp, year]) else ""
+        ctx_parts = []
+        teams = ctx.get("teams") or ""
+        comp = ctx.get("competition") or ""
+        year = ctx.get("year") or ""
+        date = ctx.get("date") or ""
+        referee = ctx.get("referee") or ""
+        minute = ctx.get("minute") or ""
+        if teams: ctx_parts.append(str(teams))
+        if comp: ctx_parts.append(str(comp))
+        if date: ctx_parts.append(str(date))
+        elif year: ctx_parts.append(str(year))
+        if referee: ctx_parts.append(f"referee {referee}")
+        if minute: ctx_parts.append(f"min {minute}")
+        ctx_line = f" [{' · '.join(ctx_parts)}]" if ctx_parts else ""
         laws = ", ".join(p.get("law_references") or [])
         lines.append(
             f"  {i}. \"{p.get('title','Precedent')}\"{ctx_line}\n"
@@ -178,7 +186,10 @@ def build_precedent_prompt(precedents: List[Dict]) -> str:
         )
     lines.append(
         "When a precedent matches closely, defer to its ruling unless the facts diverge materially. "
-        "Cite the precedent number(s) inside your reasoning (e.g. 'per precedent #1')."
+        "In your reasoning, cite the precedent by TEAM-NAMES + DATE (and REFEREE where listed) to "
+        "demonstrate institutional knowledge — e.g. \"consistent with Liverpool vs Tottenham "
+        "(2021-11-07, referee Paul Tierney): Law 11 offside interference via blocked line-of-sight.\" "
+        "This concrete citation is more persuasive to operators than generic 'per precedent #1'."
     )
     return "\n".join(lines)
 

@@ -650,8 +650,13 @@ class NeoCortexAnalyzer:
                 "\nINSTRUCTIONS: Apply the law above to the incident description. "
                 "Do NOT blindly agree with the Hippocampus - make your own independent assessment. "
                 "If the description lacks critical details, lower your confidence and note what's missing. "
-                "When ground-truth precedents match closely, defer to their rulings and cite them "
-                "(e.g. 'per precedent #2') inside your reasoning. "
+                "When ground-truth precedents match closely, defer to their rulings and quote them "
+                "concretely in your reasoning: name the clubs/teams, the date, and (if listed) the "
+                "officiating referee — e.g. 'consistent with Manchester City vs Arsenal (2023-10-08, "
+                "referee Michael Oliver): Law 12 denial of obvious goal-scoring opportunity.' "
+                "Named, dated citations of comparable historical rulings demonstrate OCTON's "
+                "institutional knowledge and make the verdict infinitely more persuasive to the "
+                "on-field official than generic 'per precedent #1' references. "
                 "Respond in JSON format only."
             )
 

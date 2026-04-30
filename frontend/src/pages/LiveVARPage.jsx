@@ -395,10 +395,9 @@ export const LiveVARPage = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-[1px] bg-white/[0.04]">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-[1px] bg-white/[0.04]">
         {[
           { label: "TOTAL INCIDENTS", value: analytics?.total_incidents || 0, icon: AlertTriangle, color: "#FFB800", hint: "ingested" },
-          { label: "AVG CONFIDENCE", value: `${analytics?.average_confidence_score?.toFixed(1) || 0}%`, icon: Brain, color: "#00E5FF", hint: "neocortex" },
           { label: "AVG DECISION TIME", value: `${analytics?.average_decision_time_seconds?.toFixed(1) || 0}s`, icon: Clock, color: "#00FF88", hint: "per call" },
           { label: "ACCURACY RATE", value: `${analytics?.decision_accuracy_rate?.toFixed(1) || 0}%`, icon: Target, color: "#00FF88", hint: "vs ref panel" },
         ].map(({ label, value, icon: Icon, color, hint }) => (
