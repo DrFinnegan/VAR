@@ -353,6 +353,7 @@ const SettingsPage = () => {
   const [config, setConfig] = useState(null);
   const [thresholdInput, setThresholdInput] = useState("15");
   const [savingThreshold, setSavingThreshold] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
 
   const seedDemo = async () => {
     setSeeding(true);
@@ -360,16 +361,18 @@ const SettingsPage = () => {
     finally { setSeeding(false); }
   };
 
+  const loadConfig = useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${API}/system/config`);
+      setConfig(data);
+      setThresholdInput(String(data.ofr_threshold_pct ?? 15));
+    } catch { /* */ }
+  }, []);
+
   useEffect(() => {
     if (user?.role !== "admin") return;
-    (async () => {
-      try {
-        const { data } = await axios.get(`${API}/system/config`);
-        setConfig(data);
-        setThresholdInput(String(data.ofr_threshold_pct ?? 15));
-      } catch { /* */ }
-    })();
-  }, [user?.role]);
+    loadConfig();
+  }, [user?.role, loadConfig]);
 
   const saveThreshold = async () => {
     const v = parseFloat(thresholdInput);
@@ -385,6 +388,17 @@ const SettingsPage = () => {
     } catch (e) {
       toast.error("Failed to update threshold");
     } finally { setSavingThreshold(false); }
+  };
+
+  const pickProfile = async (pid) => {
+    setSavingProfile(true);
+    try {
+      const { data } = await axios.put(`${API}/system/config`, { competition_profile: pid });
+      setConfig(data);
+      setThresholdInput(String(data.ofr_threshold_pct ?? 15));
+      toast.success(`Competition profile: ${data.competition_profile_details?.label}`);
+    } catch { toast.error("Failed to update profile"); }
+    finally { setSavingProfile(false); }
   };
 
   return (
@@ -440,6 +454,52 @@ const SettingsPage = () => {
         </TabsContent>
 
         <TabsContent value="admin" className="mt-6 space-y-6">
+          <Card className="bg-[#121212] border-[#B366FF]/30 rounded-none" data-testid="competition-profile-card">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-[#B366FF]" />
+                Competition Profile
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                Pre-tuned settings per competition tier. Picking a profile applies
+                its OFR threshold and sets the engine's strictness bias.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                {(config?.available_profiles || []).map((p) => {
+                  const active = config?.competition_profile === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => pickProfile(p.id)}
+                      disabled={savingProfile}
+                      className={`text-left border p-3 transition-all ${active ? "border-[#B366FF] bg-[#B366FF]/10" : "border-white/10 hover:border-[#B366FF]/50 hover:bg-white/[0.03]"}`}
+                      data-testid={`competition-profile-${p.id}`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-[#B366FF] animate-pulse" : "bg-gray-600"}`} />
+                        <span className={`font-heading font-bold text-sm ${active ? "text-[#B366FF]" : "text-white"}`}>{p.label}</span>
+                      </div>
+                      <p className="text-[10px] font-mono text-gray-500 mb-2">
+                        OFR {p.ofr_threshold_pct}% · {p.strictness}
+                      </p>
+                      <p className="text-[10px] text-gray-400 leading-snug">{p.description}</p>
+                    </button>
+                  );
+                })}
+              </div>
+              {config?.competition_profile_details && (
+                <p className="text-[10px] font-mono text-gray-500 mt-3">
+                  Active: <span className="text-[#B366FF]">{config.competition_profile_details.label}</span>
+                  {" · "}OFR {config.competition_profile_details.ofr_threshold_pct}% ·
+                  strictness {config.competition_profile_details.strictness}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
           <Card className="bg-[#121212] border-[#FFB800]/20 rounded-none" data-testid="ofr-threshold-card">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">

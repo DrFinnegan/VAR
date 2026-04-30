@@ -17,4 +17,5 @@ from . import (  # noqa: F401
     dashboards,
     system_config,
     boost,
+    public_verdict,
 )

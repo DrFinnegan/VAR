@@ -192,11 +192,14 @@ async def create_incident(data: IncidentCreate, request: Request):
         analysis_result["camera_angles_analyzed"] = len(angle_images_b64)
         analysis_result["visual_evidence_source"] = "multi_angle"
     # Re-evaluate angle_disagreement against the admin-tunable threshold.
-    from .system_config import get_ofr_threshold
+    from .system_config import get_ofr_threshold, get_competition_profile
     threshold = await get_ofr_threshold()
+    profile = await get_competition_profile()
     delta = float(analysis_result.get("angle_confidence_delta") or 0.0)
     analysis_result["angle_disagreement"] = bool(delta >= threshold and delta > 0)
     analysis_result["ofr_threshold_pct"] = threshold
+    analysis_result["competition_profile"] = profile["id"]
+    analysis_result["competition_profile_label"] = profile["label"]
 
     incident_doc = {
         "id": incident_id,

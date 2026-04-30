@@ -38,6 +38,8 @@ import { DecisionComparisonMode } from "../components/DecisionComparisonMode";
 import { CameraAngleUploader, cameraAnglesToPayload } from "../components/CameraAngleUploader";
 import ShareableVerdictCard from "../components/ShareableVerdictCard";
 import { BoostConfidenceChip } from "../components/BoostConfidenceChip";
+import ConfidenceBreakdownTooltip from "../components/ConfidenceBreakdownTooltip";
+import RefereeCitationReasoning from "../components/RefereeCitationReasoning";
 
 export const LiveVARPage = () => {
   const { user } = useAuth();
@@ -180,6 +182,16 @@ export const LiveVARPage = () => {
     setSubmitting(true);
     try {
       const payload = { ...newIncident };
+      // Match-context inheritance: when a match filter is active, auto-fill
+      // match_id + team_involved so the Match Wall picks up this incident
+      // natively (no team-name fallback needed).
+      if (matchFilterId && matchFilterId !== "all") {
+        payload.match_id = matchFilterId;
+        if (!payload.team_involved) {
+          const m = matches.find((x) => x.id === matchFilterId);
+          if (m) payload.team_involved = m.team_home;
+        }
+      }
       const ang = cameraAnglesToPayload(cameraAngles);
       if (ang.length > 0) payload.camera_angles = ang;
       const res = await axios.post(`${API}/incidents`, payload);
@@ -520,7 +532,10 @@ export const LiveVARPage = () => {
                   </div>
                 </div>
 
-                <div className="py-3">
+                <div className="py-3 relative" data-testid="confidence-score-container">
+                  <div className="absolute top-2 right-2 z-10">
+                    <ConfidenceBreakdownTooltip analysis={analysis} />
+                  </div>
                   <ConfidenceScore
                     score={analysis.final_confidence || analysis.confidence_score || 0}
                     uplift={analysis.confidence_uplift || 0}
@@ -658,9 +673,7 @@ export const LiveVARPage = () => {
                       <CopyButton text={analysis.reasoning} label="COPY" accent="#00E5FF" testId="copy-reasoning-btn" />
                     </div>
                     <div className="max-h-[300px] overflow-y-auto pr-2 octon-scrollbar" data-testid="reasoning-scroll">
-                      <p className="text-xs font-body text-gray-300 leading-relaxed whitespace-pre-wrap">
-                        {analysis.reasoning}
-                      </p>
+                      <RefereeCitationReasoning text={analysis.reasoning} />
                     </div>
                   </CurtainSection>
 
