@@ -38,10 +38,35 @@ class ConnectionManager:
             booth_id or "-",
             len(self.subscriptions),
         )
+        # Announce presence change so Match Wall pips refresh instantly.
+        if match_id and booth_id:
+            await self._announce_presence(match_id)
 
     def disconnect(self, websocket: WebSocket):
-        self.subscriptions.pop(websocket, None)
+        sub = self.subscriptions.pop(websocket, None)
         logger.info("WS disconnected. Active: %d", len(self.subscriptions))
+        # Fire-and-forget presence update (no await context here, so we
+        # schedule via the running event loop if available).
+        if sub and sub.get("match_id") and sub.get("booth_id"):
+            try:
+                import asyncio
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._announce_presence(sub["match_id"]))
+            except RuntimeError:
+                # No running loop (e.g. during shutdown) — skip silently.
+                pass
+
+    async def _announce_presence(self, match_id: str):
+        """Global broadcast: updated booth list for `match_id`. Consumed by
+        LiveMatchWallPage so the presence pip updates in real-time."""
+        await self.broadcast({
+            "type": "presence_update",
+            "data": {
+                "match_id": match_id,
+                "booth_ids": self.booths_for_match(match_id),
+                "count": len(self.booths_for_match(match_id)),
+            },
+        })
 
     @property
     def active_connections(self):

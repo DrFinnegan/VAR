@@ -9,6 +9,7 @@ from fastapi import HTTPException, Query
 from starlette.responses import StreamingResponse
 
 from core import api_router, db
+from websocket_manager import ws_manager
 
 
 # ── Live multi-match dashboard ────────────────────────────
@@ -83,6 +84,10 @@ async def matches_live(limit: int = Query(30, ge=1, le=100)):
             "incidents_by_status": statuses,
             "avg_confidence_recent": avg_conf,
             "ofr_pending": ofr_pending,
+            "booth_presence": {
+                "count": len(ws_manager.booths_for_match(mid)),
+                "booth_ids": ws_manager.booths_for_match(mid),
+            },
             "last_incident": {
                 "id": last.get("id"),
                 "incident_type": last.get("incident_type"),

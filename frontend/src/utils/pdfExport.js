@@ -523,6 +523,26 @@ export function exportAnalysisPDF(incident, analysis, audit = null, opts = {}) {
     doc.setTextColor(80, 80, 90);
     doc.text(`ENTRY  ${audit.entry_hash}`, margin, footY + 7.8);
     doc.text(`PREV   ${audit.prev_hash}`, margin, footY + 11);
+    // Booth attribution (right-aligned) — shown when the audit entry
+    // carries the X-Booth-Id / X-Booth-Label headers.
+    if (audit.booth_id || incident?.decided_by_booth) {
+      const boothLabel = audit.booth_label || incident?.decided_by_booth_label || "";
+      const boothId = audit.booth_id || incident?.decided_by_booth || "";
+      doc.setFont("courier", "bold");
+      doc.setFontSize(6.5);
+      doc.setTextColor(CYAN[0], CYAN[1], CYAN[2]);
+      doc.text("DECIDED BY BOOTH", pageW - margin, footY + 4, { align: "right" });
+      doc.setFont("courier", "normal");
+      doc.setFontSize(6);
+      doc.setTextColor(80, 80, 90);
+      if (boothLabel) {
+        doc.text(boothLabel, pageW - margin, footY + 7.8, { align: "right" });
+      }
+      doc.text(boothId, pageW - margin, footY + 11, { align: "right" });
+      if (incident?.decided_by) {
+        doc.text(`operator · ${incident.decided_by}`, pageW - margin, footY + 14, { align: "right" });
+      }
+    }
     // small purple marker to the left of the block
     doc.setFillColor(PURPLE[0], PURPLE[1], PURPLE[2]);
     doc.rect(margin - 2, footY + 2, 0.6, 10, "F");

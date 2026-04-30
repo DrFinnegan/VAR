@@ -8,7 +8,7 @@ import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 import {
-  Trophy, Activity, AlertTriangle, ChevronRight, Radio, MapPin, Calendar, Scale,
+  Trophy, Activity, AlertTriangle, ChevronRight, Radio, MapPin, Calendar, Scale, Users,
 } from "lucide-react";
 import { API } from "../lib/api";
 import { useWebSocket } from "../hooks/useWebSocket";
@@ -50,10 +50,10 @@ export default function LiveMatchWallPage() {
     return () => clearInterval(t);
   }, [load]);
 
-  // Real-time refresh — any new incident / decision / OFR → refetch
+  // Real-time refresh — any new incident / decision / OFR / booth presence → refetch
   useWebSocket(useCallback((msg) => {
     if (!msg || !msg.type) return;
-    if (["incident_created", "decision_made", "ofr_bookmark", "analysis_complete"].includes(msg.type)) {
+    if (["incident_created", "decision_made", "ofr_bookmark", "analysis_complete", "presence_update"].includes(msg.type)) {
       load();
     }
   }, [load]));
@@ -116,6 +116,18 @@ export default function LiveMatchWallPage() {
                 {mt.status === "completed" && (
                   <span className="absolute top-3 right-3 flex items-center gap-1 px-2 py-0.5 bg-white/[0.04] border border-white/10">
                     <span className="font-mono text-[8px] tracking-[0.25em] text-gray-400">FULL TIME</span>
+                  </span>
+                )}
+                {(m.booth_presence?.count || 0) > 0 && (
+                  <span
+                    className="absolute top-11 right-3 flex items-center gap-1 px-2 py-0.5 bg-[#00E5FF]/10 border border-[#00E5FF]/30"
+                    title={`${m.booth_presence.count} booth${m.booth_presence.count === 1 ? "" : "s"} scoped to this match`}
+                    data-testid={`booth-presence-${mt.id}`}
+                  >
+                    <Users className="w-2.5 h-2.5 text-[#00E5FF]" />
+                    <span className="font-mono text-[8px] tracking-[0.2em] text-[#00E5FF]">
+                      {m.booth_presence.count} BOOTH{m.booth_presence.count === 1 ? "" : "S"}
+                    </span>
                   </span>
                 )}
                 {m.ofr_pending && (

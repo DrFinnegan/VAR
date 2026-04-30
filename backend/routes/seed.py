@@ -185,7 +185,15 @@ async def seed_demo():
         },
     ]
     for inc in demo_incidents:
-        await db.incidents.insert_one(inc)
+        # Idempotent seed: keyed on incident_type + timestamp_in_match +
+        # team_involved so re-seeds don't duplicate the four demo cases.
+        existing = await db.incidents.find_one({
+            "incident_type": inc["incident_type"],
+            "timestamp_in_match": inc["timestamp_in_match"],
+            "team_involved": inc["team_involved"],
+        })
+        if not existing:
+            await db.incidents.insert_one(inc)
 
     # Guaranteed low-confidence pending incident so the Boost-Confidence
     # chip is always visible for the e2e suite (`boost.spec.js`). Keyed

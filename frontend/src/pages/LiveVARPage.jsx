@@ -41,6 +41,7 @@ import ShareableVerdictCard from "../components/ShareableVerdictCard";
 import { BoostConfidenceChip } from "../components/BoostConfidenceChip";
 import ConfidenceBreakdownTooltip from "../components/ConfidenceBreakdownTooltip";
 import RefereeCitationReasoning from "../components/RefereeCitationReasoning";
+import AuditChainDrawer from "../components/AuditChainDrawer";
 
 export const LiveVARPage = () => {
   const { user } = useAuth();
@@ -818,6 +819,9 @@ export const LiveVARPage = () => {
                       </div>
                     </CurtainSection>
                   )}
+                  {selectedIncident?.id && (
+                    <AuditChainDrawer incidentId={selectedIncident.id} />
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between text-[9px] font-mono text-gray-600 pt-3 mt-3 border-t border-white/[0.06]">
@@ -855,6 +859,20 @@ export const LiveVARPage = () => {
                   {selectedIncident.player_involved && <div className="col-span-2"><span className="font-mono text-gray-600">PLAYER</span><span className="text-white ml-1.5">{selectedIncident.player_involved}</span></div>}
                 </div>
                 {selectedIncident.final_decision && <div className="pt-2 border-t border-white/[0.06]"><span className="text-[10px] font-mono text-gray-600">FINAL</span><p className="text-xs text-white mt-1">{selectedIncident.final_decision}</p></div>}
+                {selectedIncident.decided_by_booth && (
+                  <div className="pt-2 border-t border-white/[0.06]" data-testid="booth-attribution">
+                    <span className="text-[10px] font-mono text-gray-600">DECIDED BY BOOTH</span>
+                    <p className="text-[11px] mt-1 flex items-center gap-1.5">
+                      {selectedIncident.decided_by_booth_label && (
+                        <span className="text-[#00E5FF]">{selectedIncident.decided_by_booth_label}</span>
+                      )}
+                      <span className="font-mono text-gray-500">· {selectedIncident.decided_by_booth}</span>
+                    </p>
+                    {selectedIncident.decided_by && (
+                      <p className="text-[9px] font-mono text-gray-600 mt-0.5">operator · {selectedIncident.decided_by}</p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
