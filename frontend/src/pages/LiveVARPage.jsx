@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
   Video, AlertTriangle, CheckCircle2, XCircle, Clock, RefreshCw, Upload,
@@ -142,6 +143,21 @@ export const LiveVARPage = () => {
   useEffect(() => {
     try { localStorage.setItem("octon_match_filter", matchFilterId || "all"); } catch { /* */ }
   }, [matchFilterId]);
+
+  // Match Wall deep-link: /?match=<match_id> switches the filter and clears
+  // the previously-selected incident so fetchData auto-picks the LATEST
+  // incident for that specific match (not a stale one from the last session).
+  const location = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const matchParam = params.get("match");
+    if (!matchParam) return;
+    setMatchFilterId(matchParam);
+    setSelectedIncident(null);
+    // strip the query string so a refresh doesn't re-trigger this branch
+    navigate("/", { replace: true });
+  }, [location.search, navigate]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

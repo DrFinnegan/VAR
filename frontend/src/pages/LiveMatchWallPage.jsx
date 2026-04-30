@@ -96,7 +96,7 @@ export default function LiveMatchWallPage() {
             return (
               <Link
                 key={mt.id || idx}
-                to="/"
+                to={mt.id ? `/?match=${encodeURIComponent(mt.id)}` : "/"}
                 className={`group relative block border p-4 transition-all duration-300 hover:border-[#00E5FF]/40 hover:bg-white/[0.02] ${
                   m.ofr_pending ? "border-[#FFB800]/40 bg-[#FFB800]/[0.04]" : "border-white/10 bg-black"
                 }`}
