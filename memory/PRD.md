@@ -26,6 +26,33 @@ Pure football VAR audit system. ID PROTECTION module has been separated into its
 - Storage: Emergent Object Storage
 
 ## Changelog
+- 2026-02: **🚦 Demo-grade vision pipeline + live-game ingestion**
+  Comprehensive overhaul to make the app foolproof in front of a referee panel and to enable live-broadcast testing.
+
+  **Front-page demo trust:**
+    - **CORNER pill removed** from LiveVAR front page (backend `/api/quick/corner` endpoint kept for future re-introduction).
+    - **OFFSIDE pill is now stage-scoped** — uses a `[data-octon-stage="true"]` selector so it can ONLY capture from the LiveVAR stage video, never from rogue elements. If no media is on the stage, the pill toasts a hard error and refuses to fire. No more "imaginary verdicts."
+    - **OCTON SAW evidence strip** — new component on the verdict panel renders the actual N frame thumbnails the engine analysed, with per-frame badges (`#1 SUPPORTS`, `#2 NEUTRAL`, `#3 CONTRA`) sourced from `ai_analysis.frame_breakdown`. Referees can verify exactly what OCTON looked at. When 0 frames → strip shows "Verdict produced from text analysis only" with the hard-cap note.
+    - **Per-frame breakdown demanded by the prompt** — Neo Cortex JSON contract now requires a `frame_breakdown[]` array (one entry per frame, with `observation` + `evidence_for_decision` enum). Multi-frame instruction block in the prompt explicitly tells the model "the referee panel will read these and challenge any claim that does not match the pixels."
+    - **Confidence caps tooltip** — radial-ring breakdown popover now lists `confidence_caps_applied` in red ("📉 Capped at 70% — text-only", etc.) so operators see exactly why a number was lowered. Transparent and audit-ready.
+    - **Prominent RE-ANALYSE button** — on the SELECTED INCIDENT panel header (was previously a tiny icon). Operators can re-run the multi-frame vision pipeline on incidents created during the ffmpeg outage.
+
+  **Live-game ingestion (a + b):**
+    - **`GO LIVE` button** — `navigator.mediaDevices.getDisplayMedia()` lets operators screen-share any browser tab/window/screen showing a live broadcast (Sky Go, fuboTV, BBC iPlayer, Apple TV web). The MediaStream is mounted on the LiveVAR stage; OFFSIDE pill captures live frames at 30 fps. Zero infra cost, zero licensing.
+    - **RTMP ingest endpoint** — new `mediamtx` service (port 1935 RTMP, 8888 HLS) plus `/app/backend/routes/live_ingest.py` (POST/GET/DELETE `/api/live/ingest`, heartbeat hooks). Operators get an OBS push URL + stream key + HLS playback URL. Settings → Admin Tools now hosts a `LiveIngestPanel` to manage streams.
+
+  **Hygiene:**
+    - New `POST /api/admin/hygiene/cleanup-fast-fire-tests?keep_recent=N&dry_run=bool` admin endpoint. Live run deleted **30** orphan fast-fire test incidents, keeping the 2 most recent.
+    - `POST /api/admin/hygiene/reanalyse-text-only` lists incidents that need re-analysis after the ffmpeg outage.
+
+  **Verified end-to-end:**
+    - Hit `/api/quick/offside` with a 4-frame synthetic clip → engine returned 4 frame_breakdown entries each correctly stating "Color bars displayed, no game action visible," all marked `[neutral]`, final confidence **38.4%** (no hallucinated 99% verdict). `analysed_frames_b64` populated with 4 thumbnails.
+    - 11/11 Playwright e2e tests green (3 new asserting OFFSIDE present, CORNER removed, GO LIVE wired, plus the corner backend still works).
+    - 19/19 backend pytest still green.
+
+  **System dependencies (persisted to /app/backend/system-packages.txt + supervisor):**
+    - `ffmpeg` (was the silent killer)
+    - `mediamtx` v1.9.3 (RTMP ingest)
 - 2026-02: **🚨 CRITICAL FIX — Vision pipeline + confidence honesty**
 
   **Root cause #1: ffmpeg was missing from the container.** Every video upload silently failed `extract_frame_b64()` and the dual-brain ran in text-only mode. That's why operators saw "video as a still" and "imaginary verdicts." Installed `ffmpeg` system-wide and added `/app/backend/system-packages.txt` so future rebuilds restore it. New `/api/system/health` `ffmpeg` field surfaces a red alarm if it ever regresses.

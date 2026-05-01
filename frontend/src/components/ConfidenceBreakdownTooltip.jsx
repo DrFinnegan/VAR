@@ -62,9 +62,24 @@ export default function ConfidenceBreakdownTooltip({ analysis }) {
               );
             })}
           </div>
+          {Array.isArray(analysis.confidence_caps_applied) && analysis.confidence_caps_applied.length > 0 && (
+            <div
+              className="mt-2 pt-2 border-t border-[#FF3333]/30 space-y-1"
+              data-testid="confidence-caps-applied"
+            >
+              <p className="text-[9px] font-mono tracking-[0.2em] uppercase text-[#FF3333]">📉 Caps Applied</p>
+              {analysis.confidence_caps_applied.map((cap, i) => (
+                <p key={i} className="text-[9px] font-mono text-gray-300 leading-snug">
+                  <span className="text-[#FF3333]">{cap.from?.toFixed?.(1) || cap.from}% → {cap.cap?.toFixed?.(1) || cap.cap}%</span>
+                  <span className="text-gray-500"> · {cap.reason}</span>
+                </p>
+              ))}
+            </div>
+          )}
           <p className="mt-2 pt-2 border-t border-white/10 text-[9px] text-gray-500 leading-snug">
-            Every bonus is transparent and logged — referees and media can
-            independently reconstruct how OCTON arrived at the final score.
+            Every bonus and cap is transparent and logged — referees and
+            media can independently reconstruct how OCTON arrived at the
+            final score.
           </p>
         </div>
       )}

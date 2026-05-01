@@ -43,6 +43,8 @@ import ConfidenceBreakdownTooltip from "../components/ConfidenceBreakdownTooltip
 import RefereeCitationReasoning from "../components/RefereeCitationReasoning";
 import AuditChainDrawer from "../components/AuditChainDrawer";
 import QuickFirePills from "../components/QuickFirePills";
+import GoLiveButton from "../components/GoLiveButton";
+import OctonSawStrip from "../components/OctonSawStrip";
 
 export const LiveVARPage = () => {
   const { user } = useAuth();
@@ -351,6 +353,7 @@ export const LiveVARPage = () => {
             {wsConnected && <span className="w-1.5 h-1.5 bg-[#00FF88] animate-pulse rounded-full" />}
           </div>
           <Button onClick={() => setShowComparison(!showComparison)} className={`rounded-none font-heading font-bold text-xs tracking-[0.1em] h-9 px-4 active:scale-[0.98] transition-all ${showComparison ? 'bg-[#00E5FF] text-black hover:bg-[#00E5FF]/90' : 'bg-transparent text-[#00E5FF] border border-[#00E5FF]/30 hover:bg-[#00E5FF]/10 hover:border-[#00E5FF]/60'}`} data-testid="comparison-mode-toggle"><Columns className="w-3.5 h-3.5 mr-2" />COMPARE</Button>
+          <GoLiveButton />
           <QuickFirePills
             matchId={matchFilterId}
             currentMatch={(matches || []).find(m => m.id === matchFilterId)}
@@ -510,7 +513,7 @@ export const LiveVARPage = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Button variant="ghost" size="sm" onClick={handleReanalyze} className="text-[#00E5FF] hover:text-[#00E5FF] hover:bg-[#00E5FF]/10 h-7 w-7 p-0 border border-[#00E5FF]/20 hover:border-[#00E5FF]/50 rounded-none transition-all" data-testid="reanalyze-button" title="Re-run analysis"><RefreshCw className="w-3.5 h-3.5" /></Button>
+                    <Button variant="ghost" size="sm" onClick={handleReanalyze} className="text-[#00E5FF] hover:text-[#00E5FF] hover:bg-[#00E5FF]/10 h-7 px-2 p-0 border border-[#00E5FF]/30 hover:border-[#00E5FF]/60 rounded-none transition-all flex items-center gap-1" data-testid="reanalyze-button" title="Re-run multi-frame vision analysis on this incident"><RefreshCw className="w-3.5 h-3.5" /><span className="text-[9px] font-mono tracking-[0.15em]">RE-ANALYSE</span></Button>
                     <Button variant="ghost" size="sm" onClick={async () => {
                       let audit = null;
                       try {
@@ -688,6 +691,7 @@ export const LiveVARPage = () => {
                 </div>
 
                 <div className="mt-3 space-y-2">
+                  <OctonSawStrip analysis={analysis} />
                   <CurtainSection
                     icon={BookOpen}
                     title="Reasoning"

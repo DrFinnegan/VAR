@@ -25,10 +25,49 @@ import time
 import json
 import re
 import asyncio
+import base64
+import io
 import logging
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 logger = logging.getLogger(__name__)
+
+
+def _build_thumbnail_strip(
+    image_base64: Optional[str],
+    extra_images_b64: Optional[List[str]],
+    max_width: int = 320,
+    quality: int = 60,
+) -> List[str]:
+    """Return small base64 JPEG thumbnails of every frame the model saw.
+
+    Used by the "OCTON SAW" strip on the verdict panel so a referee
+    panel can verify the engine analysed actual footage. Pillow is the
+    only dependency and it's already pinned for the verdict-card route.
+    Falls back to the original base64 if Pillow can't decode (we never
+    want to lose evidence in pursuit of compression).
+    """
+    try:
+        from PIL import Image
+    except Exception:
+        # Last-resort fallback: keep originals (still verifiable but heavier).
+        return [b for b in [image_base64, *(extra_images_b64 or [])] if b][:4]
+
+    out: List[str] = []
+    sources = [b for b in [image_base64, *(extra_images_b64 or [])] if b][:4]
+    for b in sources:
+        try:
+            raw = base64.b64decode(b)
+            im = Image.open(io.BytesIO(raw)).convert("RGB")
+            if im.width > max_width:
+                ratio = max_width / im.width
+                im = im.resize((max_width, int(im.height * ratio)))
+            buf = io.BytesIO()
+            im.save(buf, format="JPEG", quality=quality, optimize=True)
+            out.append(base64.b64encode(buf.getvalue()).decode("ascii"))
+        except Exception:
+            out.append(b)
+    return out
 
 
 # ── Default IFAB clause references per incident type ───────────────────
@@ -670,6 +709,13 @@ class NeoCortexAnalyzer:
                     '     // One object per angle in the order provided (broadcast, tactical, tight, goal_line).\n'
                     '     // confidence is what THIS angle alone supports, decision is the verdict it suggests.\n'
                     '     {"angle": "broadcast", "confidence": number, "decision": "string"}\n'
+                    '  ],\n'
+                    '  "frame_breakdown": [\n'
+                    '     // REQUIRED when 2+ frames are attached. One object per frame in the order shown.\n'
+                    '     // Describe ONLY what is visible in THAT frame. This is the operator-facing\n'
+                    '     // evidence trail — be specific (positions, ball location, body parts in\n'
+                    '     // contact, score line if visible). 1-2 sentences each.\n'
+                    '     {"frame": 1, "observation": "string", "evidence_for_decision": "supports|neutral|contradicts"}\n'
                     '  ]\n'
                     "}"
                 ),
@@ -740,17 +786,29 @@ class NeoCortexAnalyzer:
                     )
                     text = (
                         f"{prompt}\n\n"
-                        f"MULTI-CAMERA EVIDENCE — {len(all_images)} synchronised camera angles attached:\n"
+                        f"MULTI-FRAME EVIDENCE — {len(all_images)} synchronised frames attached:\n"
                         f"{angle_lines}\n\n"
-                        "Cross-reference the angles before concluding. Resolve occlusions or "
-                        "parallax disagreements by citing which angle is most authoritative for "
-                        "the specific question (e.g. goal-line camera for offside line, tight "
-                        "for point-of-contact, broadcast for context). When all angles agree, "
+                        "Cross-reference the frames before concluding. Resolve occlusions or "
+                        "parallax disagreements by citing which frame is most authoritative for "
+                        "the specific question (e.g. goal-line frame for offside line, tight "
+                        "for point-of-contact, broadcast for context). When all frames agree, "
                         "raise your confidence. When they disagree, name the disagreement in "
-                        "`neo_cortex_notes` and lower confidence accordingly."
+                        "`neo_cortex_notes` and lower confidence accordingly.\n\n"
+                        "REQUIRED — POPULATE `frame_breakdown`: produce one entry PER FRAME in "
+                        "the order shown, describing what is visible in THAT specific frame. "
+                        "This is the operator-facing audit trail; if you cannot tell what is "
+                        "happening in a given frame, say so plainly. Do NOT fabricate. The "
+                        "referee panel will read these and challenge any claim that does not "
+                        "match the pixels."
                     )
                 else:
-                    text = prompt + "\n\nMatch frame attached. Analyze visual evidence carefully."
+                    text = (
+                        prompt
+                        + "\n\nMatch frame attached. Analyze visual evidence carefully. "
+                          "Single-frame evidence is a snapshot — the moment of pass / contact "
+                          "/ ball-out cannot be confirmed from one image. Cap your confidence "
+                          "and explain what additional frame would resolve the call."
+                    )
                 user_message = UserMessage(text=text, file_contents=image_contents)
             else:
                 user_message = UserMessage(text=prompt)
@@ -812,6 +870,22 @@ class NeoCortexAnalyzer:
                 # for an OFR rather than trust the on-field call.
                 angle_disagreement = angle_confidence_delta >= 15.0
 
+            # Frame-by-frame breakdown — operator-facing evidence trail.
+            frame_breakdown = []
+            try:
+                for fb in analysis_data.get("frame_breakdown") or []:
+                    if not isinstance(fb, dict):
+                        continue
+                    frame_breakdown.append({
+                        "frame": int(fb.get("frame", len(frame_breakdown) + 1)),
+                        "observation": str(fb.get("observation", ""))[:280],
+                        "evidence_for_decision": str(
+                            fb.get("evidence_for_decision", "neutral")
+                        ).lower(),
+                    })
+            except (TypeError, ValueError):
+                frame_breakdown = []
+
             return {
                 "stage": "neo_cortex",
                 "confidence_score": min(
@@ -832,6 +906,7 @@ class NeoCortexAnalyzer:
                 "angle_assessments": angle_assessments,
                 "angle_confidence_delta": angle_confidence_delta,
                 "angle_disagreement": angle_disagreement,
+                "frame_breakdown": frame_breakdown,
                 "processing_time_ms": processing_ms,
             }
 
@@ -1170,6 +1245,7 @@ class OctonBrainEngine:
             ),
             "risk_level": neo_cortex_result.get("risk_level", "medium"),
             "angle_assessments": neo_cortex_result.get("angle_assessments", []),
+            "frame_breakdown": neo_cortex_result.get("frame_breakdown", []),
             "angle_confidence_delta": neo_cortex_result.get("angle_confidence_delta", 0.0),
             "angle_disagreement": neo_cortex_result.get("angle_disagreement", False),
             "neo_cortex_notes": neo_cortex_result.get("neo_cortex_notes", ""),
@@ -1180,6 +1256,11 @@ class OctonBrainEngine:
             "divergence_flag": divergence_flag,
             # Multi-angle metadata (0 means single-image / text-only flow).
             "camera_angles_analyzed": len([b for b in (extra_images_b64 or []) if b]) + (1 if image_base64 else 0),
+            # Small thumbnails (~32 KB each) of the actual frames the model
+            # saw — surfaced in the "OCTON SAW" strip on the verdict panel
+            # so referees can verify the engine analysed real footage. Only
+            # the first 4 are kept (vision payload cap).
+            "analysed_frames_b64": _build_thumbnail_strip(image_base64, extra_images_b64),
             "precedents_used": precedents,
             "precedents_count": len(precedents),
             "confidence_uplift": uplift_info["uplift"],

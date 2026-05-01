@@ -1,0 +1,108 @@
+/**
+ * OctonSawStrip — operator-facing evidence trail.
+ *
+ * Renders the actual frame thumbnails the engine analysed plus a
+ * per-frame observation pulled from `ai_analysis.frame_breakdown`. Killing
+ * the "imaginary verdict" suspicion dead — referees can verify that the
+ * model looked at real pixels and that the reasoning maps to specific
+ * frames rather than a generic narrative.
+ *
+ * Color coding for `evidence_for_decision`:
+ *   supports     → green
+ *   neutral      → gray
+ *   contradicts  → red
+ */
+import { Camera, Eye } from "lucide-react";
+
+const ev = {
+  supports:    { color: "#00FF88", label: "SUPPORTS" },
+  neutral:     { color: "#94A3B8", label: "NEUTRAL"  },
+  contradicts: { color: "#FF3333", label: "CONTRA"   },
+};
+
+export default function OctonSawStrip({ analysis }) {
+  const frames = analysis?.analysed_frames_b64 || [];
+  const breakdown = analysis?.frame_breakdown || [];
+  const frameCount = analysis?.camera_angles_analyzed
+    ?? frames.length
+    ?? 0;
+
+  if (frameCount === 0 && frames.length === 0) {
+    return (
+      <div className="border border-white/[0.06] bg-[#FFB800]/[0.05] p-3" data-testid="octon-saw-strip">
+        <div className="flex items-center gap-2 mb-1">
+          <Eye className="w-3 h-3 text-[#FFB800]" />
+          <span className="text-[10px] font-mono tracking-[0.2em] text-[#FFB800] font-bold">OCTON SAW · 0 FRAMES</span>
+        </div>
+        <p className="text-[10px] text-gray-400">
+          Verdict produced from text analysis only — no visual evidence
+          attached. Confidence is hard-capped. Upload footage or click
+          GO LIVE for a referee-grade decision.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-white/[0.08] bg-[#0A0A0A]" data-testid="octon-saw-strip">
+      <div className="px-3 py-2 border-b border-white/[0.06] flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Eye className="w-3 h-3 text-[#00E5FF]" />
+          <span className="text-[10px] font-mono tracking-[0.2em] text-[#00E5FF] font-bold">
+            OCTON SAW · {frames.length} FRAME{frames.length === 1 ? "" : "S"}
+          </span>
+        </div>
+        <span className="text-[9px] font-mono text-gray-500">forensic evidence trail</span>
+      </div>
+
+      {frames.length > 0 && (
+        <div className="grid grid-cols-4 gap-1 p-2 bg-black">
+          {frames.map((b64, i) => (
+            <div key={i} className="relative group" data-testid={`octon-saw-frame-${i}`}>
+              <img
+                src={`data:image/jpeg;base64,${b64}`}
+                alt={`Frame ${i + 1}`}
+                className="w-full aspect-video object-cover border border-white/10"
+                loading="lazy"
+              />
+              <span className="absolute top-1 left-1 px-1 bg-black/70 text-[8px] font-mono text-[#00E5FF]">
+                #{i + 1}
+              </span>
+              {breakdown[i]?.evidence_for_decision && ev[breakdown[i].evidence_for_decision] && (
+                <span
+                  className="absolute top-1 right-1 px-1 bg-black/70 text-[8px] font-mono"
+                  style={{ color: ev[breakdown[i].evidence_for_decision].color }}
+                >
+                  {ev[breakdown[i].evidence_for_decision].label}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {breakdown.length > 0 && (
+        <div className="border-t border-white/[0.06] p-3 space-y-2" data-testid="frame-breakdown-list">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Camera className="w-3 h-3 text-gray-500" />
+            <span className="text-[9px] font-mono tracking-[0.2em] text-gray-500">PER-FRAME OBSERVATIONS</span>
+          </div>
+          {breakdown.map((b, i) => {
+            const evd = ev[b.evidence_for_decision] || ev.neutral;
+            return (
+              <div key={i} className="flex gap-2 items-start text-[11px] leading-snug">
+                <span
+                  className="font-mono text-[9px] flex-none px-1.5 py-0.5 mt-0.5"
+                  style={{ color: evd.color, borderColor: `${evd.color}55`, borderWidth: 1 }}
+                >
+                  #{b.frame || i + 1}
+                </span>
+                <p className="text-gray-300">{b.observation || "—"}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

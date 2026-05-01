@@ -289,7 +289,7 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
   useEffect(() => { setVideoBroken(false); }, [videoSrc]);
 
   return (
-    <div ref={stageRef} className="relative border border-white/[0.08] bg-black overflow-hidden" data-testid="video-player-container">
+    <div ref={stageRef} className="relative border border-white/[0.08] bg-black overflow-hidden" data-testid="video-player-container" data-octon-stage="true">
       {/* ── Camera-angle switcher ───────────────────────────────
           Shown only when the incident has 1+ explicit angle uploads.
           "PRIMARY" toggles back to the legacy top-level still/video.
