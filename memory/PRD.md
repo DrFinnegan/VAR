@@ -26,6 +26,32 @@ Pure football VAR audit system. ID PROTECTION module has been separated into its
 - Storage: Emergent Object Storage
 
 ## Changelog
+- 2026-02: **🚨 CRITICAL FIX — Vision pipeline + confidence honesty**
+
+  **Root cause #1: ffmpeg was missing from the container.** Every video upload silently failed `extract_frame_b64()` and the dual-brain ran in text-only mode. That's why operators saw "video as a still" and "imaginary verdicts." Installed `ffmpeg` system-wide and added `/app/backend/system-packages.txt` so future rebuilds restore it. New `/api/system/health` `ffmpeg` field surfaces a red alarm if it ever regresses.
+
+  **Root cause #2: single-frame extraction.** Replaced `extract_frame_b64()` with `extract_frames_b64(video_bytes, n_frames=4)` — extracts 4 evenly-spaced frames between 10–90% of the clip duration in parallel. Wired into `incidents.create_incident`, `incidents.reanalyze_incident`, and the Quick-Fire endpoints. Engine now sees motion (moment-of-pass for offside, byline-cross for corner) instead of one frozen still.
+
+  **Root cause #3: runaway confidence on hallucinated answers.** Bonuses (precedent uplift + hip + agreement + vision + reasoning) used to compound to 99% even when the model had zero pixels. Three honesty caps now applied AFTER bonus stacking:
+    1. Text-only verdict → cap 70%
+    2. Single-frame on motion-dependent calls (offside / handball moment / goal-line) → cap 78%
+    3. Model self-flagged uncertainty in plain English (`"no clear", "cannot determine", "load the moment-of-pass"`) → cap 50%
+  Caps are recorded in `ai_analysis.confidence_caps_applied` so the UI / audit can see why a number was lowered.
+
+  **Quick-Fire pipeline upgraded:**
+    - `_OFFSIDE_PROMPT` / `_CORNER_PROMPT` now include explicit refusal contracts. If frames don't show the relevant moment, the model returns `"No clear ... event visible — load the moment-of-pass frame and retry"` with confidence ≤ 30 instead of fabricating.
+    - Frontend `QuickFirePills` captures a **4-frame motion burst** (-0.6, -0.2, +0.2, +0.6 s around playhead) from the video, falls back to the largest visible `<img>`, warns the operator if neither exists, and posts `extra_images_base64`.
+    - Quick-Fire backend post-processes again (frame_count=0 → cap 60, frame_count=1 → cap 75, model self-rejection → cap 40).
+
+  **Verified end-to-end:**
+    - Re-analysing an existing video incident: 4 frames extracted, `visual_evidence_source: video_frames`, conf 93.4%, decision "Yellow Card - Reckless Foul and Direct Free Kick" — grounded, not hallucinated.
+    - Text-only offside Quick-Fire: capped from 91% → 60% (was 99% before).
+    - Text-only corner Quick-Fire: model self-rejected with "No clear corner event visible — load the byline-cross or delivery frame and retry" @ 38.5%.
+
+  **Tests:** 7 new pytest cases (`test_vision_caps.py`: multi-frame extraction × 3, no-evidence cap, single-frame cap, self-rejection cap, grounded high-confidence pass-through). **19/19 backend tests pass. 9/9 Playwright tests pass.**
+
+  **Bonus stability fixes:** rail bumped to 100 incidents (was 30) to keep low-confidence pending items visible; default `/incidents` fetch widened to limit=100 from 20.
+
 - 2026-02: **Lightning Quick-Fire: automated offside + corner verdicts**
   1. **New `corner` IncidentType** in `core.IncidentType` + 4 canonical IFAB Law 17 precedents in `training_seed.py` (last-touch defender → legal corner, attacker-shot → goal kick, keeper-blocked → retake+foul, encroachment inside 1m → retake) + a dedicated Hippocampus keyword bank (corner, encroachment, last touch, short corner, inswinger, etc.) + Neo Cortex Law 17 instruction block with verbatim procedure/opponent-distance/retake triggers/confidence floors.
   2. **`POST /api/quick/offside`** + **`POST /api/quick/corner`** fast-path endpoints (`backend/routes/quick_fire.py`) — accept scrubber-frame base64 + optional match context, call the existing dual-brain engine with a purpose-built Law 11 / Law 17 prompt, persist a full incident tagged `quick_fire` + `fast_path: true`, broadcast to the match-scoped WS. Live warm-cache latency ~3.9–6.4 s (wall) with avg confidence 88–99%.

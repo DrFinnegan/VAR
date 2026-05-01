@@ -1082,16 +1082,60 @@ class OctonBrainEngine:
         # an additional +4 % (capped). Multi-angle uploads earn +6 % since
         # cross-camera triangulation is even more decisive.
         has_any_image = bool(image_base64 or (extra_images_b64 and any(extra_images_b64)))
-        multi_angle = bool(extra_images_b64 and len([b for b in extra_images_b64 if b]) >= 1)
+        n_frames_total = (1 if image_base64 else 0) + len([b for b in (extra_images_b64 or []) if b])
+        # Vision bonus is now proportional to actual pixel evidence quality:
+        #   • ≥ 3 frames (e.g. multi-angle or video burst) → +5 %
+        #   • 2 frames → +3 %
+        #   • 1 frame  → +2 % (still a snapshot — no motion grounding)
+        #   • 0 frames → 0 %  (text-only — no grounding at all)
         vision_evidence_bonus = 0.0
         if has_any_image and neo_conf >= 60:
-            vision_evidence_bonus = 6.0 if multi_angle else 4.0
+            if n_frames_total >= 3:
+                vision_evidence_bonus = 5.0
+            elif n_frames_total == 2:
+                vision_evidence_bonus = 3.0
+            else:
+                vision_evidence_bonus = 2.0
 
         # Apply precedent uplift + hippocampus bonus + agreement bonus + vision bonus + reasoning bonus, all transparent & capped
         base_confidence = weighted_confidence
         final_confidence = round(
             min(99.0, base_confidence + uplift_info["uplift"] + hip_bonus + strong_agreement_bonus + vision_evidence_bonus + reasoning_quality_bonus), 1
         )
+
+        # ── Honesty caps ──
+        # Bonuses are seductive but they MUST NOT push a hallucinated /
+        # ungrounded verdict into the daylight zone. Apply the caps in
+        # order; the strictest one wins.
+        confidence_caps_applied = []
+        decision_lower = (neo_cortex_result.get("suggested_decision") or "").lower()
+        reasoning_lower = (neo_cortex_result.get("reasoning") or "").lower()
+        notes_lower = (neo_cortex_result.get("neo_cortex_notes") or "").lower()
+        evidence_blob = f"{decision_lower} {reasoning_lower} {notes_lower}"
+
+        # 1) Text-only verdicts max out at 70 — no pixels, no certainty.
+        if not has_any_image and final_confidence > 70.0:
+            confidence_caps_applied.append({"cap": 70.0, "from": final_confidence, "reason": "text-only — no visual evidence"})
+            final_confidence = 70.0
+
+        # 2) Single-frame verdicts on motion-dependent calls (offside,
+        #    handball "moment of contact", goal-line) max out at 78.
+        motion_dependent = incident_type in ("offside", "handball", "goal_line")
+        if has_any_image and n_frames_total == 1 and motion_dependent and final_confidence > 78.0:
+            confidence_caps_applied.append({"cap": 78.0, "from": final_confidence, "reason": "single-frame on motion-dependent call"})
+            final_confidence = 78.0
+
+        # 3) When the model itself flags uncertainty in plain English,
+        #    do not push past 65.
+        rejection_phrases = (
+            "no clear", "not visible", "cannot determine", "cannot be determined",
+            "insufficient evidence", "unclear", "no offside event visible",
+            "no corner event visible", "no discernible", "load the moment",
+            "load the byline",
+        )
+        if any(p in evidence_blob for p in rejection_phrases) and final_confidence > 50.0:
+            confidence_caps_applied.append({"cap": 50.0, "from": final_confidence, "reason": "model flagged evidence as unclear"})
+            final_confidence = 50.0
 
         # ── Critical-trigger floor ──
         # If Hippocampus detected an IFAB-automatic red-card offence (referee
@@ -1143,6 +1187,7 @@ class OctonBrainEngine:
             "strong_agreement_bonus": strong_agreement_bonus,
             "vision_evidence_bonus": vision_evidence_bonus,
             "reasoning_quality_bonus": reasoning_quality_bonus,
+            "confidence_caps_applied": confidence_caps_applied,
             "precedent_strong_matches": uplift_info["strong_matches"],
             "precedent_avg_similarity": uplift_info["avg_similarity"],
             "precedent_consensus": uplift_info.get("consensus", False),

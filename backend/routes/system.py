@@ -59,9 +59,22 @@ async def system_health(force: bool = False):
 
     sched_cfg = await db.schedule_config.find_one({"id": "web_learning"}, {"_id": 0}) or {}
 
+    # Vision pipeline (ffmpeg). If missing, video uploads silently fall
+    # back to text-only analysis — operators get hallucinated verdicts.
+    # Surfacing this in /system/health makes the regression loud.
+    import shutil
+    ffmpeg_state = {"status": "ok"}
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+        ffmpeg_state = {
+            "status": "down",
+            "error": "ffmpeg/ffprobe not on PATH — video uploads will not be analysed visually. "
+                     "Install via `apt-get install -y ffmpeg`.",
+        }
+
     payload = {
         "storage": storage_state,
         "llm": llm_state,
+        "ffmpeg": ffmpeg_state,
         "scheduler": {
             "enabled": bool(sched_cfg.get("enabled")),
             "last_run_at": sched_cfg.get("last_run_at"),

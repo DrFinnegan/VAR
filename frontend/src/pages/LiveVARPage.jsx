@@ -119,8 +119,8 @@ export const LiveVARPage = () => {
   const fetchData = useCallback(async () => {
     try {
       const incidentsUrl = matchFilterId && matchFilterId !== "all"
-        ? `${API}/incidents?limit=50&match_id=${encodeURIComponent(matchFilterId)}`
-        : `${API}/incidents?limit=20`;
+        ? `${API}/incidents?limit=100&match_id=${encodeURIComponent(matchFilterId)}`
+        : `${API}/incidents?limit=100`;
       const [incRes, anaRes, matchRes] = await Promise.all([
         axios.get(incidentsUrl),
         axios.get(`${API}/analytics/overview`),
@@ -895,7 +895,7 @@ export const LiveVARPage = () => {
           <div className="border border-white/[0.08] bg-[#0A0A0A]">
             <div className="p-3 border-b border-white/[0.06]"><span className="text-[10px] font-heading font-bold uppercase tracking-[0.2em] text-gray-500">RECENT INCIDENTS</span></div>
             <ScrollArea className="h-[200px]">
-              {incidents.slice(0, 30).map(inc => (
+              {incidents.slice(0, 100).map(inc => (
                 <div key={inc.id} onClick={() => setSelectedIncident(inc)} className={`px-3 py-2.5 cursor-pointer border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors ${selectedIncident?.id === inc.id ? 'bg-white/[0.06] border-l-2 border-l-[#00E5FF]' : ''}`} data-testid={`incident-item-${inc.id}`}>
                   <div className="flex items-center justify-between"><IncidentBadge type={inc.incident_type} /><span className="text-[10px] font-mono text-gray-600">{inc.timestamp_in_match || '--:--'}</span></div>
                   <p className="text-[10px] text-gray-500 mt-1 truncate">{inc.description}</p>

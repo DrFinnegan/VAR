@@ -1,0 +1,6 @@
+# OCTON VAR — System (apt) packages
+# Listed here so future container rebuilds restore them automatically.
+#
+# Install:
+#   xargs -a system-packages.txt sudo apt-get install -y
+ffmpeg

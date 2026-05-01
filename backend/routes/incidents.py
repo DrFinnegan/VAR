@@ -94,12 +94,18 @@ async def create_incident(data: IncidentCreate, request: Request):
                 "message": "Video storage upstream is currently unavailable. A frame was extracted in memory for analysis but the video clip was not archived.",
             })
 
+    # Multi-frame extraction so the dual-brain sees motion, not a still.
+    primary_video_frames: List[str] = []
     if not image_b64 and video_bytes_buf:
         try:
-            from video_utils import extract_frame_b64
-            image_b64 = await extract_frame_b64(video_bytes_buf)
-            if image_b64:
-                logger.info(f"[incident {incident_id}] extracted frame for vision analysis ({len(image_b64)//1024} KB b64)")
+            from video_utils import extract_frames_b64
+            primary_video_frames = await extract_frames_b64(video_bytes_buf, n_frames=4)
+            if primary_video_frames:
+                image_b64 = primary_video_frames[0]
+                logger.info(
+                    f"[incident {incident_id}] extracted {len(primary_video_frames)} frames "
+                    f"for vision analysis ({sum(len(b)//1024 for b in primary_video_frames)} KB b64 total)"
+                )
         except Exception as e:
             logger.warning(f"Frame extraction failed: {e}")
 
@@ -109,7 +115,7 @@ async def create_incident(data: IncidentCreate, request: Request):
     angle_images_b64: List[str] = []
 
     if data.camera_angles:
-        from video_utils import extract_frame_b64 as _extract_frame_b64
+        from video_utils import extract_frames_b64 as _extract_frames_b64
         user_id = user.get("_id", "anonymous") if user else "anonymous"
         for entry in data.camera_angles[:4]:
             angle = (entry or {}).get("angle", "").lower().strip()
@@ -147,9 +153,13 @@ async def create_incident(data: IncidentCreate, request: Request):
                     })
 
             ang_frame_for_ai = ang_img_b64
+            ang_extra_frames: List[str] = []
             if not ang_frame_for_ai and ang_vid_bytes:
                 try:
-                    ang_frame_for_ai = await _extract_frame_b64(ang_vid_bytes)
+                    burst = await _extract_frames_b64(ang_vid_bytes, n_frames=2)
+                    if burst:
+                        ang_frame_for_ai = burst[0]
+                        ang_extra_frames = burst[1:]
                 except Exception as e:
                     logger.warning(f"[angle {angle}] frame extraction failed: {e}")
 
@@ -162,6 +172,9 @@ async def create_incident(data: IncidentCreate, request: Request):
             })
             if ang_frame_for_ai:
                 angle_images_b64.append(ang_frame_for_ai)
+            for extra in ang_extra_frames:
+                if extra:
+                    angle_images_b64.append(extra)
 
         if not image_b64 and angle_images_b64:
             image_b64 = angle_images_b64[0]
@@ -179,12 +192,19 @@ async def create_incident(data: IncidentCreate, request: Request):
             if primary_v:
                 video_storage_path = primary_v["video_storage_path"]
 
+    # Build the extra-images list — the multi-frame burst from the
+    # primary clip lives here so the vision payload sees motion.
+    _extras = [b for b in angle_images_b64 if b and b != image_b64]
+    for fr in primary_video_frames[1:]:
+        if fr and fr != image_b64 and fr not in _extras:
+            _extras.append(fr)
+
     analysis_result = await brain_engine.analyze_incident(
         incident_type=data.incident_type.value,
         description=data.description,
         db=db,
         image_base64=image_b64,
-        extra_images_b64=[b for b in angle_images_b64 if b and b != image_b64],
+        extra_images_b64=_extras,
     )
     analysis_result["visual_evidence_source"] = (
         "image" if data.image_base64 else ("video_frame" if video_bytes_buf else None)
@@ -394,6 +414,7 @@ async def reanalyze_incident(incident_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Incident not found")
 
     image_b64 = None
+    extra_frames: List[str] = []
     visual_source = None
     if doc.get("storage_path"):
         try:
@@ -405,19 +426,22 @@ async def reanalyze_incident(incident_id: str, request: Request):
 
     if not image_b64 and doc.get("video_storage_path"):
         try:
-            from video_utils import extract_frame_b64
+            from video_utils import extract_frames_b64
             vdata, _ = get_object(doc["video_storage_path"])
-            image_b64 = await extract_frame_b64(vdata)
-            if image_b64:
-                visual_source = "video_frame"
+            burst = await extract_frames_b64(vdata, n_frames=4)
+            if burst:
+                image_b64 = burst[0]
+                extra_frames = burst[1:]
+                visual_source = "video_frames" if len(burst) > 1 else "video_frame"
         except Exception as e:
-            logger.warning(f"Could not extract frame for reanalysis: {e}")
+            logger.warning(f"Could not extract frames for reanalysis: {e}")
 
     analysis = await brain_engine.analyze_incident(
         incident_type=doc["incident_type"],
         description=doc["description"],
         db=db,
         image_base64=image_b64,
+        extra_images_b64=extra_frames,
     )
     analysis["visual_evidence_source"] = visual_source
     # Re-evaluate angle_disagreement against the admin-tunable threshold.
