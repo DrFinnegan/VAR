@@ -26,6 +26,12 @@ Pure football VAR audit system. ID PROTECTION module has been separated into its
 - Storage: Emergent Object Storage
 
 ## Changelog
+- 2026-02: **Front-page face-lift + offside flow consolidation + GO LIVE auto-recording**
+  1. **Standalone OFFSIDE pill removed** from LiveVAR. Offside is now picked from the regular NEW INCIDENT type dropdown — and when chosen, the create-incident endpoint augments the description with the strict Law 11 fast-path contract and applies the same evidence-honesty post-process (text-only ≤ 70%, single-frame ≤ 75%, model-self-rejection ≤ 50%) that the standalone pill used. The result: offside lives alongside other foul types in the UX while still using the demo-grade evidence-grounded prompt under the hood. CORNER stays parked until corpus has 5+ in-play clips.
+  2. **HippocampusNeocortexHeader** — new visual identity strip on LiveVAR. Left: pulsing amber Hippocampus block (`fast recall · precedent matching · keyword binding · ≤ 50ms`). Right: cyan Neocortex block (`deep reasoning · multi-frame · IFAB-cited · 4-frame burst`). Centre: animated SVG synapse with a travelling spike + gradient line + side dendrites + the tagline "OCTON · BRIDGING NEUROSCIENCE & AI FOR FOOTBALL'S DECISIVE MOMENTS". Pulse rate speeds up when WS traffic arrives within the last 60 s.
+  3. **GO LIVE rolling MediaRecorder** — new `useGoLiveRecorder(stream, 8)` hook keeps a circular ~8 s MP4/WebM buffer of the screen-share stream. When the operator creates an incident while the live feed is active, the most-recent 8 s is auto-attached as `video_base64` (`video_source: "go_live_capture"`). PDFs and the audit chain now contain the exact moment the verdict was made. A `REC · 8s BUFFER` indicator next to GO LIVE shows the buffer is hot.
+  4. **Tests:** `quick-fire.spec.js` rewritten — asserts OFFSIDE/CORNER pills are absent, GO LIVE button mounted, Hippocampus + Neocortex regions visible, AND that POST `/api/incidents` with `incident_type=offside` runs the fast-path with proper confidence cap. **14/14 e2e + 19/19 backend tests green.**
+  5. **Honesty preserved:** Live verification — `POST /api/incidents` with `incident_type=offside` and no image returned 38.4% confidence with decision "No clear offside event visible — load the moment-of-pass frame and retry" + Law 11 cited. No regression on the working video pipeline.
 - 2026-02: **🚦 Demo-grade vision pipeline + live-game ingestion**
   Comprehensive overhaul to make the app foolproof in front of a referee panel and to enable live-broadcast testing.
 

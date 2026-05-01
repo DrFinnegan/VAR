@@ -199,9 +199,22 @@ async def create_incident(data: IncidentCreate, request: Request):
         if fr and fr != image_b64 and fr not in _extras:
             _extras.append(fr)
 
+    # Standalone offside fast-path: when the operator picks "offside" as
+    # the incident type, we run the SAME strict Law 11 evidence-grounded
+    # contract that the (now-removed) standalone OFFSIDE pill used. This
+    # keeps offside calls consistent with how the rest of the foul types
+    # are analysed but with the added refuse-on-no-evidence guard.
+    description_for_engine = data.description
+    if data.incident_type.value == "offside":
+        from .quick_fire import _OFFSIDE_PROMPT
+        description_for_engine = (
+            f"{_OFFSIDE_PROMPT}\n\n"
+            f"Operator-supplied description: {data.description}"
+        )
+
     analysis_result = await brain_engine.analyze_incident(
         incident_type=data.incident_type.value,
-        description=data.description,
+        description=description_for_engine,
         db=db,
         image_base64=image_b64,
         extra_images_b64=_extras,
@@ -221,6 +234,15 @@ async def create_incident(data: IncidentCreate, request: Request):
     analysis_result["ofr_threshold_pct"] = threshold
     analysis_result["competition_profile"] = profile["id"]
     analysis_result["competition_profile_label"] = profile["label"]
+
+    # Apply the same evidence-honesty post-process to standalone offside
+    # incidents that the quick-fire path already enjoys.
+    if data.incident_type.value == "offside":
+        from .quick_fire import _post_process_quick_analysis
+        frame_count_total = (1 if image_b64 else 0) + len(_extras)
+        analysis_result = _post_process_quick_analysis(analysis_result, frame_count_total)
+        analysis_result["fast_path"] = True
+        analysis_result["fast_path_frame_count"] = frame_count_total
 
     incident_doc = {
         "id": incident_id,

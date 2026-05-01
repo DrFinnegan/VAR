@@ -4,6 +4,8 @@
  * the right-rail decision controls. Wires up the global voice-action
  * dispatcher so "Hey OCTON, confirm" can act on the selected incident.
  */
+import { useGoLiveRecorder, clipBlobToBase64 } from "../hooks/useGoLiveRecorder";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -42,9 +44,9 @@ import { BoostConfidenceChip } from "../components/BoostConfidenceChip";
 import ConfidenceBreakdownTooltip from "../components/ConfidenceBreakdownTooltip";
 import RefereeCitationReasoning from "../components/RefereeCitationReasoning";
 import AuditChainDrawer from "../components/AuditChainDrawer";
-import QuickFirePills from "../components/QuickFirePills";
 import GoLiveButton from "../components/GoLiveButton";
 import OctonSawStrip from "../components/OctonSawStrip";
+import HippocampusNeocortexHeader from "../components/HippocampusNeocortexHeader";
 
 export const LiveVARPage = () => {
   const { user } = useAuth();
@@ -63,6 +65,8 @@ export const LiveVARPage = () => {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showNewIncident, setShowNewIncident] = useState(false);
+  const [liveStream, setLiveStream] = useState(null);
+  const { active: liveRecording, getClipBlob: getLiveClipBlob } = useGoLiveRecorder(liveStream, 8);
   const [newIncident, setNewIncident] = useState({ incident_type: "foul", description: "", timestamp_in_match: "", team_involved: "", player_involved: "", image_base64: null, video_base64: null });
   const [cameraAngles, setCameraAngles] = useState({});
   const [previewImage, setPreviewImage] = useState(null);
@@ -214,6 +218,23 @@ export const LiveVARPage = () => {
       }
       const ang = cameraAnglesToPayload(cameraAngles);
       if (ang.length > 0) payload.camera_angles = ang;
+
+      // GO LIVE auto-attach: when a live stream is feeding the stage and
+      // the operator hasn't manually attached a clip, capture the last 8s
+      // from the rolling MediaRecorder buffer. Persists the exact moment
+      // the verdict was made — auditable and PDF-attachable.
+      if (liveRecording && !payload.video_base64 && !payload.image_base64) {
+        try {
+          const clip = await getLiveClipBlob();
+          if (clip) {
+            const b64 = await clipBlobToBase64(clip);
+            if (b64) {
+              payload.video_base64 = b64;
+              payload.video_source = "go_live_capture";
+            }
+          }
+        } catch (e) { console.warn("Live clip capture failed:", e); }
+      }
       const res = await axios.post(`${API}/incidents`, payload);
       toast.success("OCTON analysis complete!");
       const warnings = res.data?.storage_warnings || [];
@@ -303,6 +324,11 @@ export const LiveVARPage = () => {
     <div className="flex-1 min-w-0 p-4 space-y-4 bg-[#050505] grid-overlay overflow-y-auto h-screen" data-testid="live-var-dashboard">
       <DecisionTicker incidents={incidents} onSelect={(inc) => setSelectedIncident(inc)} />
 
+      <HippocampusNeocortexHeader
+        wsConnected={wsConnected}
+        recentActivity={incidents?.[0]?.created_at ? (Date.now() - new Date(incidents[0].created_at).getTime()) < 60_000 : false}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
         <div className="flex items-center gap-4">
@@ -353,15 +379,17 @@ export const LiveVARPage = () => {
             {wsConnected && <span className="w-1.5 h-1.5 bg-[#00FF88] animate-pulse rounded-full" />}
           </div>
           <Button onClick={() => setShowComparison(!showComparison)} className={`rounded-none font-heading font-bold text-xs tracking-[0.1em] h-9 px-4 active:scale-[0.98] transition-all ${showComparison ? 'bg-[#00E5FF] text-black hover:bg-[#00E5FF]/90' : 'bg-transparent text-[#00E5FF] border border-[#00E5FF]/30 hover:bg-[#00E5FF]/10 hover:border-[#00E5FF]/60'}`} data-testid="comparison-mode-toggle"><Columns className="w-3.5 h-3.5 mr-2" />COMPARE</Button>
-          <GoLiveButton />
-          <QuickFirePills
-            matchId={matchFilterId}
-            currentMatch={(matches || []).find(m => m.id === matchFilterId)}
-            onIncidentCreated={(inc) => {
-              fetchData();
-              setSelectedIncident(inc);
-            }}
-          />
+          <GoLiveButton onLiveStart={(s) => setLiveStream(s)} onLiveEnd={() => setLiveStream(null)} />
+          {liveRecording && (
+            <span
+              className="flex items-center gap-1 px-2 h-9 border border-[#FF3333]/40 bg-[#FF3333]/10 text-[#FF3333]"
+              data-testid="live-rec-indicator"
+              title="GO LIVE buffer is active — last 8s of footage will be auto-attached to any incident you create now"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-[#FF3333] animate-pulse" />
+              <span className="font-mono text-[9px] tracking-[0.2em]">REC · 8s BUFFER</span>
+            </span>
+          )}
           <Dialog open={showNewIncident} onOpenChange={setShowNewIncident}>
             <DialogTrigger asChild>
               <Button className="bg-white text-black hover:bg-gray-200 rounded-none font-heading font-bold text-xs tracking-[0.1em] h-9 px-5 active:scale-[0.98] transition-all" data-testid="new-incident-button"><Upload className="w-3.5 h-3.5 mr-2" />NEW INCIDENT</Button>
