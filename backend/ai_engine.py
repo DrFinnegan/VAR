@@ -42,6 +42,7 @@ _DEFAULT_CITED_CLAUSE = {
     "penalty":   "IFAB Law 14 — Penalty Kick (direct-FK offence inside the penalty area)",
     "goal_line": "IFAB Law 10 — Goal (whole ball over whole goal line)",
     "red_card":  "IFAB Law 12 — Sending Off (Serious Foul Play / Violent Conduct / DOGSO)",
+    "corner":    "IFAB Law 17 — Corner Kick (award + procedure + 1m encroachment)",
     "other":     "VAR Protocol — clear and obvious error / serious missed incident",
 }
 
@@ -169,6 +170,30 @@ class HippocampusAnalyzer:
             "common_decisions": ["Review Required"],
             "severity_weight": 0.50,
             "base_confidence": 40.0,
+        },
+        "corner": {
+            "keywords": [
+                "corner", "corner kick", "corner flag", "quadrant",
+                "last touch", "last touched", "deflected off", "deflection",
+                "out of play", "crossed the byline", "goal line out",
+                "awarded corner", "wrongly awarded", "should be goal kick",
+                "encroachment", "encroached", "inside the arc",
+                "block", "blocking", "impeding", "screening",
+                "short corner", "swung in", "inswinger", "outswinger",
+                "near post", "far post", "flick on", "header from corner",
+                "whipped in", "delivered from the corner",
+            ],
+            "negative_keywords": [
+                "throw-in", "free kick", "penalty area infringement unrelated",
+            ],
+            "common_decisions": [
+                "Legal Corner Kick — Last Touch Defender",
+                "Goal Kick — Last Touch Attacker",
+                "Retake — Encroachment Inside 1m",
+                "Corner Stands — No Infringement",
+            ],
+            "severity_weight": 0.70,
+            "base_confidence": 55.0,
         },
     }
 
@@ -491,6 +516,35 @@ class NeoCortexAnalyzer:
             "BINDING IFAB POSITION ON 'CLEAR AND OBVIOUS': the VAR threshold is intended for ambiguous "
             "incidents. When the description unambiguously asserts a sending-off offence above, the law is "
             "applied directly — the on-field 'soft' decision is overridden. Confidence MUST be >= 92."
+        ),
+        "corner": (
+            "IFAB LAW 17 — THE CORNER KICK (Verbatim-faithful)\n"
+            "AWARD: A corner kick is awarded when the WHOLE of the ball — having last been touched by a "
+            "defending team player — passes over the goal line (on the ground or in the air) without a "
+            "goal having been scored. If the ball was last touched by an attacker, the restart is a GOAL "
+            "KICK, not a corner.\n"
+            "PROCEDURE: The ball must be placed inside the corner arc nearest to where the ball crossed "
+            "the goal line. The corner flag-post must not be moved. The ball is in play when it is kicked "
+            "and clearly moves — it does not need to leave the corner arc.\n"
+            "OPPONENT DISTANCE: Opponents must remain at least 1 metre (1 yard) from the corner arc until "
+            "the ball is in play. Encroachment inside 1 m → retake the corner; repeated offenders are "
+            "cautioned.\n"
+            "OFFSIDE: A player cannot be in an offside position directly from a corner kick (Law 11).\n"
+            "RETAKE triggers: (a) ball not placed correctly in the arc, (b) kicker plays the ball twice "
+            "before another player touches it (indirect free-kick to the defending team), (c) opponent "
+            "encroachment under 1 m that influences play.\n"
+            "DEFENSIVE INFRINGEMENTS commonly reviewed by VAR: (i) blocking/holding/pulling inside the "
+            "penalty area at the moment the ball is delivered → penalty if it denies a clear chance; "
+            "(ii) goalkeeper impeded by a screen → free kick or penalty depending on where the screen is.\n"
+            "VAR THRESHOLD: corner-vs-goal-kick decisions are reviewable only when they lead directly to "
+            "a goal. Award-direction errors with no goal fallout stay with the on-field decision. "
+            "Encroachment without impact on play = no retake.\n"
+            "CONFIDENCE FLOORS (textbook cases):\n"
+            "  • Clear defender last touch before ball exits byline → 92+ (legal corner)\n"
+            "  • Clear attacker last touch / own shot deflected wide by defender only off the attacker → "
+            "    88+ (goal kick)\n"
+            "  • Multiple defenders blocking keeper at delivery → 85+ (retake / foul)\n"
+            "  • Subjective last touch (multiple deflections, boot-on-boot) → 55-70 (stay with on-field)."
         ),
         "other": (
             "VAR PROTOCOL (IFAB Law VI / VAR Handbook)\n"
@@ -817,6 +871,10 @@ class NeoCortexAnalyzer:
             "red_card": [
                 ("Red Card - Serious Foul Play", "Excessive force or endangering safety detected", 70),
                 ("Yellow Card - Reckless but Not Excessive", "Foul was reckless but not brutal/excessive", 55),
+            ],
+            "corner": [
+                ("Legal Corner Kick — Last Touch Defender", "Final deflection by defender before ball left the byline", 70),
+                ("Goal Kick — Last Touch Attacker", "Final touch appears to be the attacking team — restart should be a goal kick, not a corner", 60),
             ],
             "other": [
                 ("Further Review Required", "Insufficient information for definitive ruling", 40),

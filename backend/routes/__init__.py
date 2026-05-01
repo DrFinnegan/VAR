@@ -18,4 +18,5 @@ from . import (  # noqa: F401
     system_config,
     boost,
     public_verdict,
+    quick_fire,
 )

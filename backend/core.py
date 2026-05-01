@@ -40,6 +40,7 @@ class IncidentType(str, Enum):
     PENALTY = "penalty"
     GOAL_LINE = "goal_line"
     RED_CARD = "red_card"
+    CORNER = "corner"
     OTHER = "other"
 
 

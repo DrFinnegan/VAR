@@ -11,6 +11,7 @@ export const incidentTypeConfig = {
   penalty:   { label: "PENALTY",   color: "bg-[#FF3333]/20 text-[#FF3333] border-[#FF3333]/30" },
   goal_line: { label: "GOAL LINE", color: "bg-[#00FF66]/20 text-[#00FF66] border-[#00FF66]/30" },
   red_card:  { label: "RED CARD",  color: "bg-[#FF3333]/20 text-[#FF3333] border-[#FF3333]/30" },
+  corner:    { label: "CORNER",    color: "bg-[#A855F7]/20 text-[#A855F7] border-[#A855F7]/30" },
   other:     { label: "OTHER",     color: "bg-white/20 text-white border-white/30" },
 };
 

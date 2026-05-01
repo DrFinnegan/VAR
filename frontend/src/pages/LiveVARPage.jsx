@@ -31,7 +31,7 @@ import { exportAnalysisPDF } from "../utils/pdfExport";
 
 import { OctonBrainLogo } from "../components/OctonBrainLogo";
 import { ConfidenceScore, CopyButton, CurtainSection } from "../components/OctonAnalysisParts";
-import { IncidentBadge, DecisionBadge } from "../components/Badges";
+import { IncidentBadge, DecisionBadge, FastPathBadge } from "../components/Badges";
 import { DecisionTicker } from "../components/DecisionTicker";
 import { BrainPathway } from "../components/BrainPathway";
 import { VideoStage } from "../components/VideoStage";
@@ -42,6 +42,7 @@ import { BoostConfidenceChip } from "../components/BoostConfidenceChip";
 import ConfidenceBreakdownTooltip from "../components/ConfidenceBreakdownTooltip";
 import RefereeCitationReasoning from "../components/RefereeCitationReasoning";
 import AuditChainDrawer from "../components/AuditChainDrawer";
+import QuickFirePills from "../components/QuickFirePills";
 
 export const LiveVARPage = () => {
   const { user } = useAuth();
@@ -350,6 +351,14 @@ export const LiveVARPage = () => {
             {wsConnected && <span className="w-1.5 h-1.5 bg-[#00FF88] animate-pulse rounded-full" />}
           </div>
           <Button onClick={() => setShowComparison(!showComparison)} className={`rounded-none font-heading font-bold text-xs tracking-[0.1em] h-9 px-4 active:scale-[0.98] transition-all ${showComparison ? 'bg-[#00E5FF] text-black hover:bg-[#00E5FF]/90' : 'bg-transparent text-[#00E5FF] border border-[#00E5FF]/30 hover:bg-[#00E5FF]/10 hover:border-[#00E5FF]/60'}`} data-testid="comparison-mode-toggle"><Columns className="w-3.5 h-3.5 mr-2" />COMPARE</Button>
+          <QuickFirePills
+            matchId={matchFilterId}
+            currentMatch={(matches || []).find(m => m.id === matchFilterId)}
+            onIncidentCreated={(inc) => {
+              fetchData();
+              setSelectedIncident(inc);
+            }}
+          />
           <Dialog open={showNewIncident} onOpenChange={setShowNewIncident}>
             <DialogTrigger asChild>
               <Button className="bg-white text-black hover:bg-gray-200 rounded-none font-heading font-bold text-xs tracking-[0.1em] h-9 px-5 active:scale-[0.98] transition-all" data-testid="new-incident-button"><Upload className="w-3.5 h-3.5 mr-2" />NEW INCIDENT</Button>
@@ -850,7 +859,13 @@ export const LiveVARPage = () => {
 
           {selectedIncident && (
             <div className="border border-white/[0.08] bg-[#0A0A0A]">
-              <div className="p-3 border-b border-white/[0.06] flex items-center justify-between"><IncidentBadge type={selectedIncident.incident_type} /><DecisionBadge status={selectedIncident.decision_status} /></div>
+              <div className="p-3 border-b border-white/[0.06] flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <IncidentBadge type={selectedIncident.incident_type} />
+                  {selectedIncident?.ai_analysis?.fast_path && <FastPathBadge />}
+                </div>
+                <DecisionBadge status={selectedIncident.decision_status} />
+              </div>
               <div className="p-3 space-y-3">
                 <p className="text-xs font-body text-gray-400 leading-relaxed">{selectedIncident.description}</p>
                 <div className="grid grid-cols-2 gap-2 text-[10px]">
@@ -880,7 +895,7 @@ export const LiveVARPage = () => {
           <div className="border border-white/[0.08] bg-[#0A0A0A]">
             <div className="p-3 border-b border-white/[0.06]"><span className="text-[10px] font-heading font-bold uppercase tracking-[0.2em] text-gray-500">RECENT INCIDENTS</span></div>
             <ScrollArea className="h-[200px]">
-              {incidents.slice(0, 10).map(inc => (
+              {incidents.slice(0, 30).map(inc => (
                 <div key={inc.id} onClick={() => setSelectedIncident(inc)} className={`px-3 py-2.5 cursor-pointer border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors ${selectedIncident?.id === inc.id ? 'bg-white/[0.06] border-l-2 border-l-[#00E5FF]' : ''}`} data-testid={`incident-item-${inc.id}`}>
                   <div className="flex items-center justify-between"><IncidentBadge type={inc.incident_type} /><span className="text-[10px] font-mono text-gray-600">{inc.timestamp_in_match || '--:--'}</span></div>
                   <p className="text-[10px] text-gray-500 mt-1 truncate">{inc.description}</p>
