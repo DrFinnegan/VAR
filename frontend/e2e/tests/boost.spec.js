@@ -15,6 +15,9 @@ test.describe("boost confidence chip", () => {
       await request.post(`${baseURL}/api/seed-demo`).catch(() => {});
 
       await loginAsAdmin(page);
+      // Clear any stale match filter set by earlier specs (e.g. match-wall
+      // deep-link) so the right rail shows incidents from every match.
+      await page.evaluate(() => localStorage.removeItem("octon_match_filter"));
       await page.goto("/");
       await page.waitForLoadState("networkidle");
 
@@ -26,10 +29,12 @@ test.describe("boost confidence chip", () => {
       );
       expect(boostIncident, "Seed didn't insert the boost-demo incident").toBeTruthy();
 
-      // Click the incident item in the right rail to select it
+      // Click the incident item in the right rail. The radix ScrollArea
+      // wraps the list so we click via DOM dispatch to bypass any
+      // scroll/overlay quirks.
       const item = page.locator(`[data-testid="incident-item-${boostIncident.id}"]`);
-      await item.scrollIntoViewIfNeeded();
-      await item.click({ force: true });
+      await expect(item).toBeAttached({ timeout: 10_000 });
+      await item.evaluate((el) => el.click());
       await page.waitForTimeout(800);
 
       // Chip should now be visible

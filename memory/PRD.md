@@ -26,6 +26,10 @@ Pure football VAR audit system. ID PROTECTION module has been separated into its
 - Storage: Emergent Object Storage
 
 ## Changelog
+- 2026-02: **Presence-pip flash + Audit Chain Integrity pill**:
+  1. **Match-Wall pip flash on join/leave** — Match Wall now diffs incoming `presence_update` events against the cached count and stamps a `flashes[matchId]` direction on the affected tile (`join` = green pulse + "· JOINED" suffix, `leave` = amber pulse + "· LEFT" suffix). 1.4 s CSS keyframes (`.presence-flash-join` / `.presence-flash-leave` in App.css) drive a ring expansion + pip pulse. Pip stays visible during a leave flash even when count drops to 0 so operators see who left.
+  2. **Audit Chain Integrity pill** — New `AuditChainPill` component on Settings → Admin Tools calls `GET /api/audit/verify` and renders a green "CHAIN INTACT · N ENTRIES" pill (or red "TAMPER DETECTED · BROKEN AT #K · reason" / amber "VERIFIER ERROR"). Includes a RE-VERIFY button, truncated latest hash, and last-checked timestamp. New e2e spec `audit-pill.spec.js`.
+  3. Stabilised `boost.spec.js` against rail ScrollArea quirks — uses `el.click()` JS dispatch rather than scroll-into-view + force-click. Full suite **7/7 passing**.
 - 2026-02: **Booth presence + attribution + audit drawer** — Three-part trust/traceability drop built on the booth-id plumbing:
   1. **Match-Wall presence pip** — `GET /api/matches/live` now embeds `booth_presence: {count, booth_ids}` from `ws_manager.booths_for_match()`; tiles render a cyan "N BOOTH(S)" chip (hidden when 0). `ConnectionManager.connect/disconnect` now announces a global `presence_update` WS event on scoped connects/disconnects so pips refresh instantly (no 15s polling wait). Match-Wall subscribes to `presence_update`.
   2. **Decision card booth attribution** — The "SELECTED INCIDENT" panel on LiveVAR renders a new "DECIDED BY BOOTH" row (label + id + operator name) when the incident has `decided_by_booth`. PDF footer adds a right-aligned booth block ("DECIDED BY BOOTH · Control Room Alpha · booth-abc").

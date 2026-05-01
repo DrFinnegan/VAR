@@ -36,6 +36,9 @@ function ConfidenceRing({ value = 0, size = 44 }) {
 export default function LiveMatchWallPage() {
   const [data, setData] = useState({ matches: [], live_count: 0, scheduled_count: 0, completed_count: 0 });
   const [loading, setLoading] = useState(true);
+  // match_id -> "join" | "leave" — set briefly to drive the flash animation,
+  // cleared after 1.4s so subsequent transitions can re-trigger.
+  const [flashes, setFlashes] = useState({});
 
   const load = useCallback(async () => {
     try {
@@ -51,9 +54,35 @@ export default function LiveMatchWallPage() {
   }, [load]);
 
   // Real-time refresh — any new incident / decision / OFR / booth presence → refetch
+  // For presence_update, also infer join/leave by comparing the new count to
+  // the count we currently have in state, then flash the tile accordingly.
   useWebSocket(useCallback((msg) => {
     if (!msg || !msg.type) return;
-    if (["incident_created", "decision_made", "ofr_bookmark", "analysis_complete", "presence_update"].includes(msg.type)) {
+    if (msg.type === "presence_update") {
+      const newCount = msg?.data?.count ?? 0;
+      const matchId = msg?.data?.match_id;
+      if (matchId) {
+        setData((prev) => {
+          const tile = prev.matches.find((m) => m.match.id === matchId);
+          const oldCount = tile?.booth_presence?.count ?? 0;
+          if (newCount !== oldCount) {
+            const direction = newCount > oldCount ? "join" : "leave";
+            setFlashes((f) => ({ ...f, [matchId]: direction }));
+            setTimeout(() => {
+              setFlashes((f) => {
+                const next = { ...f };
+                delete next[matchId];
+                return next;
+              });
+            }, 1400);
+          }
+          return prev;
+        });
+      }
+      load();
+      return;
+    }
+    if (["incident_created", "decision_made", "ofr_bookmark", "analysis_complete"].includes(msg.type)) {
       load();
     }
   }, [load]));
@@ -118,15 +147,29 @@ export default function LiveMatchWallPage() {
                     <span className="font-mono text-[8px] tracking-[0.25em] text-gray-400">FULL TIME</span>
                   </span>
                 )}
-                {(m.booth_presence?.count || 0) > 0 && (
+                {((m.booth_presence?.count || 0) > 0 || flashes[mt.id]) && (
                   <span
-                    className="absolute top-11 right-3 flex items-center gap-1 px-2 py-0.5 bg-[#00E5FF]/10 border border-[#00E5FF]/30"
-                    title={`${m.booth_presence.count} booth${m.booth_presence.count === 1 ? "" : "s"} scoped to this match`}
+                    className={`absolute top-11 right-3 flex items-center gap-1 px-2 py-0.5 border transition-all ${
+                      flashes[mt.id] === "join" ? "presence-flash-join border-[#00FF88]/60 bg-[#00FF88]/15" :
+                      flashes[mt.id] === "leave" ? "presence-flash-leave border-[#FFB800]/60 bg-[#FFB800]/15" :
+                      "border-[#00E5FF]/30 bg-[#00E5FF]/10"
+                    }`}
+                    title={`${m.booth_presence?.count || 0} booth${(m.booth_presence?.count || 0) === 1 ? "" : "s"} scoped to this match`}
                     data-testid={`booth-presence-${mt.id}`}
                   >
-                    <Users className="w-2.5 h-2.5 text-[#00E5FF]" />
-                    <span className="font-mono text-[8px] tracking-[0.2em] text-[#00E5FF]">
-                      {m.booth_presence.count} BOOTH{m.booth_presence.count === 1 ? "" : "S"}
+                    <Users className={`w-2.5 h-2.5 ${
+                      flashes[mt.id] === "join" ? "text-[#00FF88]" :
+                      flashes[mt.id] === "leave" ? "text-[#FFB800]" :
+                      "text-[#00E5FF]"
+                    }`} />
+                    <span className={`font-mono text-[8px] tracking-[0.2em] ${
+                      flashes[mt.id] === "join" ? "text-[#00FF88]" :
+                      flashes[mt.id] === "leave" ? "text-[#FFB800]" :
+                      "text-[#00E5FF]"
+                    }`}>
+                      {m.booth_presence?.count || 0} BOOTH{(m.booth_presence?.count || 0) === 1 ? "" : "S"}
+                      {flashes[mt.id] === "join" && " · JOINED"}
+                      {flashes[mt.id] === "leave" && " · LEFT"}
                     </span>
                   </span>
                 )}

@@ -317,3 +317,21 @@ body {
 
   border-bottom: 1px solid; border-right: 1px solid;
 }
+
+/* ── Booth presence pip flash ───────────────────────────────
+ * Triggered on `presence_update` WS events when a booth joins or
+ * leaves a Match Wall tile. Two-tier animation: a ring expansion to
+ * draw the eye + a brief scale pulse on the pip itself. */
+@keyframes presenceFlashJoin {
+  0%   { box-shadow: 0 0 0 0 rgba(0,255,136,0.55); transform: scale(1); }
+  35%  { box-shadow: 0 0 0 14px rgba(0,255,136,0.0);  transform: scale(1.08); }
+  100% { box-shadow: 0 0 0 0 rgba(0,255,136,0.0);   transform: scale(1); }
+}
+@keyframes presenceFlashLeave {
+  0%   { box-shadow: 0 0 0 0 rgba(255,184,0,0.55); transform: scale(1); }
+  35%  { box-shadow: 0 0 0 14px rgba(255,184,0,0.0); transform: scale(0.94); }
+  100% { box-shadow: 0 0 0 0 rgba(255,184,0,0.0); transform: scale(1); }
+}
+.presence-flash-join  { animation: presenceFlashJoin  1.4s ease-out 1; }
+.presence-flash-leave { animation: presenceFlashLeave 1.4s ease-out 1; }
+

@@ -45,6 +45,7 @@ import { AnalyticsPage } from "./pages/AnalyticsPage";
 import LiveMatchWallPage from "./pages/LiveMatchWallPage";
 import MobileOFRPage from "./pages/MobileOFRPage";
 import { RefereesIndexPage, RefereeScorecardPage } from "./pages/RefereeScorecardPage";
+import AuditChainPill from "./components/AuditChainPill";
 
 // ── Voice widget mounting helper ──────────────────────────
 function MountedVoiceWidget() {
@@ -543,6 +544,8 @@ const SettingsPage = () => {
               </div>
             </CardContent>
           </Card>
+
+          <AuditChainPill />
 
           <Card className="bg-[#121212] border-white/10 rounded-none">
             <CardHeader><CardTitle className="text-white">Admin Tools</CardTitle><CardDescription className="text-gray-400">Administrative functions for league officials</CardDescription></CardHeader>
