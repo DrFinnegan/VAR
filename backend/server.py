@@ -40,6 +40,33 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
+    # ── Self-heal FFmpeg ─────────────────────────────────────────
+    # The container's filesystem can lose apt-installed binaries on
+    # rebuild. FFmpeg is a HARD requirement for video → frame
+    # extraction; without it every video upload silently falls back
+    # to text-only mode and confidence collapses to ~30%.
+    # We probe ffmpeg/ffprobe at boot and reinstall via apt-get if
+    # missing. Best-effort, logged loudly on success/failure.
+    import shutil
+    import asyncio
+    if not (shutil.which("ffmpeg") and shutil.which("ffprobe")):
+        logger.warning("FFmpeg missing on PATH — auto-installing via apt-get…")
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                "apt-get update -y && apt-get install -y ffmpeg",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _out, _err = await asyncio.wait_for(proc.communicate(), timeout=180)
+            if shutil.which("ffmpeg"):
+                logger.info("FFmpeg auto-install succeeded — video pipeline armed.")
+            else:
+                logger.error("FFmpeg auto-install attempted but binary still missing: %s", _err[:400])
+        except Exception as e:
+            logger.error("FFmpeg auto-install raised: %s", e)
+    else:
+        logger.info("FFmpeg present on PATH — video pipeline armed.")
+
     await seed_admin(db)
     try:
         init_storage()
