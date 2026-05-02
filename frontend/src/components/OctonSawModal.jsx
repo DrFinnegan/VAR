@@ -23,7 +23,7 @@ const ev = {
   contradicts: { color: "#FF3333", label: "CONTRA"    },
 };
 
-export default function OctonSawModal({ open, onClose, analysis, incident }) {
+export default function OctonSawModal({ open, onClose, analysis, incident, initialCinema = false, autoPlay = false }) {
   const frames = analysis?.analysed_frames_b64 || [];
   const breakdown = analysis?.frame_breakdown || [];
   const [idx, setIdx] = useState(0);
@@ -32,7 +32,13 @@ export default function OctonSawModal({ open, onClose, analysis, incident }) {
   const [fading, setFading] = useState(false);
   const dialogRef = useRef(null);
 
-  useEffect(() => { if (open) setIdx(0); }, [open]);
+  useEffect(() => {
+    if (open) {
+      setIdx(0);
+      setCinema(initialCinema);
+      setPlaying(autoPlay);
+    }
+  }, [open, initialCinema, autoPlay]);
 
   // Preload all frame images as soon as the modal opens so navigation
   // feels instant and the cinema crossfade is smooth.

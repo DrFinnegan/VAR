@@ -68,6 +68,7 @@ export const LiveVARPage = () => {
   const [showNewIncident, setShowNewIncident] = useState(false);
   const [liveStream, setLiveStream] = useState(null);
   const [showOctonSawModal, setShowOctonSawModal] = useState(false);
+  const [octonSawCinema, setOctonSawCinema] = useState(false);
   const [lastWsEvent, setLastWsEvent] = useState(null);
   const { active: liveRecording, getClipBlob: getLiveClipBlob } = useGoLiveRecorder(liveStream, 8);
   const [newIncident, setNewIncident] = useState({ incident_type: "foul", description: "", timestamp_in_match: "", team_involved: "", player_involved: "", image_base64: null, video_base64: null });
@@ -125,6 +126,32 @@ export const LiveVARPage = () => {
       }
     );
   }, [selectedIncident?.id, selectedIncident?.ai_analysis]);
+
+  // ── CINEMA shortcut key (C) ─────────────────────────────
+  // Press "C" anywhere on LiveVAR to open the OCTON SAW modal in
+  // auto-playing cinema mode for the currently selected incident.
+  // Skipped when the operator is typing in an input/textarea or the
+  // modal is already open.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "c" && e.key !== "C") return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target;
+      const tag = (t?.tagName || "").toUpperCase();
+      if (tag === "INPUT" || tag === "TEXTAREA" || t?.isContentEditable) return;
+      if (showOctonSawModal) return;
+      const frames = selectedIncident?.ai_analysis?.analysed_frames_b64 || [];
+      if (!frames.length) {
+        toast.info("No frames to play — upload a video or use RE-ANALYSE first.");
+        return;
+      }
+      e.preventDefault();
+      setOctonSawCinema(true);
+      setShowOctonSawModal(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedIncident?.ai_analysis?.analysed_frames_b64, showOctonSawModal]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -1005,9 +1032,11 @@ export const LiveVARPage = () => {
       />
       <OctonSawModal
         open={showOctonSawModal}
-        onClose={() => setShowOctonSawModal(false)}
+        onClose={() => { setShowOctonSawModal(false); setOctonSawCinema(false); }}
         analysis={analysis}
         incident={selectedIncident}
+        initialCinema={octonSawCinema}
+        autoPlay={octonSawCinema}
       />
     </div>
   );

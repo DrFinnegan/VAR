@@ -67,10 +67,18 @@ export default function OctonSawStrip({ analysis, onExplain }) {
               onClick={onExplain}
               className="text-[9px] font-mono tracking-[0.2em] text-[#00E5FF] hover:text-white border border-[#00E5FF]/30 hover:border-[#00E5FF]/60 px-2 py-0.5 transition-colors"
               data-testid="octon-saw-explain-button"
-              title="Show me how OCTON saw this — frame-by-frame walkthrough"
+              title="Show me how OCTON saw this — frame-by-frame walkthrough (press C for cinema)"
             >
               EXPLAIN ▶
             </button>
+          )}
+          {frames.length > 0 && (
+            <kbd
+              className="hidden md:inline-flex text-[9px] font-mono tracking-[0.15em] text-[#B366FF]/80 border border-[#B366FF]/30 bg-[#B366FF]/5 px-1.5 py-0.5"
+              title="Press C from anywhere on the LiveVAR page to open this evidence in cinema auto-play"
+            >
+              C · CINEMA
+            </kbd>
           )}
           <span className="text-[9px] font-mono text-gray-500">forensic evidence trail</span>
         </div>
