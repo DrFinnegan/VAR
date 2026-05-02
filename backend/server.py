@@ -64,6 +64,12 @@ async def startup():
     except Exception as e:
         logger.warning(f"Web-learning scheduler init failed: {e}")
 
+    try:
+        from tamper_monitor import start_tamper_monitor
+        await start_tamper_monitor(db)
+    except Exception as e:
+        logger.warning(f"Tamper monitor init failed: {e}")
+
 
 @app.on_event("shutdown")
 async def shutdown():

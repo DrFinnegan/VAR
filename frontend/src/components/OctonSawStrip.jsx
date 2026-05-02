@@ -20,7 +20,7 @@ const ev = {
   contradicts: { color: "#FF3333", label: "CONTRA"   },
 };
 
-export default function OctonSawStrip({ analysis }) {
+export default function OctonSawStrip({ analysis, onExplain }) {
   const frames = analysis?.analysed_frames_b64 || [];
   const breakdown = analysis?.frame_breakdown || [];
   const frameCount = analysis?.camera_angles_analyzed
@@ -52,7 +52,19 @@ export default function OctonSawStrip({ analysis }) {
             OCTON SAW · {frames.length} FRAME{frames.length === 1 ? "" : "S"}
           </span>
         </div>
-        <span className="text-[9px] font-mono text-gray-500">forensic evidence trail</span>
+        <div className="flex items-center gap-2">
+          {onExplain && frames.length > 0 && (
+            <button
+              onClick={onExplain}
+              className="text-[9px] font-mono tracking-[0.2em] text-[#00E5FF] hover:text-white border border-[#00E5FF]/30 hover:border-[#00E5FF]/60 px-2 py-0.5 transition-colors"
+              data-testid="octon-saw-explain-button"
+              title="Show me how OCTON saw this — frame-by-frame walkthrough"
+            >
+              EXPLAIN ▶
+            </button>
+          )}
+          <span className="text-[9px] font-mono text-gray-500">forensic evidence trail</span>
+        </div>
       </div>
 
       {frames.length > 0 && (

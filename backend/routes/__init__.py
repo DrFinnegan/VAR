@@ -21,4 +21,5 @@ from . import (  # noqa: F401
     quick_fire,
     hygiene,
     live_ingest,
+    admin_dashboards,
 )

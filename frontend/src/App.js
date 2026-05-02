@@ -47,6 +47,7 @@ import MobileOFRPage from "./pages/MobileOFRPage";
 import { RefereesIndexPage, RefereeScorecardPage } from "./pages/RefereeScorecardPage";
 import AuditChainPill from "./components/AuditChainPill";
 import LiveIngestPanel from "./components/LiveIngestPanel";
+import BoothActivityPage from "./pages/BoothActivityPage";
 
 // ── Voice widget mounting helper ──────────────────────────
 function MountedVoiceWidget() {
@@ -703,6 +704,7 @@ function App() {
                       <Route path="/referees" element={<RefereesIndexPage />} />
                       <Route path="/referees/:refereeId" element={<RefereeScorecardPage />} />
                       <Route path="/feedback" element={<ProtectedRoute roles={["admin", "var_operator"]}><FeedbackPage /></ProtectedRoute>} />
+                      <Route path="/booths" element={<ProtectedRoute roles={["admin"]}><BoothActivityPage /></ProtectedRoute>} />
                       <Route path="/settings" element={<SettingsPage />} />
                     </Routes>
                     <MountedVoiceWidget />

@@ -46,6 +46,7 @@ import RefereeCitationReasoning from "../components/RefereeCitationReasoning";
 import AuditChainDrawer from "../components/AuditChainDrawer";
 import GoLiveButton from "../components/GoLiveButton";
 import OctonSawStrip from "../components/OctonSawStrip";
+import OctonSawModal from "../components/OctonSawModal";
 import HippocampusNeocortexHeader from "../components/HippocampusNeocortexHeader";
 
 export const LiveVARPage = () => {
@@ -66,6 +67,7 @@ export const LiveVARPage = () => {
   const [loading, setLoading] = useState(true);
   const [showNewIncident, setShowNewIncident] = useState(false);
   const [liveStream, setLiveStream] = useState(null);
+  const [showOctonSawModal, setShowOctonSawModal] = useState(false);
   const { active: liveRecording, getClipBlob: getLiveClipBlob } = useGoLiveRecorder(liveStream, 8);
   const [newIncident, setNewIncident] = useState({ incident_type: "foul", description: "", timestamp_in_match: "", team_involved: "", player_involved: "", image_base64: null, video_base64: null });
   const [cameraAngles, setCameraAngles] = useState({});
@@ -327,6 +329,7 @@ export const LiveVARPage = () => {
       <HippocampusNeocortexHeader
         wsConnected={wsConnected}
         recentActivity={incidents?.[0]?.created_at ? (Date.now() - new Date(incidents[0].created_at).getTime()) < 60_000 : false}
+        lastEvent={lastWsEvent}
       />
 
       {/* Header */}
@@ -719,7 +722,7 @@ export const LiveVARPage = () => {
                 </div>
 
                 <div className="mt-3 space-y-2">
-                  <OctonSawStrip analysis={analysis} />
+                  <OctonSawStrip analysis={analysis} onExplain={() => setShowOctonSawModal(true)} />
                   <CurtainSection
                     icon={BookOpen}
                     title="Reasoning"
@@ -942,6 +945,12 @@ export const LiveVARPage = () => {
         incident={selectedIncident}
         open={shareOpen}
         onClose={() => setShareOpen(false)}
+      />
+      <OctonSawModal
+        open={showOctonSawModal}
+        onClose={() => setShowOctonSawModal(false)}
+        analysis={analysis}
+        incident={selectedIncident}
       />
     </div>
   );

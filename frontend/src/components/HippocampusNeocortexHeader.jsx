@@ -14,13 +14,30 @@
 import { useEffect, useState } from "react";
 import { Brain, Zap } from "lucide-react";
 
-export default function HippocampusNeocortexHeader({ wsConnected, recentActivity = false }) {
+export default function HippocampusNeocortexHeader({ wsConnected, recentActivity = false, lastEvent = null }) {
   // Periodic synapse pulse — slower when idle, faster when traffic flows.
   const [tick, setTick] = useState(0);
+  const [fireTick, setFireTick] = useState(0);
+  const [fireKind, setFireKind] = useState(null);
   useEffect(() => {
     const intvl = setInterval(() => setTick((t) => t + 1), recentActivity ? 800 : 2200);
     return () => clearInterval(intvl);
   }, [recentActivity]);
+
+  // Fire-flash: every distinct WS event bumps fireTick → triggers a 1.4s
+  // colour pulse on the synapse that maps the event type to a hue:
+  //   incident_created   → cyan      (new evidence ingested)
+  //   decision_made      → green     (verdict locked in)
+  //   analysis_complete  → magenta   (Neo Cortex finished)
+  //   presence_update    → amber     (booth presence change)
+  //   ofr_bookmark       → red       (OFR threshold crossed)
+  useEffect(() => {
+    if (!lastEvent || !lastEvent.type) return;
+    setFireKind(lastEvent.type);
+    setFireTick((n) => n + 1);
+    const t = setTimeout(() => setFireKind(null), 1400);
+    return () => clearTimeout(t);
+  }, [lastEvent]);
 
   return (
     <div
@@ -47,7 +64,7 @@ export default function HippocampusNeocortexHeader({ wsConnected, recentActivity
 
         {/* Centre: animated synapse bridge + tagline */}
         <div className="flex-1 max-w-2xl mx-2 flex flex-col items-center gap-1.5">
-          <Synapse tick={tick} active={wsConnected} />
+          <Synapse tick={tick} fireTick={fireTick} fireKind={fireKind} active={wsConnected} />
           <p className="text-[10px] text-gray-400 font-mono tracking-[0.18em] text-center">
             <span className="text-white">OCTON</span>
             <span className="mx-2 text-gray-600">·</span>
@@ -73,10 +90,20 @@ export default function HippocampusNeocortexHeader({ wsConnected, recentActivity
   );
 }
 
-function Synapse({ tick, active }) {
+function Synapse({ tick, active, fireTick, fireKind }) {
   // Two parallel lines with a moving "spike" travelling left → right
   // when WS traffic is alive, signalling the dual-brain handoff.
+  // When a WS event fires, the spike paints in an event-coloured hue
+  // for ~1.4s so referees literally see the brain firing in real time.
   const offset = tick % 100;
+  const fireColors = {
+    incident_created: "#00E5FF",
+    decision_made: "#00FF88",
+    analysis_complete: "#FF6BD6",
+    presence_update: "#FFB800",
+    ofr_bookmark: "#FF3333",
+  };
+  const fireColor = fireKind ? (fireColors[fireKind] || "#FFFFFF") : null;
   return (
     <svg
       width="100%"
@@ -86,6 +113,9 @@ function Synapse({ tick, active }) {
       className="overflow-visible"
       role="presentation"
       aria-hidden="true"
+      data-testid="hippo-neo-synapse"
+      data-fire-tick={fireTick}
+      data-fire-kind={fireKind || ""}
     >
       <defs>
         <linearGradient id="synapseGrad" x1="0" x2="1">
@@ -95,14 +125,23 @@ function Synapse({ tick, active }) {
         </linearGradient>
       </defs>
       <line x1="0" y1="11" x2="400" y2="11" stroke="url(#synapseGrad)" strokeWidth="1" strokeDasharray="3 4" />
+      {fireColor && (
+        <line
+          x1="0" y1="11" x2="400" y2="11"
+          stroke={fireColor}
+          strokeWidth="2"
+          opacity="0.85"
+          style={{ filter: `drop-shadow(0 0 8px ${fireColor})`, animation: "octonFireFlash 1.4s ease-out forwards" }}
+        />
+      )}
       {active && (
         <circle
           cx={offset * 4}
           cy="11"
-          r="3"
-          fill="#fff"
-          opacity="0.85"
-          style={{ filter: "drop-shadow(0 0 4px #00E5FF)" }}
+          r={fireColor ? 4.5 : 3}
+          fill={fireColor || "#fff"}
+          opacity="0.9"
+          style={{ filter: `drop-shadow(0 0 ${fireColor ? 8 : 4}px ${fireColor || "#00E5FF"})` }}
         />
       )}
       {/* Side dendrites — small visual accents that connect to the icons */}
