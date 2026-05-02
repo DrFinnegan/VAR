@@ -204,6 +204,7 @@ const Sidebar = () => {
     { path: "/training", icon: BookOpen, label: "Training Library", roles: ["admin"], section: "var" },
     { path: "/analytics", icon: BarChart3, label: "VAR Analytics", roles: null, section: "system" },
     { path: "/referees", icon: Award, label: "Referee Scorecards", roles: null, section: "system" },
+    { path: "/booths", icon: Users, label: "Booth Activity", roles: ["admin"], section: "system" },
     { path: "/feedback", icon: Brain, label: "AI Feedback", roles: ["admin", "var_operator"], section: "system" },
     { path: "/settings", icon: Settings, label: "Settings", roles: null, section: "system" },
   ].filter(item => !item.roles || (user && item.roles.includes(user.role)));

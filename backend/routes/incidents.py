@@ -34,6 +34,11 @@ class IncidentCreate(BaseModel):
     player_involved: Optional[str] = None
     image_base64: Optional[str] = None
     video_base64: Optional[str] = None
+    # Provenance tag for how the primary video was obtained. "upload" (default),
+    # "go_live_capture" (rolling 8s MediaRecorder buffer from the GO LIVE
+    # browser screen-share). Persisted on the incident doc and surfaced in
+    # the PDF audit header so referees can see where the clip came from.
+    video_source: Optional[str] = None
     # Multi-camera-angle ingestion. Each entry: {angle, image_base64?, video_base64?}
     camera_angles: Optional[List[Dict]] = None
 
@@ -254,6 +259,7 @@ async def create_incident(data: IncidentCreate, request: Request):
         "player_involved": data.player_involved,
         "storage_path": storage_path,
         "video_storage_path": video_storage_path,
+        "video_source": (data.video_source or ("upload" if data.video_base64 else None)),
         "has_image": bool(image_b64),
         "has_video": bool(data.video_base64) or any(a.get("has_video") for a in persisted_angles),
         "camera_angles": persisted_angles,

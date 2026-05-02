@@ -68,6 +68,7 @@ export const LiveVARPage = () => {
   const [showNewIncident, setShowNewIncident] = useState(false);
   const [liveStream, setLiveStream] = useState(null);
   const [showOctonSawModal, setShowOctonSawModal] = useState(false);
+  const [lastWsEvent, setLastWsEvent] = useState(null);
   const { active: liveRecording, getClipBlob: getLiveClipBlob } = useGoLiveRecorder(liveStream, 8);
   const [newIncident, setNewIncident] = useState({ incident_type: "foul", description: "", timestamp_in_match: "", team_involved: "", player_involved: "", image_base64: null, video_base64: null });
   const [cameraAngles, setCameraAngles] = useState({});
@@ -83,6 +84,7 @@ export const LiveVARPage = () => {
     if (msg.type === "incident_created" || msg.type === "decision_made" || msg.type === "analysis_complete") {
       fetchData();
       if (msg.type === "incident_created") toast.info(msg.message);
+      setLastWsEvent({ type: msg.type, at: Date.now() });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []), matchFilterId);

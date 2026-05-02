@@ -423,9 +423,20 @@ export function exportAnalysisPDF(incident, analysis, audit = null, opts = {}) {
       : evSrc === "image" ? "Uploaded still frame"
       : "Text-only analysis";
     doc.text(srcLabel, noteX, y + 7);
+    // Provenance of the video: GO LIVE 8s rolling buffer capture vs. standard upload.
+    const vidSource = incident?.video_source;
+    if (vidSource === "go_live_capture") {
+      doc.setFontSize(6);
+      doc.setTextColor(AMBER[0], AMBER[1], AMBER[2]);
+      doc.text("GO LIVE · 8s rolling buffer auto-attached", noteX, y + 10);
+    } else if (vidSource === "upload") {
+      doc.setFontSize(6);
+      doc.setTextColor(GRAY_MUTED[0], GRAY_MUTED[1], GRAY_MUTED[2]);
+      doc.text("Standard upload", noteX, y + 10);
+    }
     doc.setFontSize(6);
     doc.setTextColor(GRAY_MUTED[0], GRAY_MUTED[1], GRAY_MUTED[2]);
-    wrapAndDraw(doc, "Operator-drawn offside lines / circles / player markers as rendered on the Live VAR scrubber at the moment of export.", noteX, y + 11.2, noteW, 3.4, 4);
+    wrapAndDraw(doc, "Operator-drawn offside lines / circles / player markers as rendered on the Live VAR scrubber at the moment of export.", noteX, y + 13.2, noteW, 3.4, 4);
     y += imgH + 8;
   }
 

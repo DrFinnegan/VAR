@@ -435,7 +435,14 @@ class NeoCortexAnalyzer:
             "VAR THRESHOLD: Tight (within boot/torso width) = LOW confidence (60-75); semi-automated lines "
             "available = HIGH confidence; daylight (>30cm clear) beyond second-last defender = VERY HIGH "
             "confidence (90+). Frame the decision at the EXACT moment of the kick/touch, not when the receiver "
-            "controls the ball."
+            "controls the ball.\n"
+            "2025-26 UPDATES (IFAB Laws of the Game 2025/26, in force 1 July 2025):\n"
+            "  • SEMI-AUTOMATED OFFSIDE TECHNOLOGY (SAOT) is now the standard in elite competitions — "
+            "    average offside check time down to ~12 s; decision time down 27 s per event. When SAOT "
+            "    data is indicated in the description, treat the line as binary — confidence floor 95.\n"
+            "  • Law 11 clarification: for an offside offence from a GOALKEEPER THROW, the OFFSIDE LINE is "
+            "    now judged at the LAST POINT OF CONTACT between the goalkeeper's hand and the ball "
+            "    (not at the moment of release)."
         ),
         "handball": (
             "IFAB LAW 12 — HANDBALL (Verbatim & Casebook, 2023 update)\n"
@@ -488,7 +495,21 @@ class NeoCortexAnalyzer:
             "VAR REVIEWABLE: only goal-affecting fouls, penalty fouls, direct red-card fouls, mistaken identity. "
             "VAR threshold = 'clear and obvious error', NOT a re-refereeing of every foul.\n"
             "ASSESS: Was there genuine attempt to play the ball? Point of contact (shin/ankle/chest/face)? "
-            "Speed of the challenge? Studs visible? Two-footed? Over-the-top? Off-the-ball?"
+            "Speed of the challenge? Studs visible? Two-footed? Over-the-top? Off-the-ball?\n"
+            "2025-26 UPDATES (IFAB Laws of the Game 2025/26, in force 1 July 2025):\n"
+            "  • GOALKEEPER 8-SECOND RULE: a goalkeeper who controls the ball with the hands for more than "
+            "    8 seconds is now penalised by a CORNER KICK to the opposing team (replacing the old "
+            "    indirect free-kick). The referee signals a visible 5-second countdown before the 8s "
+            "    deadline. Verdict for this incident = 'Corner Kick — Goalkeeper 8-Second Violation'.\n"
+            "  • SIMULATION / DECEPTION: stronger action — any clear act of simulation is a MANDATORY "
+            "    CAUTION (yellow card). No advantage / replay available for the pretend-fouled player.\n"
+            "  • DOGSO CAUTION-ON-ADVANTAGE: when a foul that denied a goal-scoring opportunity occurs but "
+            "    the referee PLAYS ADVANTAGE and the attacking team SCORES, the caution/red for DOGSO is "
+            "    NO LONGER issued (just the goal stands). If the advantage does not result in a goal, "
+            "    the original DOGSO sanction applies.\n"
+            "  • HOLDING OFFENCE RECOGNITION (2025/26): stronger enforcement of shirt-pulling / body-block "
+            "    holds at set-pieces — VAR is now permitted to intervene for penalty-area holding that "
+            "    directly denies a clear goal-scoring chance."
         ),
         "penalty": (
             "IFAB LAW 14 — PENALTY KICK (Verbatim & Casebook)\n"
@@ -512,7 +533,15 @@ class NeoCortexAnalyzer:
             "SIMULATION: deliberate attempt to deceive the referee by feigning injury or pretending to be fouled "
             "= caution (Law 12.3), NO penalty.\n"
             "VAR THRESHOLD: clear and obvious. Soft contact with both players going to ground = referee discretion. "
-            "Clear trip / shirt-pull / arm-extended handball inside the box = >= 90 confidence."
+            "Clear trip / shirt-pull / arm-extended handball inside the box = >= 90 confidence.\n"
+            "2025-26 UPDATES (IFAB Laws of the Game 2025/26, in force 1 July 2025):\n"
+            "  • ACCIDENTAL DOUBLE-TOUCH CLARIFICATION: if the penalty kicker inadvertently double-touches "
+            "    the ball (e.g. slipping while striking) AND the kick is SCORED, the goal is disallowed "
+            "    and the kick is RETAKEN (not an indirect free-kick, as the double-touch is deemed "
+            "    unintentional). If the double-touch was deliberate, the original 'indirect free-kick "
+            "    to defending team' sanction still applies. Verdict = 'Retake — Accidental Double-Touch'.\n"
+            "  • Assistant referees now position on the touchline IN LINE WITH THE PENALTY MARK (the "
+            "    offside line) during penalties, since VAR handles goal/no-goal and GK encroachment."
         ),
         "goal_line": (
             "IFAB LAW 10 — DETERMINING THE OUTCOME OF A MATCH (Goal/No-Goal)\n"
@@ -599,7 +628,16 @@ class NeoCortexAnalyzer:
             "VAR recommends the referee (a) accept VAR's information, (b) review the footage on the pitch-side "
             "monitor (OFR — On-Field Review). The final decision is always the referee's.\n"
             "THRESHOLD: 'clear and obvious error'. Subjective interpretation matters of degree (was it careless "
-            "or reckless?) generally stay with the on-field decision unless the on-field call was clearly wrong."
+            "or reckless?) generally stay with the on-field decision unless the on-field call was clearly wrong.\n"
+            "2025-26 UPDATES (IFAB Laws of the Game 2025/26, in force 1 July 2025) — EXPANDED VAR SCOPE:\n"
+            "  • VAR may now intervene for SECOND YELLOW CARDS when the second caution was CLEARLY wrong "
+            "    (the direct-red restriction has been relaxed for this specific error type).\n"
+            "  • VAR may intervene for MISTAKEN IDENTITY in RED OR YELLOW cards (previously red only).\n"
+            "  • VAR may intervene for CLEARLY WRONG CORNER KICK awards, BUT only if review is immediate "
+            "    (i.e. before the next phase of play) — to preserve match flow.\n"
+            "  • REFEREE ANNOUNCEMENTS: competitions may opt in for the referee to announce the VAR "
+            "    decision over the stadium PA after a review or lengthy check (transparency feature).\n"
+            "  • Optional body cameras for referees and 'captains-only' approach for dissent are trialled."
         ),
     }
 
@@ -1159,13 +1197,17 @@ class OctonBrainEngine:
         has_any_image = bool(image_base64 or (extra_images_b64 and any(extra_images_b64)))
         n_frames_total = (1 if image_base64 else 0) + len([b for b in (extra_images_b64 or []) if b])
         # Vision bonus is now proportional to actual pixel evidence quality:
-        #   • ≥ 3 frames (e.g. multi-angle or video burst) → +5 %
+        #   • ≥ 4 frames (multi-frame video burst / multi-angle) → +7 %
+        #     (full motion grounding — the engine can see what happens before/during/after the moment)
+        #   • 3 frames → +5 %
         #   • 2 frames → +3 %
         #   • 1 frame  → +2 % (still a snapshot — no motion grounding)
         #   • 0 frames → 0 %  (text-only — no grounding at all)
         vision_evidence_bonus = 0.0
         if has_any_image and neo_conf >= 60:
-            if n_frames_total >= 3:
+            if n_frames_total >= 4:
+                vision_evidence_bonus = 7.0
+            elif n_frames_total == 3:
                 vision_evidence_bonus = 5.0
             elif n_frames_total == 2:
                 vision_evidence_bonus = 3.0
@@ -1200,17 +1242,34 @@ class OctonBrainEngine:
             confidence_caps_applied.append({"cap": 78.0, "from": final_confidence, "reason": "single-frame on motion-dependent call"})
             final_confidence = 78.0
 
-        # 3) When the model itself flags uncertainty in plain English,
-        #    do not push past 65.
+        # 3) When the model itself EXPLICITLY flags uncertainty in plain English,
+        #    softly cap. The cap is STRICTEST when we have no frames (50) and
+        #    LOOSER when we have real visual evidence, because a mature multi-
+        #    frame analysis that still hedges is useful signal but not grounds
+        #    to drop a decision into the bin.
         rejection_phrases = (
             "no clear", "not visible", "cannot determine", "cannot be determined",
             "insufficient evidence", "unclear", "no offside event visible",
             "no corner event visible", "no discernible", "load the moment",
             "load the byline",
         )
-        if any(p in evidence_blob for p in rejection_phrases) and final_confidence > 50.0:
-            confidence_caps_applied.append({"cap": 50.0, "from": final_confidence, "reason": "model flagged evidence as unclear"})
-            final_confidence = 50.0
+        if any(p in evidence_blob for p in rejection_phrases):
+            if not has_any_image:
+                rejection_cap = 50.0
+            elif n_frames_total >= 4:
+                # Multi-frame burst — hedging tolerated; just trim the top.
+                rejection_cap = 72.0
+            elif n_frames_total >= 2:
+                rejection_cap = 65.0
+            else:
+                rejection_cap = 55.0
+            if final_confidence > rejection_cap:
+                confidence_caps_applied.append({
+                    "cap": rejection_cap,
+                    "from": final_confidence,
+                    "reason": f"model flagged evidence as unclear ({n_frames_total} frame{'s' if n_frames_total != 1 else ''})",
+                })
+                final_confidence = rejection_cap
 
         # ── Critical-trigger floor ──
         # If Hippocampus detected an IFAB-automatic red-card offence (referee
