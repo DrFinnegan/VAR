@@ -29,15 +29,24 @@ export default function OctonSawStrip({ analysis, onExplain }) {
 
   if (frameCount === 0 && frames.length === 0) {
     return (
-      <div className="border border-white/[0.06] bg-[#FFB800]/[0.05] p-3" data-testid="octon-saw-strip">
-        <div className="flex items-center gap-2 mb-1">
-          <Eye className="w-3 h-3 text-[#FFB800]" />
-          <span className="text-[10px] font-mono tracking-[0.2em] text-[#FFB800] font-bold">OCTON SAW · 0 FRAMES</span>
+      <div className="border border-[#FFB800]/30 bg-gradient-to-r from-[#FFB800]/[0.06] to-transparent p-3" data-testid="octon-saw-strip">
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <div className="flex items-center gap-2">
+            <Eye className="w-3.5 h-3.5 text-[#FFB800]" />
+            <span className="text-[10px] font-mono tracking-[0.2em] text-[#FFB800] font-bold">
+              OCTON SAW · TEXT-ONLY ANALYSIS
+            </span>
+          </div>
+          <span className="text-[8px] font-mono tracking-[0.2em] text-[#FFB800]/70 px-1.5 py-0.5 border border-[#FFB800]/30 bg-[#FFB800]/10">
+            ⚠ NO VISUAL EVIDENCE
+          </span>
         </div>
-        <p className="text-[10px] text-gray-400">
-          Verdict produced from text analysis only — no visual evidence
-          attached. Confidence is hard-capped. Upload footage or click
-          GO LIVE for a referee-grade decision.
+        <p className="text-[10px] text-gray-300 leading-snug">
+          This verdict was produced from <span className="text-[#FFB800] font-bold">text only</span> — no video or
+          image was attached when the incident was created. Confidence is hard-capped at 70%. To unlock
+          high-confidence multi-frame analysis, click <span className="text-[#00E5FF] font-bold">RE-ANALYSE</span> after
+          uploading footage, or use <span className="text-[#FF3333] font-bold">GO LIVE</span> to capture the
+          last 8 s of a broadcast directly.
         </p>
       </div>
     );
