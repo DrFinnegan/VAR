@@ -83,8 +83,9 @@ export default function OctonSawStrip({ analysis, onExplain }) {
               <img
                 src={`data:image/jpeg;base64,${b64}`}
                 alt={`Frame ${i + 1}`}
-                className="w-full aspect-video object-cover border border-white/10"
+                className="w-full aspect-video object-cover border border-white/10 transition-transform duration-200 group-hover:scale-[1.02]"
                 loading="lazy"
+                decoding="async"
               />
               <span className="absolute top-1 left-1 px-1 bg-black/70 text-[8px] font-mono text-[#00E5FF]">
                 #{i + 1}

@@ -41,7 +41,7 @@ async def _extract_one(vp: str, at_seconds: float, quality: int, td: str, idx: i
         proc = await asyncio.create_subprocess_exec(
             "ffmpeg", "-ss", f"{at_seconds:.2f}", "-i", vp,
             "-frames:v", "1", "-q:v", str(quality),
-            "-vf", "scale='min(1280,iw)':-2",
+            "-vf", "scale='min(960,iw)':-2",
             "-y", fp,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
@@ -65,7 +65,7 @@ async def _extract_one(vp: str, at_seconds: float, quality: int, td: str, idx: i
 async def extract_frames_b64(
     video_bytes: bytes,
     n_frames: int = 4,
-    quality: int = 4,
+    quality: int = 6,
 ) -> List[str]:
     """Extract `n_frames` evenly-spaced JPEG stills from `video_bytes`.
 
@@ -110,7 +110,7 @@ async def extract_frames_b64(
 async def extract_frame_b64(
     video_bytes: bytes,
     at_seconds: float = 1.5,
-    quality: int = 4,
+    quality: int = 6,
 ) -> Optional[str]:
     """Legacy single-frame helper (kept for callers that only need one)."""
     frames = await extract_frames_b64(video_bytes, n_frames=1, quality=quality)

@@ -1,5 +1,6 @@
 """Incident lifecycle: create, list, decisions, OFR bookmarks, annotations,
 re-analysis, file-serving, and text-only AI analysis."""
+import asyncio
 import base64
 import logging
 import uuid
@@ -74,7 +75,7 @@ async def create_incident(data: IncidentCreate, request: Request):
         try:
             user_id = user.get("_id", "anonymous") if user else "anonymous"
             path = generate_upload_path(user_id, f"{incident_id}.jpg")
-            put_object(path, base64.b64decode(image_b64), "image/jpeg")
+            await asyncio.to_thread(put_object, path, base64.b64decode(image_b64), "image/jpeg")
             storage_path = path
         except Exception as e:
             logger.warning(f"Image upload failed: {e}")
@@ -86,11 +87,21 @@ async def create_incident(data: IncidentCreate, request: Request):
     video_storage_path = None
     video_bytes_buf = None
     if data.video_base64:
+        video_bytes_buf = base64.b64decode(data.video_base64)
+
+    # Multi-frame extraction so the dual-brain sees motion, not a still.
+    # Running in parallel with storage upload below to cut wall time.
+    primary_video_frames: List[str] = []
+    frames_task = None
+    if not image_b64 and video_bytes_buf:
+        from video_utils import extract_frames_b64
+        frames_task = asyncio.create_task(extract_frames_b64(video_bytes_buf, n_frames=4))
+
+    if video_bytes_buf:
         try:
             user_id = user.get("_id", "anonymous") if user else "anonymous"
             vpath = generate_upload_path(user_id, f"{incident_id}.mp4")
-            video_bytes_buf = base64.b64decode(data.video_base64)
-            put_object(vpath, video_bytes_buf, "video/mp4")
+            await asyncio.to_thread(put_object, vpath, video_bytes_buf, "video/mp4")
             video_storage_path = vpath
         except Exception as e:
             logger.warning(f"Video upload failed: {e}")
@@ -99,12 +110,9 @@ async def create_incident(data: IncidentCreate, request: Request):
                 "message": "Video storage upstream is currently unavailable. A frame was extracted in memory for analysis but the video clip was not archived.",
             })
 
-    # Multi-frame extraction so the dual-brain sees motion, not a still.
-    primary_video_frames: List[str] = []
-    if not image_b64 and video_bytes_buf:
+    if frames_task is not None:
         try:
-            from video_utils import extract_frames_b64
-            primary_video_frames = await extract_frames_b64(video_bytes_buf, n_frames=4)
+            primary_video_frames = await frames_task
             if primary_video_frames:
                 image_b64 = primary_video_frames[0]
                 logger.info(

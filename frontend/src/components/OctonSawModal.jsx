@@ -28,19 +28,43 @@ export default function OctonSawModal({ open, onClose, analysis, incident }) {
   const breakdown = analysis?.frame_breakdown || [];
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [cinema, setCinema] = useState(false);
+  const [fading, setFading] = useState(false);
   const dialogRef = useRef(null);
 
   useEffect(() => { if (open) setIdx(0); }, [open]);
 
-  const next = useCallback(() => setIdx((i) => (frames.length ? (i + 1) % frames.length : 0)), [frames.length]);
-  const prev = useCallback(() => setIdx((i) => (frames.length ? (i - 1 + frames.length) % frames.length : 0)), [frames.length]);
+  // Preload all frame images as soon as the modal opens so navigation
+  // feels instant and the cinema crossfade is smooth.
+  useEffect(() => {
+    if (!open || !frames.length) return;
+    frames.forEach((b) => {
+      const im = new Image();
+      im.src = `data:image/jpeg;base64,${b}`;
+    });
+  }, [open, frames]);
 
-  // Auto-play
+  const next = useCallback(() => {
+    setFading(true);
+    setTimeout(() => {
+      setIdx((i) => (frames.length ? (i + 1) % frames.length : 0));
+      setFading(false);
+    }, 120);
+  }, [frames.length]);
+  const prev = useCallback(() => {
+    setFading(true);
+    setTimeout(() => {
+      setIdx((i) => (frames.length ? (i - 1 + frames.length) % frames.length : 0));
+      setFading(false);
+    }, 120);
+  }, [frames.length]);
+
+  // Auto-play — cinema mode speeds up for a filmic walk-through.
   useEffect(() => {
     if (!playing || !open) return;
-    const t = setInterval(next, 2200);
+    const t = setInterval(next, cinema ? 700 : 2200);
     return () => clearInterval(t);
-  }, [playing, open, next]);
+  }, [playing, open, next, cinema]);
 
   // Keyboard
   useEffect(() => {
@@ -135,7 +159,8 @@ export default function OctonSawModal({ open, onClose, analysis, incident }) {
                 key={idx}
                 src={`data:image/jpeg;base64,${frames[idx]}`}
                 alt={`Frame ${idx + 1}`}
-                className="w-full max-h-[60vh] object-contain"
+                decoding="async"
+                className={`w-full max-h-[60vh] object-contain transition-opacity duration-200 ${fading ? "opacity-0" : "opacity-100"}`}
                 data-testid={`octon-saw-modal-frame-${idx}`}
               />
             ) : (
@@ -194,6 +219,14 @@ export default function OctonSawModal({ open, onClose, analysis, incident }) {
         <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-white/[0.06]">
           <p className="text-[9px] font-mono text-gray-500 hidden sm:block">← / → to step · SPACE to play · ESC to close</p>
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCinema((c) => !c)}
+              className={`text-[9px] font-mono tracking-[0.2em] border px-2 h-8 transition-all ${cinema ? "text-[#B366FF] border-[#B366FF]/60 bg-[#B366FF]/10" : "text-gray-500 border-white/10 hover:border-[#B366FF]/40 hover:text-[#B366FF]"}`}
+              data-testid="octon-saw-cinema-toggle"
+              title="Cinema mode — fast crossfade walk-through for demos"
+            >
+              CINEMA {cinema ? "ON" : "OFF"}
+            </button>
             <Button size="sm" onClick={prev} disabled={frames.length < 2} className="bg-transparent text-[#00E5FF] border border-[#00E5FF]/30 hover:bg-[#00E5FF]/10 rounded-none h-8" data-testid="octon-saw-prev">
               <ChevronLeft className="w-3.5 h-3.5" />
             </Button>

@@ -408,19 +408,24 @@ export const LiveVARPage = () => {
             <div className="flex items-center gap-2 px-2 py-1.5 border border-[#B366FF]/30 bg-[#B366FF]/[0.05] relative" data-testid="match-context-selector">
               <div className="absolute top-0 left-0 w-full h-[1px]" style={{ backgroundColor: "#B366FF", opacity: 0.6 }} />
               <Trophy className="w-3 h-3 text-[#B366FF]" />
-              <select
-                value={matchFilterId}
-                onChange={(e) => setMatchFilterId(e.target.value)}
-                className="bg-transparent text-[10px] font-mono tracking-[0.15em] text-white outline-none cursor-pointer max-w-[180px]"
-                data-testid="match-context-select"
-              >
-                <option value="all" className="bg-black">ALL MATCHES</option>
-                {matches.map((m) => (
-                  <option key={m.id} value={m.id} className="bg-black">
-                    {m.team_home?.slice(0, 12)} vs {m.team_away?.slice(0, 12)}
-                  </option>
-                ))}
-              </select>
+              <Select value={matchFilterId} onValueChange={(v) => setMatchFilterId(v)}>
+                <SelectTrigger
+                  className="bg-transparent text-[10px] font-mono tracking-[0.15em] text-white outline-none cursor-pointer max-w-[200px] border-0 h-auto p-0 gap-1 focus:ring-0"
+                  data-testid="match-context-select"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-[#0A0A0A] border-[#B366FF]/30 rounded-none">
+                  <SelectItem value="all" className="text-white text-[10px] font-mono tracking-[0.15em]" data-testid="match-option-all">
+                    ALL MATCHES
+                  </SelectItem>
+                  {matches.map((m) => (
+                    <SelectItem key={m.id} value={m.id} className="text-white text-[10px] font-mono tracking-[0.15em]" data-testid={`match-option-${m.id}`}>
+                      {m.team_home?.slice(0, 12)} vs {m.team_away?.slice(0, 12)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
           <div className="flex items-center gap-2 px-3 py-1.5 border border-white/[0.08] bg-[#0A0A0A] relative">

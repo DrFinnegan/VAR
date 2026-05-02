@@ -110,6 +110,23 @@ CURATED_ARTICLE_URLS: List[Dict] = [
      "label": "Wikipedia · Thierry Henry (2009 handball assist — pre-VAR precedent)"},
     {"url": "https://en.wikipedia.org/wiki/UEFA_Euro_2024_Final",
      "label": "Wikipedia · Euro 2024 Final (recent VAR application)"},
+    # ── Round 3 (2026-02): PL / Euro 2024 rich-text match reports ──
+    {"url": "https://en.wikipedia.org/wiki/UEFA_Euro_2024_knockout_stage",
+     "label": "Wikipedia · Euro 2024 Knockout Stage (10+ VAR-decided ties)"},
+    {"url": "https://en.wikipedia.org/wiki/2023%E2%80%9324_Premier_League",
+     "label": "Wikipedia · 2023-24 Premier League season (VAR incidents inc. Luis Diaz ghost-offside)"},
+    {"url": "https://en.wikipedia.org/wiki/2024%E2%80%9325_Premier_League",
+     "label": "Wikipedia · 2024-25 Premier League season (SAOT rollout season)"},
+    {"url": "https://en.wikipedia.org/wiki/2022%E2%80%9323_Premier_League",
+     "label": "Wikipedia · 2022-23 Premier League season (Haaland goal-line + multiple DOGSO)"},
+    {"url": "https://en.wikipedia.org/wiki/2024_UEFA_Champions_League_Final",
+     "label": "Wikipedia · 2024 UCL Final (Dortmund-Real Madrid VAR checks)"},
+    {"url": "https://en.wikipedia.org/wiki/2022_FIFA_World_Cup_knockout_stage",
+     "label": "Wikipedia · 2022 World Cup KO stage (multiple VAR precedents)"},
+    {"url": "https://en.wikipedia.org/wiki/UEFA_Euro_2024_Group_C",
+     "label": "Wikipedia · Euro 2024 Group C (England vs Slovenia handball checks)"},
+    {"url": "https://en.wikipedia.org/wiki/UEFA_Champions_League",
+     "label": "Wikipedia · UEFA Champions League (historical VAR landmark moments)"},
 ]
 
 
