@@ -173,19 +173,44 @@ export const LiveVARPage = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleImageChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const b64 = reader.result.split(",")[1];
-      setNewIncident(prev => ({ ...prev, image_base64: b64 }));
-      setPreviewImage(reader.result);
-    };
-    reader.readAsDataURL(file);
+  // ── File-reader race fix ──
+  // FileReader is async. If the operator hits ANALYSE before the reader
+  // finishes for a large video, the POST goes out with video_base64=null
+  // → text-only fallback → ~28% confidence. We track a Promise per
+  // pending media read; submit awaits any in-flight read before posting.
+  const pendingMediaRef = useRef({ image: null, video: null });
+  const [mediaLoading, setMediaLoading] = useState({ image: false, video: false });
+
+  const readFileAsBase64 = (file, kind) => {
+    setMediaLoading((s) => ({ ...s, [kind]: true }));
+    const p = new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        try { resolve(reader.result.split(",")[1]); }
+        catch (e) { reject(e); }
+      };
+      reader.onerror = () => reject(new Error(`Could not read the ${kind} file`));
+      reader.readAsDataURL(file);
+    }).finally(() => {
+      setMediaLoading((s) => ({ ...s, [kind]: false }));
+    });
+    pendingMediaRef.current[kind] = p;
+    return p;
   };
 
-  const handleVideoChange = (e) => {
+  const handleImageChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const b64 = await readFileAsBase64(file, "image");
+      setNewIncident((prev) => ({ ...prev, image_base64: b64 }));
+      setPreviewImage(`data:${file.type};base64,${b64}`);
+    } catch (err) {
+      toast.error("Could not read the image file");
+    }
+  };
+
+  const handleVideoChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 12 * 1024 * 1024) {
@@ -194,22 +219,41 @@ export const LiveVARPage = () => {
       return;
     }
     toast.info(`Reading ${(file.size / 1024 / 1024).toFixed(1)} MB clip…`);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const b64 = reader.result.split(",")[1];
-      setNewIncident(prev => ({ ...prev, video_base64: b64 }));
+    try {
+      const b64 = await readFileAsBase64(file, "video");
+      setNewIncident((prev) => ({ ...prev, video_base64: b64 }));
       setPreviewVideo(URL.createObjectURL(file));
-      toast.success("Video ready — OCTON will extract a frame for analysis on submit");
-    };
-    reader.onerror = () => toast.error("Could not read the video file");
-    reader.readAsDataURL(file);
+      toast.success(`Video ready · ${Math.round(b64.length * 0.75 / 1024)} KB · OCTON will extract 4 frames on analyse`);
+    } catch (err) {
+      toast.error("Could not read the video file");
+    }
   };
 
   const handleCreateIncident = async () => {
     if (!newIncident.description) { toast.error("Provide a description"); return; }
+    // ── Race-condition guard ──
+    // If a FileReader is still in flight, await it so the POST carries
+    // the actual base64 instead of null. Without this the operator sees
+    // a low-confidence text-only verdict on the first click and a
+    // correct one only on the second (after the reader has finished).
+    if (mediaLoading.video || mediaLoading.image) {
+      toast.info("Waiting for media to finish loading…");
+    }
     setSubmitting(true);
     try {
-      const payload = { ...newIncident };
+      // Resolve any in-flight reads — these promises always resolve to
+      // the base64 the FileReader produced (or throw, in which case the
+      // file simply won't be attached, matching previous behaviour).
+      let liveImage = newIncident.image_base64;
+      let liveVideo = newIncident.video_base64;
+      try {
+        if (pendingMediaRef.current.image) liveImage = await pendingMediaRef.current.image;
+      } catch (_) { /* keep liveImage as-is */ }
+      try {
+        if (pendingMediaRef.current.video) liveVideo = await pendingMediaRef.current.video;
+      } catch (_) { /* keep liveVideo as-is */ }
+
+      const payload = { ...newIncident, image_base64: liveImage, video_base64: liveVideo };
       // Match-context inheritance: when a match filter is active, auto-fill
       // match_id + team_involved so the Match Wall picks up this incident
       // natively (no team-name fallback needed).
@@ -250,6 +294,8 @@ export const LiveVARPage = () => {
       setNewIncident({ incident_type: "foul", description: "", timestamp_in_match: "", team_involved: "", player_involved: "", image_base64: null, video_base64: null });
       setCameraAngles({});
       setPreviewImage(null);
+      setPreviewVideo(null);
+      pendingMediaRef.current = { image: null, video: null };
       fetchData();
     } catch { toast.error("Failed to create incident"); }
     finally { setSubmitting(false); }
@@ -459,8 +505,12 @@ export const LiveVARPage = () => {
               </div>
               <DialogFooter>
                 <Button variant="ghost" onClick={() => { setShowNewIncident(false); setPreviewImage(null); setPreviewVideo(null); }} className="text-gray-400 hover:text-white">Cancel</Button>
-                <Button onClick={handleCreateIncident} disabled={submitting} className="bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 rounded-none" data-testid="submit-incident-button">
-                  {submitting ? "ANALYZING..." : "SUBMIT & ANALYZE"}
+                <Button onClick={handleCreateIncident} disabled={submitting || mediaLoading.video || mediaLoading.image} className="bg-[#00E5FF] text-black hover:bg-[#00E5FF]/80 rounded-none disabled:opacity-50" data-testid="submit-incident-button">
+                  {submitting
+                    ? "ANALYZING..."
+                    : (mediaLoading.video || mediaLoading.image)
+                      ? `READING ${mediaLoading.video ? "VIDEO" : "IMAGE"}...`
+                      : "SUBMIT & ANALYZE"}
                 </Button>
               </DialogFooter>
             </DialogContent>
