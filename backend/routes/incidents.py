@@ -48,6 +48,12 @@ class DecisionUpdate(BaseModel):
     decision_status: DecisionStatus
     final_decision: str
     decided_by: str
+    # Optional operator-supplied rationale for an overturn (or even a
+    # confirm — sometimes operators want to capture *why* they agreed).
+    # When present, this is included verbatim in the auto-promoted
+    # training case so OCTON's future reasoning has the operator's
+    # explicit guidance to learn from.
+    override_reason: Optional[str] = None
 
 
 class TextAnalysisRequest(BaseModel):
@@ -395,12 +401,75 @@ async def update_decision(incident_id: str, decision: DecisionUpdate, request: R
         "operator_decision": decision.final_decision,
         "decision_status": decision.decision_status.value,
         "was_ai_correct": was_confirmed,
+        "override_reason": decision.override_reason,
         "decided_by": decision.decided_by,
         "decided_by_booth": get_booth_id(request),
         "decided_by_booth_label": get_booth_label(request),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.ai_feedback.insert_one(feedback_doc)
+
+    # ── Continuous-learning feedback loop ─────────────────────
+    # The MOST valuable training signal is an operator override.
+    # When confirmed → corpus learns "OCTON was right on this pattern".
+    # When overturned → corpus learns "OCTON was wrong; the correct
+    #   ruling here is X" — this is GOLD because it actively
+    #   corrects future similar verdicts via precedent retrieval.
+    # Auto-promote to training_cases (idempotent by source_incident_id).
+    try:
+        existing_tc = await db.training_cases.find_one(
+            {"source_incident_id": incident_id}, {"_id": 0, "id": 1}
+        )
+        if not existing_tc:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            outcome_label = "operator_confirmed" if was_confirmed else "operator_overturned"
+            title = f"{current.get('incident_type','incident').replace('_',' ').title()} — operator {('confirm' if was_confirmed else 'overturn')} — {datetime.now(timezone.utc).date().isoformat()}"
+            # When overturned, the OPERATOR's ruling is the correct one.
+            correct_decision = decision.final_decision or ai_suggestion or "Decision (auto-promoted)"
+            # Build a richer rationale: reason + ai-summary + (override-reason if any)
+            rationale_parts = []
+            if decision.override_reason:
+                rationale_parts.append(f"OPERATOR REASON: {decision.override_reason}")
+            if ai_analysis.get("reasoning"):
+                rationale_parts.append(f"AI REASONING (at decision time): {ai_analysis.get('reasoning')[:600]}")
+            if current.get("description"):
+                rationale_parts.append(f"INCIDENT: {current.get('description')[:300]}")
+            rationale = "\n\n".join(rationale_parts) or current.get("description", "")
+            keywords = ai_analysis.get("key_factors") or []
+            tc = {
+                "id": str(uuid.uuid4()),
+                "title": title[:160],
+                "incident_type": current.get("incident_type", "other"),
+                "correct_decision": correct_decision,
+                "rationale": rationale[:1500],
+                "keywords": [str(k)[:60] for k in keywords][:12],
+                "tags": [
+                    "operator-promoted",
+                    f"status:{decision.decision_status.value}",
+                    "ai-correct" if was_confirmed else "ai-overturned",
+                ],
+                "match_context": {
+                    "teams": current.get("team_involved"),
+                    "competition": current.get("match_id"),
+                    "year": datetime.now(timezone.utc).year,
+                    "referee": decision.decided_by,
+                },
+                "law_references": [ai_analysis.get("cited_clause")] if ai_analysis.get("cited_clause") else [],
+                "outcome": outcome_label,
+                "visual_tags": [],
+                "media_storage_path": current.get("storage_path"),
+                "thumbnail_storage_path": current.get("storage_path") if (current.get("media_content_type", "") or "").startswith("image") else None,
+                "source_incident_id": incident_id,
+                "source_url": None,
+                "source_ingested_at": now_iso,
+                "created_by": decision.decided_by,
+                "created_by_name": decision.decided_by,
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            }
+            await db.training_cases.insert_one(tc)
+    except Exception as e:
+        logger.warning(f"Auto-promote of incident {incident_id} to training corpus failed: {e}")
 
     if current.get("match_id"):
         await db.matches.update_one(

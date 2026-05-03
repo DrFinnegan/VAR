@@ -340,15 +340,30 @@ export const LiveVARPage = () => {
     } catch { toast.dismiss(); toast.error("Reanalysis failed"); }
   };
 
-  const handleDecision = async (status, decision) => {
+  const handleDecision = async (status, decision, overrideReason = null) => {
     if (!selectedIncident) return;
     try {
       const res = await axios.put(`${API}/incidents/${selectedIncident.id}/decision`, {
-        decision_status: status, final_decision: decision, decided_by: user?.name || "VAR_Operator"
+        decision_status: status, final_decision: decision, decided_by: user?.name || "VAR_Operator",
+        override_reason: overrideReason,
       });
       setSelectedIncident(res.data);
-      toast.success("Decision recorded!"); fetchData();
+      const tone = status === "overturned" ? "OCTON will learn from this overturn" : "OCTON corpus reinforced";
+      toast.success(`Decision recorded · ${tone}`);
+      fetchData();
     } catch { toast.error("Failed to record decision"); }
+  };
+
+  // ── Overturn dialog state ──
+  // When the operator clicks OVERTURN we pop a dialog asking for the
+  // exact verdict + reason. Both flow into the auto-promoted training
+  // case so OCTON learns from the override.
+  const [overturnDialog, setOverturnDialog] = useState({ open: false, verdict: "", reason: "" });
+  const submitOverturn = async () => {
+    const v = overturnDialog.verdict.trim();
+    if (!v) { toast.error("Please specify the corrected verdict"); return; }
+    await handleDecision("overturned", v, overturnDialog.reason.trim() || null);
+    setOverturnDialog({ open: false, verdict: "", reason: "" });
   };
 
   if (loading) return (
@@ -997,7 +1012,7 @@ export const LiveVARPage = () => {
               <div className="p-3 border-b border-white/[0.06]"><span className="text-[10px] font-heading font-bold uppercase tracking-[0.2em] text-gray-500">DECISION</span></div>
               <div className="p-3 space-y-2">
                 <Button className="w-full h-12 bg-[#00FF88]/[0.06] text-[#00FF88] border border-[#00FF88]/20 hover:bg-[#00FF88]/15 hover:border-[#00FF88]/40 rounded-none font-heading font-bold text-xs tracking-[0.15em] uppercase transition-all active:scale-[0.98]" onClick={() => handleDecision('confirmed', analysis?.suggested_decision || 'Confirmed')} data-testid="confirm-decision-button"><CheckCircle2 className="w-4 h-4 mr-2" />CONFIRM</Button>
-                <Button className="w-full h-12 bg-[#FF2A2A]/[0.06] text-[#FF2A2A] border border-[#FF2A2A]/20 hover:bg-[#FF2A2A]/15 hover:border-[#FF2A2A]/40 rounded-none font-heading font-bold text-xs tracking-[0.15em] uppercase transition-all active:scale-[0.98]" onClick={() => handleDecision('overturned', 'Decision Overturned')} data-testid="override-decision-button"><XCircle className="w-4 h-4 mr-2" />OVERTURN</Button>
+                <Button className="w-full h-12 bg-[#FF2A2A]/[0.06] text-[#FF2A2A] border border-[#FF2A2A]/20 hover:bg-[#FF2A2A]/15 hover:border-[#FF2A2A]/40 rounded-none font-heading font-bold text-xs tracking-[0.15em] uppercase transition-all active:scale-[0.98]" onClick={() => setOverturnDialog({ open: true, verdict: analysis?.suggested_decision || "", reason: "" })} data-testid="override-decision-button"><XCircle className="w-4 h-4 mr-2" />OVERTURN</Button>
               </div>
             </div>
           )}
@@ -1064,6 +1079,57 @@ export const LiveVARPage = () => {
         initialCinema={octonSawCinema}
         autoPlay={octonSawCinema}
       />
+
+      {/* ── Overturn dialog: capture corrected verdict + reason ── */}
+      <Dialog open={overturnDialog.open} onOpenChange={(o) => !o && setOverturnDialog({ ...overturnDialog, open: false })}>
+        <DialogContent className="bg-[#0A0A0A] border border-[#FF2A2A]/40 max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-[#FF2A2A] font-mono tracking-[0.2em] text-sm">OVERTURN OCTON's VERDICT</DialogTitle>
+            <DialogDescription className="text-gray-400 text-[11px] font-mono">
+              The corrected verdict + your reason will be auto-promoted to OCTON's training corpus
+              so future similar incidents apply your ruling. This is the strongest learning signal we collect.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <label className="text-[10px] font-mono tracking-[0.15em] text-gray-400 uppercase block mb-1">
+                Corrected Verdict <span className="text-[#FF2A2A]">*</span>
+              </label>
+              <Input
+                value={overturnDialog.verdict}
+                onChange={(e) => setOverturnDialog({ ...overturnDialog, verdict: e.target.value })}
+                placeholder="e.g. Red Card + Penalty — DOGSO by holding"
+                className="bg-black border-white/10 text-white font-mono text-[12px] rounded-none"
+                data-testid="overturn-verdict-input"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-mono tracking-[0.15em] text-gray-400 uppercase block mb-1">
+                Reason / Reasoning
+              </label>
+              <Textarea
+                value={overturnDialog.reason}
+                onChange={(e) => setOverturnDialog({ ...overturnDialog, reason: e.target.value })}
+                placeholder="Why did OCTON get this wrong? e.g. 'On 1/4-speed review, defender's plant foot was too far to reach the ball — genuine attempt criterion not met.'"
+                rows={4}
+                className="bg-black border-white/10 text-white font-mono text-[11px] rounded-none"
+                data-testid="overturn-reason-input"
+              />
+            </div>
+            <p className="text-[9px] font-mono text-gray-500 leading-relaxed">
+              Your override becomes a high-priority FRESH precedent. Within the next analysis run on a similar
+              incident, OCTON will consult your ruling first — visible in the LESSONS APPLIED panel.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOverturnDialog({ open: false, verdict: "", reason: "" })} className="text-gray-400 hover:text-white">Cancel</Button>
+            <Button onClick={submitOverturn} className="bg-[#FF2A2A] text-black hover:bg-[#FF2A2A]/80 rounded-none font-heading font-bold tracking-[0.15em]" data-testid="overturn-submit-button">
+              OVERTURN & TRAIN
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

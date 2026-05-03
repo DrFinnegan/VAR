@@ -21,8 +21,10 @@ test.describe("boost confidence chip", () => {
       await page.goto("/");
       await page.waitForLoadState("networkidle");
 
-      // Find the boost-demo incident id by fetching the incident list
-      const incidents = await request.get(`${baseURL}/api/incidents?limit=100`)
+      // Find the boost-demo incident id by fetching the incident list.
+      // Use limit=200 (API max) so the demo isn't pushed out by recent
+      // test traffic that accumulates over time.
+      const incidents = await request.get(`${baseURL}/api/incidents?limit=200`)
         .then(r => r.json());
       const boostIncident = incidents.find(i =>
         (i.description || "").includes("OCTON-BOOST-DEMO")

@@ -200,6 +200,15 @@ async def seed_demo():
     # off a stable marker so reseeds never create duplicates.
     BOOST_DEMO_MARKER = "OCTON-BOOST-DEMO"
     existing_boost = await db.incidents.find_one({"description": {"$regex": BOOST_DEMO_MARKER}})
+    # Always bump the boost-demo to "now" so the e2e test (which queries
+    # the most-recent rail) always finds it even after a heavy session
+    # of test traffic. We update created_at when it already exists.
+    now_iso = datetime.now(timezone.utc).isoformat()
+    if existing_boost:
+        await db.incidents.update_one(
+            {"id": existing_boost["id"]},
+            {"$set": {"created_at": now_iso, "updated_at": now_iso, "decision_status": "pending", "final_decision": None}},
+        )
     if not existing_boost:
         boost_demo = {
             "id": str(uuid.uuid4()),
