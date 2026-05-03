@@ -48,6 +48,7 @@ import { RefereesIndexPage, RefereeScorecardPage } from "./pages/RefereeScorecar
 import AuditChainPill from "./components/AuditChainPill";
 import LiveIngestPanel from "./components/LiveIngestPanel";
 import BoothActivityPage from "./pages/BoothActivityPage";
+import ChangedMindToaster from "./components/ChangedMindToaster";
 
 // ── Voice widget mounting helper ──────────────────────────
 function MountedVoiceWidget() {
@@ -709,6 +710,7 @@ function App() {
                       <Route path="/settings" element={<SettingsPage />} />
                     </Routes>
                     <MountedVoiceWidget />
+                    <ChangedMindToaster />
                   </div>
                 </ProtectedRoute>
               } />
