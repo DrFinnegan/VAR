@@ -97,6 +97,12 @@ async def startup():
     except Exception as e:
         logger.warning(f"Tamper monitor init failed: {e}")
 
+    try:
+        from self_audit import start_self_audit
+        await start_self_audit(db)
+    except Exception as e:
+        logger.warning(f"Self-audit scheduler init failed: {e}")
+
 
 @app.on_event("shutdown")
 async def shutdown():

@@ -25,7 +25,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.cron import CronTrigger  # noqa: F401  (kept for legacy admin endpoints)
+from datetime import datetime as _dt_now_safe, timezone as _tz_now_safe, timedelta as _td_now_safe
+
+def now_safe():
+    """First run ~60 s after server start so boot finishes before harvest kicks off."""
+    return _dt_now_safe.now(_tz_now_safe.utc).replace(microsecond=0) + _td_now_safe(seconds=60)
 
 from web_learning import ingest_url
 
@@ -33,27 +38,49 @@ logger = logging.getLogger(__name__)
 
 CONFIG_ID = "web_learning"
 SYSTEM_USER = {"id": "system-scheduler", "name": "OCTON Scheduler"}
-MIN_REFRESH_HOURS = 20
+# 2026-02 — Continuous-learning v2:
+#   • daily 3am cron → 3-hour interval so PL/UCL match reports land
+#     in the corpus the same evening as kick-off
+#   • per-feed rate-limit dropped 20h → 4h so the same Guardian/BBC
+#     section page can yield freshly-published match reports through
+#     the day rather than once per 24h
+MIN_REFRESH_HOURS = 4
+SCHEDULE_INTERVAL_HOURS = 3
 
 
 DEFAULT_FEEDS: List[Dict] = [
-    # Public football news roots — article URLs extracted from section pages
-    # may not always yield VAR decisions, but the scheduler dedupes per-URL,
-    # so leaving these enabled keeps the precedent corpus growing daily.
-    # Admins can disable individual feeds from the Training Library UI.
+    # ── Section/landing pages — daily PL + UCL match reports ───────
+    # These section pages publish multiple match reports a day. The
+    # extractor de-dupes per article URL, so re-hitting them every
+    # few hours yields fresh precedent without spam.
     {"url": "https://www.theguardian.com/football",
      "label": "The Guardian · Football",          "enabled": True},
+    {"url": "https://www.theguardian.com/football/champions-league",
+     "label": "The Guardian · Champions League",  "enabled": True},
+    {"url": "https://www.theguardian.com/football/premierleague",
+     "label": "The Guardian · Premier League",    "enabled": True},
     {"url": "https://www.espn.com/soccer/",
      "label": "ESPN Soccer",                       "enabled": True},
+    {"url": "https://www.espn.com/soccer/league/_/name/eng.1",
+     "label": "ESPN · English Premier League",    "enabled": True},
+    {"url": "https://www.espn.com/soccer/league/_/name/uefa.champions",
+     "label": "ESPN · UEFA Champions League",     "enabled": True},
     {"url": "https://www.bbc.com/sport/football",
      "label": "BBC Sport · Football",              "enabled": True},
-    # VAR-specific authoritative sources — much higher hit-rate for our
-    # precedent extractor (Premier League officiating + dedicated VAR
-    # decision/explanation pages).
+    {"url": "https://www.bbc.com/sport/football/premier-league",
+     "label": "BBC Sport · Premier League",       "enabled": True},
+    {"url": "https://www.bbc.com/sport/football/champions-league",
+     "label": "BBC Sport · Champions League",     "enabled": True},
     {"url": "https://www.premierleague.com/news",
      "label": "Premier League · Official News",   "enabled": True},
     {"url": "https://www.skysports.com/football/news",
      "label": "Sky Sports · Football News",       "enabled": True},
+    {"url": "https://www.skysports.com/premier-league-news",
+     "label": "Sky Sports · Premier League News", "enabled": True},
+    {"url": "https://www.skysports.com/champions-league-news",
+     "label": "Sky Sports · Champions League News","enabled": True},
+    {"url": "https://www.uefa.com/uefachampionsleague/news/",
+     "label": "UEFA · Champions League Official", "enabled": True},
 ]
 
 
@@ -336,13 +363,18 @@ async def start_scheduler(db) -> None:
         _scheduler.shutdown(wait=False)
 
     _scheduler = AsyncIOScheduler(timezone="UTC")
-    trigger = CronTrigger(hour=int(cfg.get("cron_hour", 3)),
-                          minute=int(cfg.get("cron_minute", 15)))
+    # 2026-02: switched from a single daily CronTrigger to a 3-hour
+    # IntervalTrigger so the corpus tracks live matches in near-real
+    # time. The per-feed MIN_REFRESH_HOURS guard keeps publishers from
+    # being hammered.
+    from apscheduler.triggers.interval import IntervalTrigger
+    interval_hours = int(cfg.get("interval_hours", SCHEDULE_INTERVAL_HOURS))
+    trigger = IntervalTrigger(hours=interval_hours)
     _scheduler.add_job(_safe_run, trigger=trigger, id="octon-web-learning",
-                       replace_existing=True)
+                       replace_existing=True, next_run_time=now_safe())
     _scheduler.start()
-    logger.info("Web-learning scheduler started (enabled=%s, %02d:%02d UTC)",
-                cfg.get("enabled"), cfg.get("cron_hour"), cfg.get("cron_minute"))
+    logger.info("Web-learning scheduler started (enabled=%s, every %d h)",
+                cfg.get("enabled"), interval_hours)
 
 
 async def _safe_run() -> None:

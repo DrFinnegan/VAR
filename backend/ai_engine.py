@@ -1331,6 +1331,8 @@ class OctonBrainEngine:
             "precedent_strong_matches": uplift_info["strong_matches"],
             "precedent_avg_similarity": uplift_info["avg_similarity"],
             "precedent_consensus": uplift_info.get("consensus", False),
+            "fresh_precedents": uplift_info.get("fresh_precedents", 0),
+            "fresh_bonus": uplift_info.get("fresh_bonus", 0.0),
             "critical_trigger": critical_trigger,
             "critical_floor_applied": critical_floor_applied,
             "total_processing_time_ms": total_time_ms,

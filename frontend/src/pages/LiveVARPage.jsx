@@ -861,36 +861,62 @@ export const LiveVARPage = () => {
                   {Array.isArray(analysis.precedents_used) && analysis.precedents_used.length > 0 && (
                     <CurtainSection
                       icon={BookOpen}
-                      title="Precedents"
-                      accent="#B366FF"
+                      title={analysis.fresh_precedents > 0 ? `Lessons Applied · ${analysis.fresh_precedents} FRESH` : "Precedents"}
+                      accent={analysis.fresh_precedents > 0 ? "#00FF88" : "#B366FF"}
                       count={analysis.precedents_used.length}
                       defaultOpen={analysis.confidence_uplift > 0}
                       testId="precedents-curtain"
                     >
+                      {analysis.fresh_precedents > 0 && (
+                        <div className="mb-2 px-2 py-1.5 bg-[#00FF88]/[0.08] border border-[#00FF88]/30 flex items-center gap-2" data-testid="lessons-applied-banner">
+                          <span className="inline-block w-1.5 h-1.5 bg-[#00FF88] animate-pulse rounded-full" />
+                          <span className="text-[9px] font-mono tracking-[0.15em] text-[#00FF88] font-bold">
+                            +{(analysis.fresh_bonus || 0).toFixed(1)}% FRESH-PRECEDENT BONUS
+                          </span>
+                          <span className="text-[9px] font-mono text-gray-400 ml-1">
+                            from {analysis.fresh_precedents} recent {analysis.fresh_precedents === 1 ? "lesson" : "lessons"}
+                          </span>
+                        </div>
+                      )}
                       <div className="max-h-[360px] overflow-y-auto pr-2 octon-scrollbar space-y-2" data-testid="precedents-scroll">
-                        {analysis.precedents_used.map((p, i) => (
-                          <div
-                            key={p.id || i}
-                            className="border border-[#B366FF]/20 bg-[#B366FF]/[0.04] p-2 hover:border-[#B366FF]/40 transition-colors"
-                            data-testid={`precedent-${i}`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-[9px] font-mono text-[#B366FF] font-bold">#{i + 1}</span>
-                                <span className="text-[11px] font-body text-white font-semibold truncate">{p.title}</span>
+                        {analysis.precedents_used.map((p, i) => {
+                          const fresh = (p.freshness === "FRESH");
+                          const recent = (p.freshness === "RECENT");
+                          const accent = fresh ? "#00FF88" : recent ? "#FFB800" : "#B366FF";
+                          const badgeLabel = fresh ? `FRESH · ${p.age_days}d` : recent ? `RECENT · ${Math.round(p.age_days)}d` : "CANON";
+                          return (
+                            <div
+                              key={p.id || i}
+                              className="border p-2 transition-colors"
+                              style={{ borderColor: `${accent}33`, backgroundColor: `${accent}0a` }}
+                              data-testid={`precedent-${i}`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-[9px] font-mono font-bold flex-none" style={{ color: accent }}>#{i + 1}</span>
+                                  <span className="text-[11px] font-body text-white font-semibold truncate">{p.title}</span>
+                                </div>
+                                <div className="flex flex-none items-center gap-1">
+                                  <span className="text-[8px] font-mono px-1 border tracking-[0.1em]"
+                                    style={{ color: accent, borderColor: `${accent}55`, backgroundColor: `${accent}1a` }}
+                                    data-testid={`precedent-${i}-freshness`}
+                                  >
+                                    {badgeLabel}
+                                  </span>
+                                  <span className="text-[9px] font-mono px-1 border" style={{ color: accent, borderColor: `${accent}55`, backgroundColor: `${accent}10` }}>
+                                    {(p.similarity * 100).toFixed(1)}%
+                                  </span>
+                                </div>
                               </div>
-                              <span className="text-[9px] font-mono text-[#B366FF] flex-none px-1 border border-[#B366FF]/30" style={{ backgroundColor: "#B366FF10" }}>
-                                {(p.similarity * 100).toFixed(1)}%
-                              </span>
+                              <p className="text-[10px] font-mono text-[#00FF88]/80 mt-1">→ {p.correct_decision}</p>
+                              {p.match_context && (p.match_context.teams || p.match_context.year) && (
+                                <p className="text-[9px] font-mono text-gray-600 mt-0.5">
+                                  {p.match_context.teams} {p.match_context.competition ? `· ${p.match_context.competition}` : ""} {p.match_context.year ? `· ${p.match_context.year}` : ""}
+                                </p>
+                              )}
                             </div>
-                            <p className="text-[10px] font-mono text-[#00FF88]/80 mt-1">→ {p.correct_decision}</p>
-                            {p.match_context && (p.match_context.teams || p.match_context.year) && (
-                              <p className="text-[9px] font-mono text-gray-600 mt-0.5">
-                                {p.match_context.teams} {p.match_context.competition ? `· ${p.match_context.competition}` : ""} {p.match_context.year ? `· ${p.match_context.year}` : ""}
-                              </p>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </CurtainSection>
                   )}

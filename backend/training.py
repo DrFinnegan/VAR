@@ -12,6 +12,7 @@ import re
 import json
 import time
 import logging
+from datetime import datetime, timezone
 from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,7 @@ async def retrieve_precedents(
         return []
 
     scored: List[Dict] = []
+    now_dt = datetime.now(timezone.utc)
     for c in cases:
         case_text = " ".join([
             c.get("title") or "",
@@ -85,6 +87,34 @@ async def retrieve_precedents(
         ])
         all_tags = list(set((c.get("keywords") or []) + (c.get("tags") or []) + (c.get("visual_tags") or [])))
         score = _similarity(description, query_tags or [], case_text, all_tags)
+
+        # ── Recency boost (Continuous Learning v2, 2026-02) ───────
+        # Lessons harvested from recent PL/UCL matches should weigh
+        # more than 10-year-old encyclopedia precedents — the laws
+        # evolve every season and so do referee patterns.
+        #   • case <  7 days old   → similarity ×1.25
+        #   • case < 30 days old   → similarity ×1.15
+        #   • else                 → no change
+        # `created_at` is set by training_seed / training endpoints.
+        age_days: Optional[float] = None
+        try:
+            ca = c.get("created_at") or c.get("source_ingested_at")
+            if ca:
+                if isinstance(ca, str):
+                    ca = datetime.fromisoformat(ca.replace("Z", "+00:00"))
+                if ca.tzinfo is None:
+                    ca = ca.replace(tzinfo=timezone.utc)
+                age_days = (now_dt - ca).total_seconds() / 86400.0
+        except Exception:
+            age_days = None
+
+        recency_factor = 1.0
+        if age_days is not None:
+            if age_days < 7:
+                recency_factor = 1.25
+            elif age_days < 30:
+                recency_factor = 1.15
+        score = score * recency_factor
 
         # Landmark-precedent boost — iconic cases (Hand of God, Lampard ghost
         # goal, Henry vs Ireland, etc.) are universally recognised legal
@@ -107,6 +137,19 @@ async def retrieve_precedents(
             score = max(score, 0.18)  # floor so landmark precedents always retrieve
 
         if score >= min_score:
+            # Freshness label for prompt + UI: how the engine should
+            # weight this lesson. "FRESH" precedents are very recent
+            # match reports; "RECENT" are within a month; "CANON"
+            # are settled long-standing precedents.
+            if age_days is None:
+                freshness = "CANON"
+            elif age_days < 7:
+                freshness = "FRESH"
+            elif age_days < 30:
+                freshness = "RECENT"
+            else:
+                freshness = "CANON"
+
             scored.append({
                 "id": c["id"],
                 "title": c.get("title"),
@@ -120,6 +163,9 @@ async def retrieve_precedents(
                 "media_storage_path": c.get("media_storage_path"),
                 "thumbnail_storage_path": c.get("thumbnail_storage_path"),
                 "similarity": score,
+                "age_days": round(age_days, 1) if age_days is not None else None,
+                "freshness": freshness,
+                "source_url": c.get("source_url"),
             })
 
     scored.sort(key=lambda x: x["similarity"], reverse=True)
@@ -166,12 +212,21 @@ def compute_confidence_uplift(precedents: List[Dict]) -> Dict:
     raw = top_sim * 50.0 + (len(strong) - 1) * 2.5
     if consensus:
         raw += 4.0
+    # Fresh-precedent bonus: each precedent created within the last
+    # 30 days adds +1.5 % uplift, capped to +6 %. This is what makes
+    # OCTON visibly improve as new PL/UCL match reports flow into the
+    # corpus — recent rulings dominate stale ones.
+    fresh_count = sum(1 for p in strong if (p.get("freshness") in ("FRESH", "RECENT")))
+    fresh_bonus = min(6.0, fresh_count * 1.5)
+    raw += fresh_bonus
     uplift = round(max(0.0, min(30.0, raw)), 1)
     return {
         "uplift": uplift,
         "strong_matches": len(strong),
         "avg_similarity": round(avg_sim, 3),
         "consensus": consensus,
+        "fresh_precedents": fresh_count,
+        "fresh_bonus": round(fresh_bonus, 1),
     }
 
 
@@ -205,14 +260,25 @@ def build_precedent_prompt(precedents: List[Dict]) -> str:
             ctx_parts.append(f"min {minute}")
         ctx_line = f" [{' · '.join(ctx_parts)}]" if ctx_parts else ""
         laws = ", ".join(p.get("law_references") or [])
+        # Freshness badge — tells Neocortex to weight recent lessons higher
+        freshness = p.get("freshness") or "CANON"
+        age_days = p.get("age_days")
+        if freshness == "FRESH" and age_days is not None:
+            fresh_tag = f" 🆕 FRESH · {age_days:.0f} d old"
+        elif freshness == "RECENT" and age_days is not None:
+            fresh_tag = f" ⏱ RECENT · {age_days:.0f} d old"
+        else:
+            fresh_tag = "  📜 CANON"
         lines.append(
-            f"  {i}. \"{p.get('title','Precedent')}\"{ctx_line}\n"
+            f"  {i}.{fresh_tag}  \"{p.get('title','Precedent')}\"{ctx_line}\n"
             f"     Rationale: {p.get('rationale','')[:220]}\n"
             f"     Correct ruling: {p.get('correct_decision','')}\n"
             f"     Laws: {laws or 'n/a'}    Similarity: {p['similarity']*100:.1f}%"
         )
     lines.append(
         "When a precedent matches closely, defer to its ruling unless the facts diverge materially. "
+        "FRESH precedents (last 7 days) reflect this season's referee guidance and should weigh "
+        "MORE than older CANON entries when the laws-of-the-game application is contested. "
         "In your reasoning, cite the precedent by TEAM-NAMES + DATE (and REFEREE where listed) to "
         "demonstrate institutional knowledge — e.g. \"consistent with Liverpool vs Tottenham "
         "(2021-11-07, referee Paul Tierney): Law 11 offside interference via blocked line-of-sight.\" "
