@@ -317,6 +317,7 @@ async def create_incident(data: IncidentCreate, request: Request):
 async def get_incidents(
     status: Optional[str] = None,
     incident_type: Optional[str] = None,
+    match_id: Optional[str] = None,
     limit: int = Query(50, ge=1, le=200),
 ):
     query = {}
@@ -324,6 +325,22 @@ async def get_incidents(
         query["decision_status"] = status
     if incident_type:
         query["incident_type"] = incident_type
+    # Match-Wall deep-link support: when a tile is clicked the frontend
+    # passes ?match_id=<id>. We mirror the lookup logic used by the
+    # `/matches/live` aggregator so the result matches the tile's count
+    # — i.e. incidents tied to this match_id OR tagged with either team
+    # name (covers legacy seed incidents that pre-date match wiring).
+    if match_id:
+        match_doc = await db.matches.find_one(
+            {"id": match_id},
+            {"_id": 0, "team_home": 1, "team_away": 1},
+        )
+        ors = [{"match_id": match_id}]
+        if match_doc:
+            for tn in (match_doc.get("team_home"), match_doc.get("team_away")):
+                if tn:
+                    ors.append({"team_involved": tn})
+        query["$or"] = ors
     return (
         await db.incidents.find(query, {"_id": 0})
         .sort("created_at", -1)

@@ -163,11 +163,9 @@ export const LiveVARPage = () => {
         axios.get(`${API}/analytics/overview`),
         axios.get(`${API}/matches?limit=20`),
       ]);
-      let filteredIncidents = incRes.data;
-      // Server doesn't support match_id filter on this endpoint yet; do it client-side
-      if (matchFilterId && matchFilterId !== "all") {
-        filteredIncidents = filteredIncidents.filter(i => i.match_id === matchFilterId);
-      }
+      // Backend now filters by match_id (with team-name $or fallback) so the
+      // result already matches the Match-Wall tile count — no client filter.
+      const filteredIncidents = incRes.data || [];
       setIncidents(filteredIncidents);
       setAnalytics(anaRes.data);
       setMatches(matchRes.data || []);

@@ -167,6 +167,104 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
     a.click();
   };
 
+  // Single-frame referee export — the CURRENT frame with offside lines and
+  // verdict overlay burned in. For referee match-report attachments where
+  // a single annotated still is preferred over the full multi-frame pack.
+  const downloadCurrentFrame = async () => {
+    if (!frames.length) return;
+    const im = await new Promise((res) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.src = `data:image/jpeg;base64,${frames[idx]}`;
+    });
+    const W = im.width, H = im.height;
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H + 56;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, W, H + 56);
+    ctx.drawImage(im, 0, 0, W, H);
+
+    // Draw offside lines if this is an offside frame and we have markers.
+    if (mk) {
+      // Defender line — amber dashed
+      if (typeof mk.offside_line_x === "number") {
+        const x = mk.offside_line_x * W;
+        ctx.strokeStyle = "#FFB800";
+        ctx.lineWidth = Math.max(2, W / 600);
+        ctx.setLineDash([10, 6]);
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#000";
+        ctx.fillRect(x - 56, 8, 112, 22);
+        ctx.strokeStyle = "#FFB800"; ctx.lineWidth = 1;
+        ctx.strokeRect(x - 56, 8, 112, 22);
+        ctx.fillStyle = "#FFB800";
+        ctx.font = "bold 13px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("DEFENDER", x, 24);
+      }
+      // Attacker line — cyan dashed
+      if (typeof mk.attacker_x === "number") {
+        const x = mk.attacker_x * W;
+        ctx.strokeStyle = "#00E5FF";
+        ctx.lineWidth = Math.max(2, W / 600);
+        ctx.setLineDash([10, 6]);
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#000";
+        ctx.fillRect(x - 56, 36, 112, 22);
+        ctx.strokeStyle = "#00E5FF"; ctx.lineWidth = 1;
+        ctx.strokeRect(x - 56, 36, 112, 22);
+        ctx.fillStyle = "#00E5FF";
+        ctx.font = "bold 13px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("ATTACKER", x, 52);
+      }
+      // Verdict pill (bottom-right of image)
+      if (mk.verdict) {
+        const v = mk.verdict.toUpperCase();
+        const vc = mk.verdict === "offside" ? "#FF3333"
+                  : mk.verdict === "onside" ? "#00FF88"
+                  : "#94A3B8";
+        ctx.font = "bold 16px monospace";
+        const text = mk.daylight_cm != null
+          ? `${v}  ${Math.abs(mk.daylight_cm)}cm ${mk.daylight_cm >= 0 ? "BEYOND" : "BEHIND"}`
+          : v;
+        const tw = ctx.measureText(text).width;
+        ctx.fillStyle = "#000";
+        ctx.fillRect(W - tw - 36, H - 44, tw + 24, 28);
+        ctx.strokeStyle = vc; ctx.lineWidth = 2;
+        ctx.strokeRect(W - tw - 36, H - 44, tw + 24, 28);
+        ctx.fillStyle = vc;
+        ctx.textAlign = "left";
+        ctx.fillText(text, W - tw - 24, H - 24);
+      }
+    }
+
+    // Footer strip — referee report header
+    ctx.fillStyle = "#0A0A0F";
+    ctx.fillRect(0, H, W, 56);
+    ctx.fillStyle = "#00E5FF";
+    ctx.font = "bold 11px monospace";
+    ctx.textAlign = "left";
+    ctx.fillText("OCTON VAR · REFEREE EXPORT", 12, H + 18);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 13px monospace";
+    const verdict = (decision || "Verdict").slice(0, 90);
+    ctx.fillText(verdict, 12, H + 38);
+    ctx.fillStyle = "#94A3B8";
+    ctx.font = "11px monospace";
+    ctx.textAlign = "right";
+    const meta = `Frame ${idx + 1}/${frames.length} · conf ${conf?.toFixed?.(1) || conf || "—"}% · ${incident?.id?.slice(0, 8) || ""}`;
+    ctx.fillText(meta, W - 12, H + 38);
+
+    const a = document.createElement("a");
+    a.download = `octon-frame-${incident?.id?.slice(0, 8) || "incident"}-${idx + 1}.png`;
+    a.href = c.toDataURL("image/png");
+    a.click();
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
@@ -190,6 +288,12 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
             </div>
           </div>
           <div className="flex items-center gap-1.5 flex-none">
+            {isOffside && frames.length > 0 && (
+              <Button size="sm" variant="ghost" onClick={downloadCurrentFrame} className="text-gray-400 hover:text-[#FFB800] h-8 px-2 rounded-none" data-testid="octon-saw-export-frame" title="Export current frame with offside lines + verdict (referee report)">
+                <span className="text-[9px] font-mono tracking-[0.2em] mr-1">FRAME</span>
+                <Download className="w-3.5 h-3.5" />
+              </Button>
+            )}
             <Button size="sm" variant="ghost" onClick={downloadEvidence} className="text-gray-400 hover:text-[#00E5FF] h-8 px-2 rounded-none" data-testid="octon-saw-download" title="Download evidence pack PNG">
               <Download className="w-3.5 h-3.5" />
             </Button>
