@@ -25,7 +25,28 @@ export const AnnotationToolbar = ({ activeTool, setActiveTool, activeColor, setA
   };
 
   const addOffsideLine = () => {
-    setAnnotations(prev => [...prev, { type: "offside_line", y: 65, color: "#FFB800", id: Date.now() }]);
+    // Vertical offside line — defender's forward-most body-part position
+    // (amber). Draggable left/right on the pitch, with a DEFENDER label.
+    setAnnotations(prev => [...prev, {
+      type: "offside_line_v", x: 50, color: "#FFB800", label: "DEFENDER",
+      id: Date.now(), angle: activeAngle,
+    }]);
+  };
+  const addAttackerLine = () => {
+    // Attacker's forward-most body-part (cyan). Together with the amber
+    // defender line, this is the canonical PGMOL offside visualisation.
+    setAnnotations(prev => [...prev, {
+      type: "offside_line_v", x: 55, color: "#00E5FF", label: "ATTACKER",
+      id: Date.now() + 1, angle: activeAngle,
+    }]);
+  };
+  const addOffsideLineHorizontal = () => {
+    // Horizontal variant — kept for behind-goal camera angles where
+    // the pitch runs vertically on screen.
+    setAnnotations(prev => [...prev, {
+      type: "offside_line", y: 65, color: "#FFB800",
+      id: Date.now(), angle: activeAngle,
+    }]);
   };
 
   return (
@@ -46,7 +67,9 @@ export const AnnotationToolbar = ({ activeTool, setActiveTool, activeColor, setA
         <button onClick={() => setShowFormations(!showFormations)} title="Team Formation Overlay"
           className={`h-7 px-2 flex items-center gap-1 text-[9px] font-mono transition-all ${showFormations ? 'bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/40' : 'text-gray-500 hover:text-white border border-transparent'}`}
           data-testid="tool-formation"><Users2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">FORMATION</span></button>
-        <button onClick={addOffsideLine} title="Add Offside Line" className="h-7 px-2 flex items-center gap-1 text-[9px] font-mono text-gray-500 hover:text-[#FFB800] border border-transparent transition-all" data-testid="tool-offside-line"><Layers className="w-3.5 h-3.5" /><span className="hidden sm:inline">OFFSIDE</span></button>
+        <button onClick={addOffsideLine} title="Add vertical offside line (defender, amber — draggable)" className="h-7 px-2 flex items-center gap-1 text-[9px] font-mono text-gray-500 hover:text-[#FFB800] border border-transparent transition-all" data-testid="tool-offside-line"><Layers className="w-3.5 h-3.5" /><span className="hidden sm:inline">OFFSIDE·D</span></button>
+        <button onClick={addAttackerLine} title="Add vertical attacker line (cyan — draggable)" className="h-7 px-2 flex items-center gap-1 text-[9px] font-mono text-gray-500 hover:text-[#00E5FF] border border-transparent transition-all" data-testid="tool-attacker-line"><Layers className="w-3.5 h-3.5" /><span className="hidden sm:inline">OFFSIDE·A</span></button>
+        <button onClick={addOffsideLineHorizontal} title="Add horizontal offside line (behind-goal camera)" className="h-7 px-2 flex items-center gap-1 text-[9px] font-mono text-gray-500 hover:text-[#FFB800]/70 border border-transparent transition-all" data-testid="tool-offside-line-h"><Layers className="w-3.5 h-3.5 rotate-90" /><span className="hidden sm:inline">·H</span></button>
 
         <div className="h-4 w-[1px] bg-white/[0.06] mx-0.5" />
 

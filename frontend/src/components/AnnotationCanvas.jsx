@@ -73,7 +73,13 @@ export const AnnotationCanvas = ({ width, height, annotations, setAnnotations, a
     const pos = getPos(e);
     if (!pos) return;
     if (draggingPlayer !== null) {
-      setAnnotations(prev => prev.map(a => a.id === draggingPlayer ? { ...a, x: pos.x, y: pos.y } : a));
+      setAnnotations(prev => prev.map(a => {
+        if (a.id !== draggingPlayer) return a;
+        // Vertical offside lines drag along X, horizontal along Y, players both.
+        if (a.type === "offside_line_v") return { ...a, x: Math.max(0, Math.min(100, pos.x)) };
+        if (a.type === "offside_line") return { ...a, y: Math.max(0, Math.min(100, pos.y)) };
+        return { ...a, x: pos.x, y: pos.y };
+      }));
       return;
     }
     if (!isDrawing || !startPos) return;
@@ -137,9 +143,24 @@ export const AnnotationCanvas = ({ width, height, annotations, setAnnotations, a
           </g>
         );
         if (a.type === "offside_line") return (
-          <g key={a.id}>
-            <line x1={0} y1={a.y} x2={100} y2={a.y} stroke={a.color} strokeWidth="0.3" strokeDasharray="1.5 0.8" opacity="0.8" />
-            <text x={2} y={a.y - 1} fill={a.color} fontSize="2" fontFamily="monospace" opacity="0.7">OFFSIDE LINE</text>
+          <g key={a.id} style={{ cursor: 'ns-resize' }} onMouseDown={(e) => handlePlayerDragStart(e, a.id)}>
+            {/* Invisible hit-zone so it's draggable */}
+            <line x1={0} y1={a.y} x2={100} y2={a.y} stroke="transparent" strokeWidth="3" />
+            <line x1={0} y1={a.y} x2={100} y2={a.y} stroke={a.color} strokeWidth="0.3" strokeDasharray="1.5 0.8" opacity="0.9" />
+            <text x={2} y={a.y - 1} fill={a.color} fontSize="2" fontFamily="monospace" opacity="0.9">OFFSIDE LINE ↕</text>
+          </g>
+        );
+        if (a.type === "offside_line_v") return (
+          <g key={a.id} style={{ cursor: 'ew-resize' }} onMouseDown={(e) => handlePlayerDragStart(e, a.id)}>
+            {/* Invisible hit-zone so the 0.3-wide stroke is still grab-able */}
+            <line x1={a.x} y1={0} x2={a.x} y2={100} stroke="transparent" strokeWidth="3" />
+            <line x1={a.x} y1={0} x2={a.x} y2={100} stroke={a.color} strokeWidth="0.3" strokeDasharray="1.5 0.8" opacity="0.95" />
+            {/* Label chip at top of line so operators know which is which */}
+            <rect x={a.x - 6} y={1.8} width="12" height="4" fill="#000" stroke={a.color} strokeWidth="0.15" opacity="0.85" />
+            <text x={a.x} y={4.8} textAnchor="middle" fill={a.color} fontSize="2.2" fontFamily="monospace" fontWeight="bold">{a.label || "OFFSIDE"}</text>
+            {/* Drag handle on bottom to make affordance explicit */}
+            <rect x={a.x - 2.5} y={95} width="5" height="3" fill={a.color} opacity="0.55" />
+            <text x={a.x} y={97.3} textAnchor="middle" fill="#000" fontSize="1.8" fontFamily="monospace" fontWeight="bold">↔</text>
           </g>
         );
         return null;

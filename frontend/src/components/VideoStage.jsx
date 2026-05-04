@@ -118,6 +118,10 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
         } else if (a.type === "offside_line") {
           ctx.setLineDash([12, 6]); ctx.beginPath(); ctx.moveTo(0, a.y/100*mainH); ctx.lineTo(w, a.y/100*mainH); ctx.stroke(); ctx.setLineDash([]);
           ctx.font = "bold 14px monospace"; ctx.fillText("OFFSIDE LINE", 20, a.y/100*mainH - 8);
+        } else if (a.type === "offside_line_v") {
+          ctx.setLineDash([12, 6]); ctx.beginPath(); ctx.moveTo(a.x/100*w, 0); ctx.lineTo(a.x/100*w, mainH); ctx.stroke(); ctx.setLineDash([]);
+          ctx.font = "bold 14px monospace"; ctx.textAlign = "center"; ctx.fillText(a.label || "OFFSIDE", a.x/100*w, 20);
+          ctx.textAlign = "start";
         }
       });
 
@@ -188,6 +192,8 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
             ctx.fillStyle = a.color;
           } else if (a.type === "offside_line") {
             ctx.setLineDash([8, 4]); ctx.beginPath(); ctx.moveTo(0, a.y/100*h); ctx.lineTo(w, a.y/100*h); ctx.stroke(); ctx.setLineDash([]);
+          } else if (a.type === "offside_line_v") {
+            ctx.setLineDash([8, 4]); ctx.beginPath(); ctx.moveTo(a.x/100*w, 0); ctx.lineTo(a.x/100*w, h); ctx.stroke(); ctx.setLineDash([]);
           }
         });
         return canvas.toDataURL("image/jpeg", 0.75);

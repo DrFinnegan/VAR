@@ -90,6 +90,10 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
   const evd = ev[cur.evidence_for_decision] || ev.neutral;
   const conf = analysis?.final_confidence;
   const decision = analysis?.suggested_decision;
+  const offsideMarkers = analysis?.offside_markers || [];
+  const isOffside = (analysis?.cited_clause || "").toLowerCase().includes("offside")
+    || (decision || "").toLowerCase().includes("offside");
+  const mk = isOffside ? offsideMarkers[idx] : null;
 
   const downloadEvidence = async () => {
     if (!frames.length) return;
@@ -178,6 +182,42 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
               <span className="absolute top-2 left-2 px-2 py-0.5 bg-black/70 text-[10px] font-mono text-[#00E5FF]">
                 #{idx + 1} / {frames.length}
               </span>
+            )}
+            {/* Auto offside markers overlay for offside incidents */}
+            {frames.length > 0 && mk && (
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                {typeof mk.offside_line_x === "number" && (
+                  <g>
+                    <line x1={mk.offside_line_x * 100} y1="0" x2={mk.offside_line_x * 100} y2="100" stroke="#FFB800" strokeWidth="0.35" strokeDasharray="1.5 0.8" opacity="0.95" />
+                    <rect x={mk.offside_line_x * 100 - 7} y="2" width="14" height="4" fill="#000" stroke="#FFB800" strokeWidth="0.15" opacity="0.9" />
+                    <text x={mk.offside_line_x * 100} y="5.2" textAnchor="middle" fill="#FFB800" fontSize="2.6" fontFamily="monospace" fontWeight="bold">DEFENDER</text>
+                  </g>
+                )}
+                {typeof mk.attacker_x === "number" && (
+                  <g>
+                    <line x1={mk.attacker_x * 100} y1="0" x2={mk.attacker_x * 100} y2="100" stroke="#00E5FF" strokeWidth="0.35" strokeDasharray="1.5 0.8" opacity="0.95" />
+                    <rect x={mk.attacker_x * 100 - 7} y="93" width="14" height="4" fill="#000" stroke="#00E5FF" strokeWidth="0.15" opacity="0.9" />
+                    <text x={mk.attacker_x * 100} y="96.2" textAnchor="middle" fill="#00E5FF" fontSize="2.6" fontFamily="monospace" fontWeight="bold">ATTACKER</text>
+                  </g>
+                )}
+              </svg>
+            )}
+            {mk?.verdict && (
+              <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/90 border"
+                style={{ borderColor: mk.verdict === "offside" ? "#FF333399" : mk.verdict === "onside" ? "#00FF8899" : "#94A3B899" }}
+                data-testid="octon-offside-verdict-chip"
+              >
+                <span className="text-[10px] font-mono font-bold tracking-[0.15em]"
+                  style={{ color: mk.verdict === "offside" ? "#FF3333" : mk.verdict === "onside" ? "#00FF88" : "#94A3B8" }}
+                >
+                  {mk.verdict.toUpperCase()}
+                </span>
+                {mk.daylight_cm != null && (
+                  <span className="ml-2 text-[10px] font-mono text-white">
+                    {mk.daylight_cm} cm {mk.verdict === "offside" ? "beyond line" : "behind line"}
+                  </span>
+                )}
+              </div>
             )}
             {cur.evidence_for_decision && (
               <span

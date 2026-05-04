@@ -834,6 +834,18 @@ class NeoCortexAnalyzer:
                     '     // evidence trail — be specific (positions, ball location, body parts in\n'
                     '     // contact, score line if visible). 1-2 sentences each.\n'
                     '     {"frame": 1, "observation": "string", "evidence_for_decision": "supports|neutral|contradicts"}\n'
+                    '  ],\n'
+                    '  "offside_markers": [\n'
+                    '     // REQUIRED ONLY when incident_type == "offside" AND visual frames are attached.\n'
+                    '     // One object per frame. Estimate the horizontal position (on the image) of the\n'
+                    '     // offside-line (second-last-defender\'s forward-most body part) and the attacker\'s\n'
+                    '     // forward-most body part, each as a decimal 0.0 (left edge) to 1.0 (right edge).\n'
+                    '     // The frontend draws two dashed vertical lines on the frame — amber for defender,\n'
+                    '     // cyan for attacker — so the verdict is EVIDENT. If you cannot reliably locate\n'
+                    '     // either line in a given frame, set that field to null (do NOT guess).\n'
+                    '     // verdict: "offside" | "onside" | "unclear". daylight_cm: positive integer (attacker\n'
+                    '     // beyond line when offside) or null. note: 1 short phrase.\n'
+                    '     {"frame": 1, "offside_line_x": 0.62, "attacker_x": 0.67, "verdict": "offside", "daylight_cm": 35, "note": "shoulder past the last defender"}\n'
                     '  ]\n'
                     "}"
                 ),
@@ -1004,6 +1016,39 @@ class NeoCortexAnalyzer:
             except (TypeError, ValueError):
                 frame_breakdown = []
 
+            # ── Offside markers (for auto-drawn PGMOL-style lines) ───
+            offside_markers: List[Dict] = []
+            try:
+                def _clamp(v):
+                    try:
+                        v = float(v)
+                    except (TypeError, ValueError):
+                        return None
+                    if v != v:  # NaN
+                        return None
+                    return max(0.0, min(1.0, v))
+                for om in analysis_data.get("offside_markers") or []:
+                    if not isinstance(om, dict):
+                        continue
+                    verdict = str(om.get("verdict", "unclear")).lower().strip()
+                    if verdict not in ("offside", "onside", "unclear"):
+                        verdict = "unclear"
+                    dl = om.get("daylight_cm")
+                    try:
+                        dl = int(dl) if dl is not None else None
+                    except (TypeError, ValueError):
+                        dl = None
+                    offside_markers.append({
+                        "frame": int(om.get("frame", len(offside_markers) + 1)),
+                        "offside_line_x": _clamp(om.get("offside_line_x")),
+                        "attacker_x": _clamp(om.get("attacker_x")),
+                        "verdict": verdict,
+                        "daylight_cm": dl,
+                        "note": str(om.get("note", ""))[:160] if om.get("note") else None,
+                    })
+            except (TypeError, ValueError):
+                offside_markers = []
+
             return {
                 "stage": "neo_cortex",
                 "confidence_score": min(
@@ -1025,6 +1070,7 @@ class NeoCortexAnalyzer:
                 "angle_confidence_delta": angle_confidence_delta,
                 "angle_disagreement": angle_disagreement,
                 "frame_breakdown": frame_breakdown,
+                "offside_markers": offside_markers,
                 "processing_time_ms": processing_ms,
             }
 
@@ -1385,6 +1431,7 @@ class OctonBrainEngine:
             "risk_level": neo_cortex_result.get("risk_level", "medium"),
             "angle_assessments": neo_cortex_result.get("angle_assessments", []),
             "frame_breakdown": neo_cortex_result.get("frame_breakdown", []),
+            "offside_markers": neo_cortex_result.get("offside_markers", []),
             "angle_confidence_delta": neo_cortex_result.get("angle_confidence_delta", 0.0),
             "angle_disagreement": neo_cortex_result.get("angle_disagreement", False),
             "neo_cortex_notes": neo_cortex_result.get("neo_cortex_notes", ""),

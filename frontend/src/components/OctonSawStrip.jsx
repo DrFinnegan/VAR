@@ -23,6 +23,16 @@ const ev = {
 export default function OctonSawStrip({ analysis, onExplain }) {
   const frames = analysis?.analysed_frames_b64 || [];
   const breakdown = analysis?.frame_breakdown || [];
+  // Auto offside markers from the AI engine — one per frame:
+  //   { frame: 1-indexed, offside_line_x: 0..1 or null,
+  //     attacker_x: 0..1 or null, verdict: "offside"|"onside"|"unclear",
+  //     daylight_cm: number|null, note: string|null }
+  // When present AND incident is offside, we draw an amber defender line
+  // and a cyan attacker line on each thumbnail — this is the PGMOL-style
+  // visual that instantly makes the verdict evident.
+  const offsideMarkers = analysis?.offside_markers || [];
+  const isOffsideIncident = (analysis?.cited_clause || "").toLowerCase().includes("offside")
+    || (analysis?.suggested_decision || "").toLowerCase().includes("offside");
   const frameCount = analysis?.camera_angles_analyzed
     ?? frames.length
     ?? 0;
@@ -95,6 +105,25 @@ export default function OctonSawStrip({ analysis, onExplain }) {
                 loading="lazy"
                 decoding="async"
               />
+              {/* Auto offside-line overlay */}
+              {isOffsideIncident && offsideMarkers[i] && (
+                <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  {typeof offsideMarkers[i].offside_line_x === "number" && (
+                    <g>
+                      <line x1={offsideMarkers[i].offside_line_x * 100} y1="0" x2={offsideMarkers[i].offside_line_x * 100} y2="100" stroke="#FFB800" strokeWidth="0.5" strokeDasharray="1.5 0.8" opacity="0.95" />
+                      <rect x={offsideMarkers[i].offside_line_x * 100 - 5} y="2" width="10" height="3.5" fill="#000" stroke="#FFB800" strokeWidth="0.15" opacity="0.9" />
+                      <text x={offsideMarkers[i].offside_line_x * 100} y="4.4" textAnchor="middle" fill="#FFB800" fontSize="2" fontFamily="monospace" fontWeight="bold">DEF</text>
+                    </g>
+                  )}
+                  {typeof offsideMarkers[i].attacker_x === "number" && (
+                    <g>
+                      <line x1={offsideMarkers[i].attacker_x * 100} y1="0" x2={offsideMarkers[i].attacker_x * 100} y2="100" stroke="#00E5FF" strokeWidth="0.5" strokeDasharray="1.5 0.8" opacity="0.95" />
+                      <rect x={offsideMarkers[i].attacker_x * 100 - 5} y="93" width="10" height="3.5" fill="#000" stroke="#00E5FF" strokeWidth="0.15" opacity="0.9" />
+                      <text x={offsideMarkers[i].attacker_x * 100} y="95.4" textAnchor="middle" fill="#00E5FF" fontSize="2" fontFamily="monospace" fontWeight="bold">ATT</text>
+                    </g>
+                  )}
+                </svg>
+              )}
               <span className="absolute top-1 left-1 px-1 bg-black/70 text-[8px] font-mono text-[#00E5FF]">
                 #{i + 1}
               </span>
@@ -104,6 +133,15 @@ export default function OctonSawStrip({ analysis, onExplain }) {
                   style={{ color: ev[breakdown[i].evidence_for_decision].color }}
                 >
                   {ev[breakdown[i].evidence_for_decision].label}
+                </span>
+              )}
+              {isOffsideIncident && offsideMarkers[i]?.verdict && (
+                <span
+                  className="absolute bottom-1 left-1 px-1 bg-black/85 text-[8px] font-mono font-bold tracking-wider"
+                  style={{ color: offsideMarkers[i].verdict === "offside" ? "#FF3333" : offsideMarkers[i].verdict === "onside" ? "#00FF88" : "#94A3B8" }}
+                >
+                  {offsideMarkers[i].verdict.toUpperCase()}
+                  {offsideMarkers[i].daylight_cm != null && ` · ${offsideMarkers[i].daylight_cm}cm`}
                 </span>
               )}
             </div>

@@ -258,6 +258,7 @@ export const DecisionComparisonMode = ({ incident, onClose }) => {
         else if (a.type === "marker") { ctx.beginPath(); ctx.arc(offsetX + a.x/100*areaW, pY + 25 + a.y/100*pH, 6, 0, Math.PI*2); ctx.fill(); }
         else if (a.type === "formation_player") { ctx.beginPath(); ctx.arc(offsetX + a.x/100*areaW, pY + 25 + a.y/100*pH, 8, 0, Math.PI*2); ctx.fill(); }
         else if (a.type === "offside_line") { ctx.setLineDash([8, 4]); ctx.beginPath(); ctx.moveTo(offsetX, pY + 25 + a.y/100*pH); ctx.lineTo(offsetX + areaW, pY + 25 + a.y/100*pH); ctx.stroke(); ctx.setLineDash([]); }
+        else if (a.type === "offside_line_v") { ctx.setLineDash([8, 4]); ctx.beginPath(); ctx.moveTo(offsetX + a.x/100*areaW, pY + 25); ctx.lineTo(offsetX + a.x/100*areaW, pY + 25 + pH); ctx.stroke(); ctx.setLineDash([]); }
       });
     };
     drawAnnotations(beforeAnnotations, 0, w/2 - 5);
