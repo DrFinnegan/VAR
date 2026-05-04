@@ -23,16 +23,19 @@ const ev = {
 export default function OctonSawStrip({ analysis, onExplain }) {
   const frames = analysis?.analysed_frames_b64 || [];
   const breakdown = analysis?.frame_breakdown || [];
-  // Auto offside markers from the AI engine — one per frame:
-  //   { frame: 1-indexed, offside_line_x: 0..1 or null,
-  //     attacker_x: 0..1 or null, verdict: "offside"|"onside"|"unclear",
-  //     daylight_cm: number|null, note: string|null }
-  // When present AND incident is offside, we draw an amber defender line
-  // and a cyan attacker line on each thumbnail — this is the PGMOL-style
-  // visual that instantly makes the verdict evident.
   const offsideMarkers = analysis?.offside_markers || [];
   const isOffsideIncident = (analysis?.cited_clause || "").toLowerCase().includes("offside")
-    || (analysis?.suggested_decision || "").toLowerCase().includes("offside");
+    || (analysis?.suggested_decision || "").toLowerCase().includes("offside")
+    || (analysis?.incident_type === "offside");
+  // Fallback: if offside incident but no valid LLM-estimated lines,
+  // synthesise a pair of centered placeholder markers so the operator
+  // always sees dashed lines on a fresh review. Marked ESTIMATE.
+  const markerFor = (i) => {
+    const m = offsideMarkers[i];
+    if (m && (typeof m.offside_line_x === "number" || typeof m.attacker_x === "number")) return m;
+    if (!isOffsideIncident) return null;
+    return { offside_line_x: 0.48, attacker_x: 0.52, verdict: "estimate", daylight_cm: null, note: "ESTIMATE — drag in EXPLAIN to calibrate" };
+  };
   const frameCount = analysis?.camera_angles_analyzed
     ?? frames.length
     ?? 0;
@@ -105,21 +108,21 @@ export default function OctonSawStrip({ analysis, onExplain }) {
                 loading="lazy"
                 decoding="async"
               />
-              {/* Auto offside-line overlay */}
-              {isOffsideIncident && offsideMarkers[i] && (
+              {/* Auto offside-line overlay (with client-side fallback) */}
+              {isOffsideIncident && markerFor(i) && (
                 <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
-                  {typeof offsideMarkers[i].offside_line_x === "number" && (
-                    <g>
-                      <line x1={offsideMarkers[i].offside_line_x * 100} y1="0" x2={offsideMarkers[i].offside_line_x * 100} y2="100" stroke="#FFB800" strokeWidth="0.5" strokeDasharray="1.5 0.8" opacity="0.95" />
-                      <rect x={offsideMarkers[i].offside_line_x * 100 - 5} y="2" width="10" height="3.5" fill="#000" stroke="#FFB800" strokeWidth="0.15" opacity="0.9" />
-                      <text x={offsideMarkers[i].offside_line_x * 100} y="4.4" textAnchor="middle" fill="#FFB800" fontSize="2" fontFamily="monospace" fontWeight="bold">DEF</text>
+                  {typeof markerFor(i).offside_line_x === "number" && (
+                    <g opacity={markerFor(i).verdict === "estimate" ? 0.55 : 1}>
+                      <line x1={markerFor(i).offside_line_x * 100} y1="0" x2={markerFor(i).offside_line_x * 100} y2="100" stroke="#FFB800" strokeWidth="0.5" strokeDasharray="1.5 0.8" />
+                      <rect x={markerFor(i).offside_line_x * 100 - 5} y="2" width="10" height="3.5" fill="#000" stroke="#FFB800" strokeWidth="0.15" opacity="0.9" />
+                      <text x={markerFor(i).offside_line_x * 100} y="4.4" textAnchor="middle" fill="#FFB800" fontSize="2" fontFamily="monospace" fontWeight="bold">DEF</text>
                     </g>
                   )}
-                  {typeof offsideMarkers[i].attacker_x === "number" && (
-                    <g>
-                      <line x1={offsideMarkers[i].attacker_x * 100} y1="0" x2={offsideMarkers[i].attacker_x * 100} y2="100" stroke="#00E5FF" strokeWidth="0.5" strokeDasharray="1.5 0.8" opacity="0.95" />
-                      <rect x={offsideMarkers[i].attacker_x * 100 - 5} y="93" width="10" height="3.5" fill="#000" stroke="#00E5FF" strokeWidth="0.15" opacity="0.9" />
-                      <text x={offsideMarkers[i].attacker_x * 100} y="95.4" textAnchor="middle" fill="#00E5FF" fontSize="2" fontFamily="monospace" fontWeight="bold">ATT</text>
+                  {typeof markerFor(i).attacker_x === "number" && (
+                    <g opacity={markerFor(i).verdict === "estimate" ? 0.55 : 1}>
+                      <line x1={markerFor(i).attacker_x * 100} y1="0" x2={markerFor(i).attacker_x * 100} y2="100" stroke="#00E5FF" strokeWidth="0.5" strokeDasharray="1.5 0.8" />
+                      <rect x={markerFor(i).attacker_x * 100 - 5} y="93" width="10" height="3.5" fill="#000" stroke="#00E5FF" strokeWidth="0.15" opacity="0.9" />
+                      <text x={markerFor(i).attacker_x * 100} y="95.4" textAnchor="middle" fill="#00E5FF" fontSize="2" fontFamily="monospace" fontWeight="bold">ATT</text>
                     </g>
                   )}
                 </svg>
@@ -135,13 +138,13 @@ export default function OctonSawStrip({ analysis, onExplain }) {
                   {ev[breakdown[i].evidence_for_decision].label}
                 </span>
               )}
-              {isOffsideIncident && offsideMarkers[i]?.verdict && (
+              {isOffsideIncident && markerFor(i)?.verdict && (
                 <span
                   className="absolute bottom-1 left-1 px-1 bg-black/85 text-[8px] font-mono font-bold tracking-wider"
-                  style={{ color: offsideMarkers[i].verdict === "offside" ? "#FF3333" : offsideMarkers[i].verdict === "onside" ? "#00FF88" : "#94A3B8" }}
+                  style={{ color: markerFor(i).verdict === "offside" ? "#FF3333" : markerFor(i).verdict === "onside" ? "#00FF88" : markerFor(i).verdict === "estimate" ? "#94A3B8" : "#94A3B8" }}
                 >
-                  {offsideMarkers[i].verdict.toUpperCase()}
-                  {offsideMarkers[i].daylight_cm != null && ` · ${offsideMarkers[i].daylight_cm}cm`}
+                  {markerFor(i).verdict.toUpperCase()}
+                  {markerFor(i).daylight_cm != null && ` · ${markerFor(i).daylight_cm}cm`}
                 </span>
               )}
             </div>

@@ -31,6 +31,11 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
   const [cinema, setCinema] = useState(false);
   const [fading, setFading] = useState(false);
   const dialogRef = useRef(null);
+  // Offside drag-calibration state — declared BEFORE any early return to
+  // comply with rules-of-hooks. Values are computed conditionally below.
+  const [dragLines, setDragLines] = useState({ def: 0.48, att: 0.52 });
+  const [dragging, setDragging] = useState(null); // 'def' | 'att' | null
+  const dragRef = useRef(null);
 
   useEffect(() => {
     if (open) {
@@ -42,6 +47,18 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
 
   // Preload all frame images as soon as the modal opens so navigation
   // feels instant and the cinema crossfade is smooth.
+  // Reset drag-calibration lines when frame changes or markers arrive.
+  // Hook lives at top level; reads from props directly.
+  useEffect(() => {
+    if (!open) return;
+    const markers = analysis?.offside_markers || [];
+    const m = markers[idx];
+    const defX = m && typeof m.offside_line_x === "number" ? m.offside_line_x : 0.48;
+    const attX = m && typeof m.attacker_x === "number" ? m.attacker_x : 0.52;
+    setDragLines({ def: defX, att: attX });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, idx, analysis?.offside_markers]);
+
   useEffect(() => {
     if (!open || !frames.length) return;
     frames.forEach((b) => {
@@ -92,8 +109,30 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
   const decision = analysis?.suggested_decision;
   const offsideMarkers = analysis?.offside_markers || [];
   const isOffside = (analysis?.cited_clause || "").toLowerCase().includes("offside")
-    || (decision || "").toLowerCase().includes("offside");
-  const mk = isOffside ? offsideMarkers[idx] : null;
+    || (decision || "").toLowerCase().includes("offside")
+    || (analysis?.incident_type === "offside");
+  const rawMk = offsideMarkers[idx];
+  const hasLlmCoords = rawMk && (typeof rawMk.offside_line_x === "number" || typeof rawMk.attacker_x === "number");
+  const mk = isOffside ? {
+    offside_line_x: dragLines.def,
+    attacker_x: dragLines.att,
+    verdict: hasLlmCoords ? rawMk.verdict : "estimate",
+    daylight_cm: hasLlmCoords ? rawMk.daylight_cm : null,
+    note: hasLlmCoords ? rawMk.note : "ESTIMATE — drag the amber DEFENDER and cyan ATTACKER lines to calibrate",
+  } : null;
+
+  // Drag handlers (capture plain fns — no hooks, safe after early return)
+  const onMouseDownLine = (which) => (e) => {
+    e.stopPropagation();
+    setDragging(which);
+  };
+  const onMouseMoveFrame = (e) => {
+    if (!dragging || !dragRef.current) return;
+    const rect = dragRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    setDragLines((s) => ({ ...s, [dragging]: x }));
+  };
+  const onMouseUpFrame = () => setDragging(null);
 
   const downloadEvidence = async () => {
     if (!frames.length) return;
@@ -163,13 +202,20 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
         {/* Body */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-3 p-4 overflow-auto">
           {/* Frame */}
-          <div className="lg:col-span-2 relative bg-black border border-white/10 flex items-center justify-center min-h-[280px]">
+          <div
+            className="lg:col-span-2 relative bg-black border border-white/10 flex items-center justify-center min-h-[280px] select-none"
+            ref={dragRef}
+            onMouseMove={onMouseMoveFrame}
+            onMouseUp={onMouseUpFrame}
+            onMouseLeave={onMouseUpFrame}
+          >
             {frames.length ? (
               <img
                 key={idx}
                 src={`data:image/jpeg;base64,${frames[idx]}`}
                 alt={`Frame ${idx + 1}`}
                 decoding="async"
+                draggable="false"
                 className={`w-full max-h-[60vh] object-contain transition-opacity duration-200 ${fading ? "opacity-0" : "opacity-100"}`}
                 data-testid={`octon-saw-modal-frame-${idx}`}
               />
@@ -183,38 +229,49 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
                 #{idx + 1} / {frames.length}
               </span>
             )}
-            {/* Auto offside markers overlay for offside incidents */}
+            {/* Auto offside markers overlay for offside incidents — draggable */}
             {frames.length > 0 && mk && (
-              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ pointerEvents: 'none' }}>
                 {typeof mk.offside_line_x === "number" && (
-                  <g>
-                    <line x1={mk.offside_line_x * 100} y1="0" x2={mk.offside_line_x * 100} y2="100" stroke="#FFB800" strokeWidth="0.35" strokeDasharray="1.5 0.8" opacity="0.95" />
-                    <rect x={mk.offside_line_x * 100 - 7} y="2" width="14" height="4" fill="#000" stroke="#FFB800" strokeWidth="0.15" opacity="0.9" />
+                  <g opacity={mk.verdict === "estimate" ? 0.65 : 0.95} style={{ pointerEvents: 'auto', cursor: 'ew-resize' }} onMouseDown={onMouseDownLine('def')}>
+                    {/* 3-wide transparent hit zone so the 0.35 stroke is grab-able */}
+                    <line x1={mk.offside_line_x * 100} y1="0" x2={mk.offside_line_x * 100} y2="100" stroke="transparent" strokeWidth="3" />
+                    <line x1={mk.offside_line_x * 100} y1="0" x2={mk.offside_line_x * 100} y2="100" stroke="#FFB800" strokeWidth="0.35" strokeDasharray="1.5 0.8" />
+                    <rect x={mk.offside_line_x * 100 - 7} y="2" width="14" height="4" fill="#000" stroke="#FFB800" strokeWidth="0.15" />
                     <text x={mk.offside_line_x * 100} y="5.2" textAnchor="middle" fill="#FFB800" fontSize="2.6" fontFamily="monospace" fontWeight="bold">DEFENDER</text>
+                    <rect x={mk.offside_line_x * 100 - 2.5} y="94" width="5" height="3.2" fill="#FFB800" opacity="0.6" />
+                    <text x={mk.offside_line_x * 100} y="96.3" textAnchor="middle" fill="#000" fontSize="1.9" fontFamily="monospace" fontWeight="bold">↔</text>
                   </g>
                 )}
                 {typeof mk.attacker_x === "number" && (
-                  <g>
-                    <line x1={mk.attacker_x * 100} y1="0" x2={mk.attacker_x * 100} y2="100" stroke="#00E5FF" strokeWidth="0.35" strokeDasharray="1.5 0.8" opacity="0.95" />
-                    <rect x={mk.attacker_x * 100 - 7} y="93" width="14" height="4" fill="#000" stroke="#00E5FF" strokeWidth="0.15" opacity="0.9" />
-                    <text x={mk.attacker_x * 100} y="96.2" textAnchor="middle" fill="#00E5FF" fontSize="2.6" fontFamily="monospace" fontWeight="bold">ATTACKER</text>
+                  <g opacity={mk.verdict === "estimate" ? 0.65 : 0.95} style={{ pointerEvents: 'auto', cursor: 'ew-resize' }} onMouseDown={onMouseDownLine('att')}>
+                    <line x1={mk.attacker_x * 100} y1="0" x2={mk.attacker_x * 100} y2="100" stroke="transparent" strokeWidth="3" />
+                    <line x1={mk.attacker_x * 100} y1="0" x2={mk.attacker_x * 100} y2="100" stroke="#00E5FF" strokeWidth="0.35" strokeDasharray="1.5 0.8" />
+                    <rect x={mk.attacker_x * 100 - 7} y="8" width="14" height="4" fill="#000" stroke="#00E5FF" strokeWidth="0.15" />
+                    <text x={mk.attacker_x * 100} y="11.2" textAnchor="middle" fill="#00E5FF" fontSize="2.6" fontFamily="monospace" fontWeight="bold">ATTACKER</text>
+                    <rect x={mk.attacker_x * 100 - 2.5} y="90" width="5" height="3.2" fill="#00E5FF" opacity="0.6" />
+                    <text x={mk.attacker_x * 100} y="92.3" textAnchor="middle" fill="#000" fontSize="1.9" fontFamily="monospace" fontWeight="bold">↔</text>
                   </g>
                 )}
               </svg>
             )}
             {mk?.verdict && (
-              <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/90 border"
-                style={{ borderColor: mk.verdict === "offside" ? "#FF333399" : mk.verdict === "onside" ? "#00FF8899" : "#94A3B899" }}
+              <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/90 border pointer-events-none"
+                style={{ borderColor: mk.verdict === "offside" ? "#FF333399" : mk.verdict === "onside" ? "#00FF8899" : mk.verdict === "estimate" ? "#94A3B899" : "#94A3B899" }}
                 data-testid="octon-offside-verdict-chip"
               >
                 <span className="text-[10px] font-mono font-bold tracking-[0.15em]"
-                  style={{ color: mk.verdict === "offside" ? "#FF3333" : mk.verdict === "onside" ? "#00FF88" : "#94A3B8" }}
+                  style={{ color: mk.verdict === "offside" ? "#FF3333" : mk.verdict === "onside" ? "#00FF88" : mk.verdict === "estimate" ? "#94A3B8" : "#94A3B8" }}
                 >
                   {mk.verdict.toUpperCase()}
                 </span>
-                {mk.daylight_cm != null && (
+                {mk.daylight_cm != null ? (
                   <span className="ml-2 text-[10px] font-mono text-white">
-                    {mk.daylight_cm} cm {mk.verdict === "offside" ? "beyond line" : "behind line"}
+                    {Math.abs(mk.daylight_cm)} cm {mk.daylight_cm >= 0 ? "beyond line" : "behind line"}
+                  </span>
+                ) : (
+                  <span className="ml-2 text-[10px] font-mono text-gray-400">
+                    drag lines to calibrate
                   </span>
                 )}
               </div>
