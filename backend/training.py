@@ -209,17 +209,24 @@ def compute_confidence_uplift(precedents: List[Dict]) -> Dict:
         if heads and heads.count(heads[0]) >= max(3, int(0.66 * len(heads))):
             consensus = True
 
-    raw = top_sim * 50.0 + (len(strong) - 1) * 2.5
+    raw = top_sim * 50.0 + (len(strong) - 1) * 3.0
     if consensus:
-        raw += 4.0
+        raw += 5.0
     # Fresh-precedent bonus: each precedent created within the last
-    # 30 days adds +1.5 % uplift, capped to +6 %. This is what makes
-    # OCTON visibly improve as new PL/UCL match reports flow into the
-    # corpus — recent rulings dominate stale ones.
+    # 30 days adds +2.0 % uplift, capped to +10 % (was +6 %). Now that
+    # live PL/UCL match reports flow in every 3h AND operator overrides
+    # auto-promote as FRESH precedents, this lift genuinely reflects
+    # current-season refereeing guidance and should weigh higher.
     fresh_count = sum(1 for p in strong if (p.get("freshness") in ("FRESH", "RECENT")))
-    fresh_bonus = min(6.0, fresh_count * 1.5)
+    fresh_bonus = min(10.0, fresh_count * 2.0)
     raw += fresh_bonus
-    uplift = round(max(0.0, min(30.0, raw)), 1)
+    # Operator-promoted precedents (ground truth from overrides) get an
+    # additional +1 each, capped to +4 — these are the strongest
+    # signals we collect because they are the referee-verified calls.
+    operator_promoted = sum(1 for p in strong if "operator-promoted" in (p.get("tags") or []))
+    operator_bonus = min(4.0, operator_promoted * 1.0)
+    raw += operator_bonus
+    uplift = round(max(0.0, min(40.0, raw)), 1)
     return {
         "uplift": uplift,
         "strong_matches": len(strong),
@@ -227,6 +234,8 @@ def compute_confidence_uplift(precedents: List[Dict]) -> Dict:
         "consensus": consensus,
         "fresh_precedents": fresh_count,
         "fresh_bonus": round(fresh_bonus, 1),
+        "operator_promoted": operator_promoted,
+        "operator_bonus": round(operator_bonus, 1),
     }
 
 

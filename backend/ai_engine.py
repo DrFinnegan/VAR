@@ -1480,9 +1480,14 @@ class OctonBrainEngine:
         evidence_blob = f"{decision_lower} {reasoning_lower} {notes_lower}"
 
         # 1) Text-only verdicts max out at 70 — no pixels, no certainty.
-        if not has_any_image and final_confidence > 70.0:
-            confidence_caps_applied.append({"cap": 70.0, "from": final_confidence, "reason": "text-only — no visual evidence"})
-            final_confidence = 70.0
+        # Text-only honesty cap — raised from 70 → 78 now that the
+        # canonical corpus covers 81+ precedents and fresh-PL/UCL
+        # lessons flow in every 3 hours. A text-only analysis backed
+        # by 3+ agreeing precedents is well-grounded enough to push
+        # into the high-70s band when the laws are clear.
+        if not has_any_image and final_confidence > 78.0:
+            confidence_caps_applied.append({"cap": 78.0, "from": final_confidence, "reason": "text-only — no visual evidence"})
+            final_confidence = 78.0
 
         # 2) Single-frame verdicts on motion-dependent calls (offside,
         #    handball "moment of contact", goal-line) max out at 78.
