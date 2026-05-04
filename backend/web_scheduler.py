@@ -154,6 +154,27 @@ CURATED_ARTICLE_URLS: List[Dict] = [
      "label": "Wikipedia · Euro 2024 Group C (England vs Slovenia handball checks)"},
     {"url": "https://en.wikipedia.org/wiki/UEFA_Champions_League",
      "label": "Wikipedia · UEFA Champions League (historical VAR landmark moments)"},
+    # ── Round 4 (2026-02): FREE DATASETS / curated VAR analysis ──
+    {"url": "https://en.wikipedia.org/wiki/Video_assistant_referee",
+     "label": "Wikipedia · VAR — protocol, controversies, landmark cases"},
+    {"url": "https://en.wikipedia.org/wiki/List_of_video_assistant_referee_decisions",
+     "label": "Wikipedia · List of VAR decisions (comprehensive index)"},
+    {"url": "https://en.wikipedia.org/wiki/2018_FIFA_World_Cup_final",
+     "label": "Wikipedia · 2018 WC Final (first WC-final VAR penalty)"},
+    {"url": "https://en.wikipedia.org/wiki/2022_FIFA_World_Cup_final",
+     "label": "Wikipedia · 2022 WC Final (multiple VAR reviews, offside rulings)"},
+    {"url": "https://en.wikipedia.org/wiki/Offside_(association_football)",
+     "label": "Wikipedia · Offside — law text, 2021 armpit precedent, SAOT"},
+    {"url": "https://en.wikipedia.org/wiki/Denying_a_goal-scoring_opportunity",
+     "label": "Wikipedia · DOGSO — IFAB definition, 4-D test examples"},
+    {"url": "https://en.wikipedia.org/wiki/Handball_(association_football)",
+     "label": "Wikipedia · Handball — 2021 Law 12 narrowing, 2025/26 refinements"},
+    {"url": "https://en.wikipedia.org/wiki/Laws_of_the_Game_(association_football)",
+     "label": "Wikipedia · Laws of the Game — canonical reference"},
+    {"url": "https://github.com/statsbomb/open-data",
+     "label": "StatsBomb Open Data · free event-level football dataset (Euros, WC, WSL)"},
+    {"url": "https://en.wikipedia.org/wiki/StatsBomb",
+     "label": "Wikipedia · StatsBomb — open football event data methodology"},
 ]
 
 

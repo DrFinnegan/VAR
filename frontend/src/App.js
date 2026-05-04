@@ -148,7 +148,7 @@ const RegisterPage = () => {
         <CardHeader className="text-center space-y-4 pb-2">
           <div className="flex items-center justify-center"><OctonBrainLogo size={48} /></div>
           <CardTitle className="text-2xl font-heading font-black text-white">JOIN OCTON VAR</CardTitle>
-          <CardDescription className="text-gray-400 text-sm">Register for Dr Finnegan's Forensic AI system</CardDescription>
+          <CardDescription className="text-gray-400 text-sm">Register for the OCTON VAR Forensic AI system</CardDescription>
         </CardHeader>
         <CardContent className="pt-4">
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -419,11 +419,10 @@ const SettingsPage = () => {
 
         <TabsContent value="general" className="mt-6 space-y-6">
           <Card className="bg-[#121212] border-white/10 rounded-none">
-            <CardHeader><CardTitle className="text-white">System Information</CardTitle><CardDescription className="text-gray-400">OCTON VAR - Dr Finnegan's Forensic AI</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="text-white">System Information</CardTitle><CardDescription className="text-gray-400">OCTON VAR — Forensic AI Audit System</CardDescription></CardHeader>
             <CardContent className="space-y-4">
               {[
-                ["System", "OCTON VAR v1.0"],
-                ["Architect", "Dr Finnegan"],
+                ["System", "OCTON VAR v2.3"],
                 ["AI Model", "GPT-5.2 (Neo Cortex)", "#00E5FF"],
                 ["Pattern Engine", "Hippocampus v1.0", "#00FF66"],
                 ["Architecture", "Hippocampus -> Neo Cortex Pathway"],
@@ -441,7 +440,7 @@ const SettingsPage = () => {
 
         <TabsContent value="architecture" className="mt-6 space-y-6">
           <Card className="bg-[#121212] border-white/10 rounded-none">
-            <CardHeader><CardTitle className="text-white">Neural Pathway Architecture</CardTitle><CardDescription className="text-gray-400">Dr Finnegan's dual-brain decision system</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="text-white">Neural Pathway Architecture</CardTitle><CardDescription className="text-gray-400">Dual-brain VAR decision system · Hippocampus + Neocortex</CardDescription></CardHeader>
             <CardContent className="space-y-6">
               <div className="p-4 bg-[#050505] rounded-none border border-[#00FF66]/20">
                 <div className="flex items-center gap-2 mb-3"><Zap className="w-5 h-5 text-[#00FF66]" /><h3 className="text-lg font-heading font-bold text-[#00FF66]">HIPPOCAMPUS</h3></div>
@@ -591,7 +590,7 @@ const FeedbackPage = () => {
 
   return (
     <div className="flex-1 min-w-0 p-6 space-y-6 bg-[#050505]" data-testid="feedback-page">
-      <div><h1 className="text-3xl font-heading font-black text-white tracking-tight">AI FEEDBACK LOOP</h1><p className="text-sm font-body text-gray-400 mt-1">OCTON learning from operator corrections - Dr Finnegan's self-improving AI</p></div>
+      <div><h1 className="text-3xl font-heading font-black text-white tracking-tight">AI FEEDBACK LOOP</h1><p className="text-sm font-body text-gray-400 mt-1">OCTON learning from operator corrections — continuous self-improving AI</p></div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="bg-[#121212] border-white/10 rounded-none"><CardContent className="p-4"><p className="text-xs font-mono uppercase tracking-[0.2em] text-gray-400">TOTAL FEEDBACK</p><p className="text-3xl font-mono font-medium text-white mt-1">{stats?.total_feedback || 0}</p></CardContent></Card>

@@ -86,6 +86,78 @@ _DEFAULT_CITED_CLAUSE = {
 }
 
 
+def _offside_marker_instruction(incident_type: str, n_frames: int) -> str:
+    """Inject an explicit, non-optional block into the prompt that forces the
+    LLM to populate `offside_markers` for every offside incident with frames
+    attached. Without this, GPT silently skips the field and the frontend
+    has nothing to draw. Returns '' for non-offside incidents.
+    """
+    if incident_type != "offside" or n_frames == 0:
+        return ""
+    return (
+        "═══ OFFSIDE LINE MARKERS — NON-NEGOTIABLE ═══\n"
+        f"Incident type is OFFSIDE and you have {n_frames} frame(s). You MUST produce "
+        f"`offside_markers` with EXACTLY {n_frames} entry/entries — one per frame, in "
+        "the order the frames are shown. For EVERY frame:\n"
+        "  • `offside_line_x` = horizontal position (0.0 = left edge, 1.0 = right edge "
+        "of the image) of the **second-last defender's forward-most body part** at the "
+        "moment of the pass (or the closest approximation you can estimate). This is "
+        "the AMBER dashed line rendered to the operator.\n"
+        "  • `attacker_x` = horizontal position of the **attacker's forward-most "
+        "body part** (usually a knee, chest or shoulder — NOT arms/hands per Law 11). "
+        "This is the CYAN dashed line.\n"
+        "  • `verdict` = 'offside' if attacker_x > offside_line_x by a clear margin "
+        "(roughly > 0.01 of image width, i.e. > ~1%), 'onside' if attacker_x <= "
+        "offside_line_x or too close to call within ~1%, else 'unclear'.\n"
+        "  • `daylight_cm` = your best estimate of daylight between the two lines in "
+        "centimetres, derived from goalpost/pitch-marking reference scale. Positive "
+        "number for offside, negative or null for onside. Null ONLY if no pitch-scale "
+        "reference is visible.\n"
+        "  • `note` = one short phrase (e.g. 'shoulder past centre-back at pass').\n"
+        "\n"
+        "If the image genuinely has no football action (e.g. color bars, commercials, "
+        "black frame), set BOTH `offside_line_x` and `attacker_x` to null, verdict = "
+        "'unclear', and write `note` = 'no football action visible'. This is the ONLY "
+        "acceptable way to skip the marker. Otherwise — ESTIMATE — the operator "
+        "expects dashed lines on every offside review and will overrule OCTON if they "
+        "are missing.\n\n"
+    )
+
+
+def _single_angle_warning(images: list, has_image: bool) -> str:
+    """When only 1 frame/angle is available, force Neocortex to prominently
+    flag the evidence limitation at the top of `neo_cortex_notes`. This is
+    what tells the operator 'I am drawing a conclusion from a single angle;
+    consider adding tactical/tight/goal-line before binding the verdict'.
+    """
+    n = len([i for i in (images or []) if i])
+    if n == 0 and not has_image:
+        return ""
+    if n <= 1:
+        return (
+            "═══ SINGLE-ANGLE EVIDENCE — MANDATORY CAVEAT ═══\n"
+            "Only ONE camera angle is attached to this incident. Your "
+            "`neo_cortex_notes` MUST open with EXACTLY the sentence:\n"
+            "  '⚠ LIMITED EVIDENCE — single camera angle only. Recommend "
+            "loading TACTICAL (high-behind-goal), TIGHT (close-up) and "
+            "GOAL-LINE angles before binding the verdict.'\n"
+            "Then continue with your caveats. Cap `confidence_score` at 82 "
+            "unless the incident is a critical trigger (auto-red, clear "
+            "daylight offside > 30cm, ball fully over the line, etc.) — the "
+            "referee panel must see that OCTON acknowledges its own "
+            "evidence limits.\n\n"
+        )
+    if n == 2:
+        return (
+            "═══ TWO-ANGLE EVIDENCE ═══\n"
+            "Only 2 camera angles available — good but not complete. In "
+            "`neo_cortex_notes`, briefly name which 3rd angle would best "
+            "resolve any residual ambiguity (e.g. 'goal-line camera would "
+            "confirm the offside line').\n\n"
+        )
+    return ""
+
+
 def _default_clause_for(incident_type: str) -> str:
     """Fallback citation when the LLM doesn't populate `cited_clause`."""
     return _DEFAULT_CITED_CLAUSE.get(incident_type, _DEFAULT_CITED_CLAUSE["other"])
@@ -728,7 +800,12 @@ class NeoCortexAnalyzer:
                 api_key=api_key,
                 session_id=session_id,
                 system_message=(
-                    "You are the Neo Cortex module of OCTON VAR, an elite forensic VAR analyst designed by Dr Finnegan.\n\n"
+                    "You are the Neo Cortex module of OCTON VAR, an elite forensic VAR analyst. "
+                    "CRITICAL BOUNDARY: Do NOT name any individuals (architects, designers, "
+                    "operators, users) in your reasoning, cited_clause, key_factors, "
+                    "neo_cortex_notes, or frame_breakdown. Your output is referee-grade analysis — "
+                    "keep it strictly about (1) the laws of the game, (2) the observed evidence, "
+                    "(3) cited precedents by team-names and dates, and (4) the final verdict.\n\n"
                     "YOUR ROLE: Make accurate VAR decisions by applying IFAB Laws of the Game precisely.\n\n"
                     "CRITICAL RULES:\n"
                     "- You MUST apply the specific law relevant to the incident type\n"
@@ -780,36 +857,64 @@ class NeoCortexAnalyzer:
                     "DEPTH OF ANALYSIS — FORENSIC FIVE-SECTION REASONING (MANDATORY):\n"
                     "Your `reasoning` field MUST contain FIVE distinct sections, each prefixed by its "
                     "exact §-header below. Operators read this on big-screen displays in the VAR booth — "
-                    "thin reasoning destroys their trust. Every section is REQUIRED, even if short.\n"
+                    "thin reasoning destroys their trust. Every section is REQUIRED. Minimum section "
+                    "lengths are HARD FLOORS — the referee panel will mark verdicts as weak if you "
+                    "write less. Use plain declarative sentences; avoid hedging filler.\n"
                     "\n"
-                    "  §1 EVIDENCE ASSESSMENT — what is actually visible/described. Frame-by-frame when "
-                    "       multi-frame video is provided. Call out body parts, contact points, distances, "
-                    "       angles. State explicitly what is NOT visible (occlusion, off-camera, etc.).\n"
-                    "  §2 LAW APPLICATION — name the exact IFAB law (e.g. 'Law 12 §1 Direct FK offences') "
-                    "       and walk through how the facts in §1 map onto the legal test. For DOGSO-class "
-                    "       incidents you MUST work through the 4-D's (Distance/Direction/Defenders/"
-                    "       Difficulty) one by one, stating which D's are met.\n"
-                    "  §3 PRECEDENT CROSS-REFERENCE — cite the most relevant 1-2 precedents from the "
-                    "       supplied corpus by team-names + date + referee where listed. Note whether "
-                    "       the precedent is FRESH (last 7 days) or RECENT (last 30 days) or CANON "
-                    "       (older but settled). Explain how the precedent's ruling guides — or does NOT "
-                    "       guide — this decision (e.g. fact-divergence material).\n"
-                    "  §4 VAR THRESHOLD TEST — explicitly answer: 'Is there a clear and obvious error "
-                    "       on the on-field decision?'. If yes, state which of the 4 VAR-reviewable "
-                    "       categories applies. If no, recommend on-field decision stands.\n"
-                    "  §5 FINAL DETERMINATION — verdict + sanction in one sentence, then a 1-line "
-                    "       confidence justification (e.g. 'Confidence 92 because daylight offside is "
-                    "       a textbook IFAB clause'). For fouls in the box, name the row of the DOGSO/"
+                    "  §1 EVIDENCE ASSESSMENT (≥ 3 sentences) — what is actually visible/described. "
+                    "       Frame-by-frame when multi-frame video is provided. Call out body parts, "
+                    "       contact points, distances in cm where estimable, angles, ball position "
+                    "       relative to the penalty spot / goal line / touchline. State explicitly "
+                    "       what is NOT visible (occlusion, off-camera, motion blur, frame rate). If "
+                    "       only one angle is available, open this section with the exact phrase "
+                    "       '⚠ LIMITED EVIDENCE — single camera angle only.'\n"
+                    "  §2 LAW APPLICATION (≥ 4 sentences) — name the exact IFAB law (e.g. 'Law 12 "
+                    "       §1 Direct FK offences') and walk through how the facts in §1 map onto "
+                    "       the legal test. For DOGSO-class incidents you MUST work through the "
+                    "       4-D's (Distance/Direction/Defenders/Difficulty) one by one, stating "
+                    "       which D's are met. For handball, apply the 2021 Law 12.1 test: deliberate, "
+                    "       unnatural arm position, or arm above shoulder. For offside, identify the "
+                    "       exact moment-of-pass and cite Law 11 offside offences (interfering with "
+                    "       play / with an opponent / gaining an advantage).\n"
+                    "  §3 PRECEDENT CROSS-REFERENCE (≥ 2 sentences) — cite the most relevant 1-2 "
+                    "       precedents from the supplied corpus by team-names + date + referee where "
+                    "       listed. Note whether the precedent is FRESH (last 7 days) / RECENT "
+                    "       (last 30 days) / CANON (older settled). Explain how the precedent's "
+                    "       ruling guides — or does NOT guide — this decision (e.g. fact-divergence "
+                    "       material). If no precedents supplied, say 'No directly comparable "
+                    "       precedent in corpus; applying first-principles IFAB interpretation.'\n"
+                    "  §4 VAR THRESHOLD TEST (≥ 2 sentences) — explicitly answer: 'Is there a clear "
+                    "       and obvious error on the on-field decision?'. If yes, state which of the "
+                    "       4 VAR-reviewable categories applies (goal/no-goal, penalty/no-penalty, "
+                    "       direct red, mistaken identity) and the 2025/26 expanded categories "
+                    "       (2nd yellow, wrong corner, holding in box). If no, recommend on-field "
+                    "       decision stands and explain why the subjective-interpretation margin "
+                    "       does NOT meet the clear-and-obvious bar.\n"
+                    "  §5 FINAL DETERMINATION (≥ 2 sentences) — verdict + sanction in one sentence, "
+                    "       then a 1-2 line confidence justification naming the specific factors "
+                    "       that justify the confidence band (e.g. 'Confidence 92 because daylight "
+                    "       offside is a textbook IFAB clause AND supporting precedent from 2025-10 "
+                    "       PL week 9 matches'). For fouls in the box, name the row of the DOGSO/"
                     "       SPA sanction table you used.\n"
                     "\n"
-                    "FURTHER GUIDELINES:\n"
-                    "- Use historical precedents to calibrate your confidence (if 80% of similar cases "
-                    "resulted in X, that's informative but not deterministic)\n"
-                    "- When corrections show the AI was previously wrong in similar situations, "
-                    "actively adjust your reasoning to avoid repeating the same error\n"
-                    "- Never include hedging filler like 'This is a complex situation' — every sentence "
-                    "must add legal or factual content. Operators value brevity-with-rigour over verbosity.\n"
-                    "- If evidence is ambiguous, say so clearly in §1 and §4, and lower confidence accordingly.\n"
+                    "SCIENTIFIC RIGOUR STANDARDS (failure = weak verdict):\n"
+                    "- Every assertion in §1 must be anchored to a visible pixel or the written "
+                    "description — if you cannot point to the evidence, do not assert it.\n"
+                    "- Every sentence in §2 must reference either an IFAB clause number OR a named "
+                    "test (4-Ds, Law 12.1 handball test, Law 11 offside offences).\n"
+                    "- Cite precedents by CONCRETE match identity (teams + date), never as "
+                    "'per precedent #1' or 'a similar case'. Named citations are infinitely more "
+                    "persuasive to on-field officials.\n"
+                    "- CRITICAL: do NOT name any individual persons (architects, operators, users) "
+                    "in your output. Referee-grade verdicts are evidence-and-law-only.\n"
+                    "- Use historical precedents to CALIBRATE confidence (if 80% of similar cases "
+                    "ruled X, that's informative but not deterministic).\n"
+                    "- When past corrections show OCTON was previously wrong in similar situations, "
+                    "actively adjust to avoid repeating the same error and say so in §3.\n"
+                    "- Never include hedging filler like 'This is a complex situation', 'It depends', "
+                    "or 'In some interpretations' — every sentence must add legal or factual content.\n"
+                    "- If evidence is ambiguous, say so clearly in §1 and §4, cap confidence and "
+                    "specify in §5 what additional angle/frame/information would resolve the call.\n"
                     "- When the LAW REFERENCE block contains a VERBATIM clause that maps to the facts "
                     "(e.g. the 9-row DOGSO/SPA sanction table for fouls), QUOTE the row label in §5 so "
                     "the verdict is auditable.\n\n"
@@ -929,7 +1034,9 @@ class NeoCortexAnalyzer:
                         "This is the operator-facing audit trail; if you cannot tell what is "
                         "happening in a given frame, say so plainly. Do NOT fabricate. The "
                         "referee panel will read these and challenge any claim that does not "
-                        "match the pixels."
+                        "match the pixels.\n\n"
+                        + (_offside_marker_instruction(incident_type, len(all_images)))
+                        + _single_angle_warning(all_images, has_image)
                     )
                 else:
                     text = (
@@ -937,7 +1044,9 @@ class NeoCortexAnalyzer:
                         + "\n\nMatch frame attached. Analyze visual evidence carefully. "
                           "Single-frame evidence is a snapshot — the moment of pass / contact "
                           "/ ball-out cannot be confirmed from one image. Cap your confidence "
-                          "and explain what additional frame would resolve the call."
+                          "and explain what additional frame would resolve the call.\n\n"
+                        + (_offside_marker_instruction(incident_type, 1))
+                        + _single_angle_warning([image_base64] if image_base64 else [], has_image)
                     )
                 user_message = UserMessage(text=text, file_contents=image_contents)
             else:
@@ -1464,7 +1573,7 @@ class OctonBrainEngine:
             "critical_floor_applied": critical_floor_applied,
             "total_processing_time_ms": total_time_ms,
             "pathway": "hippocampus -> neo_cortex (adaptive weight) + precedent-RAG + agreement bonus + ifab-floor",
-            "engine_version": "OCTON v2.3 - Dr Finnegan",
+            "engine_version": "OCTON VAR v2.3",
         }
 
     async def _get_historical_context(

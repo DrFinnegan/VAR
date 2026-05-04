@@ -139,7 +139,7 @@ export function exportAnalysisPDF(incident, analysis, audit = null, opts = {}) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(CYAN[0], CYAN[1], CYAN[2]);
-  doc.text("FORENSIC ANALYSIS REPORT  ·  Dr Finnegan's Neocortex  ·  v2.1", margin + 12, 14);
+  doc.text("FORENSIC ANALYSIS REPORT  ·  OCTON Neocortex  ·  v2.1", margin + 12, 14);
   // Right-top meta
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);

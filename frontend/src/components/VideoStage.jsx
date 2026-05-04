@@ -132,7 +132,7 @@ export const VideoStage = ({ incident, onAnalyze, previewImage, previewVideo, on
       ctx.fillStyle = "#00E5FF"; ctx.font = "bold 18px monospace";
       ctx.fillText("OCTON VAR - REFEREE REPORT", 20, fy + 28);
       ctx.fillStyle = "#888"; ctx.font = "12px monospace";
-      ctx.fillText(`Dr Finnegan's Forensic AI | ${new Date().toISOString().split("T")[0]}`, 20, fy + 48);
+      ctx.fillText(`OCTON VAR Forensic AI | ${new Date().toISOString().split("T")[0]}`, 20, fy + 48);
       if (incident) {
         ctx.fillText(`Incident: ${incident.incident_type?.toUpperCase()} | Match Time: ${incident.timestamp_in_match || "N/A"} | ${incident.team_involved || ""} ${incident.player_involved || ""}`, 20, fy + 68);
         const ai = incident.ai_analysis;
