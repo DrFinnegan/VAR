@@ -1,20 +1,36 @@
 """
 OCTON VAR — Video → Frame extractor
 
-Returns multiple evenly-spaced frames from a clip so the dual-brain
-vision pathway sees motion and not a single still. Each frame is
-JPEG-encoded base64 and capped at 1280px wide for payload size.
+Returns multiple JPEG frames from a clip so the dual-brain vision pathway
+sees motion and not a single still. Each frame is base64-encoded JPEG and
+capped at 960px wide for payload size.
+
+Selection strategy (2026-02 upgrade):
+    Real-world VAR clips are 5-30 s long with ONE decisive moment of impact.
+    Uniformly-spaced timestamps almost always miss that moment — the
+    elbow-to-face frame, the boot-on-shin frame, the moment the ball
+    crosses the line.
+
+    NEW: FFmpeg scene-change detection picks frames at MOTION PEAKS.
+    The `select=gt(scene,T),metadata=print` filter prints a scene-change
+    score (0..1) for every frame whose differential pixel-change exceeds
+    threshold T. We sort by score desc and keep the top-N candidates,
+    spread across time so we never return four near-duplicates.
+
+    Fallback: if scene-detect returns < n_frames candidates (rare — happens
+    with very static clips), we top up with evenly-spaced timestamps.
 
 Public API:
     extract_frame_b64(video_bytes, at_seconds, quality)  -> str | None     # legacy single-frame
-    extract_frames_b64(video_bytes, n_frames, quality)   -> list[str]      # multi-frame burst
+    extract_frames_b64(video_bytes, n_frames, quality)   -> list[str]      # impact-aware burst
 """
 import asyncio
 import base64
 import logging
 import os
+import re
 import tempfile
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +49,73 @@ async def _probe_duration(vp: str) -> float:
         return float(out.decode().strip() or 0)
     except Exception:
         return 0.0
+
+
+_SCENE_RE = re.compile(
+    r"pts_time:(?P<t>\d+(?:\.\d+)?).*?lavfi\.scene_score=(?P<s>\d+(?:\.\d+)?)",
+    re.DOTALL,
+)
+
+
+async def _scene_candidates(vp: str, threshold: float = 0.15) -> List[Tuple[float, float]]:
+    """Return a list of (timestamp_s, scene_score) tuples for frames whose
+    inter-frame change exceeds `threshold`. The list is sorted by time.
+
+    A typical broadcast clip with one impact moment yields 3-15 candidates
+    spanning the camera cuts, slow-mo replays and the impact itself —
+    plenty of coverage for selecting the most informative N frames.
+    """
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-i", vp,
+            "-vf", f"select='gt(scene\\,{threshold})',metadata=print",
+            "-an", "-f", "null", "-",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, err = await asyncio.wait_for(proc.communicate(), timeout=30)
+        text = err.decode("utf-8", errors="ignore")
+    except Exception as e:
+        logger.warning("scene-detect failed: %s", e)
+        return []
+    out: List[Tuple[float, float]] = []
+    # FFmpeg prints metadata in two-line blocks per frame; the regex above
+    # is single-line so we collapse \n → " " and walk groups.
+    flat = text.replace("\n", " ")
+    for m in _SCENE_RE.finditer(flat):
+        try:
+            out.append((float(m.group("t")), float(m.group("s"))))
+        except ValueError:
+            continue
+    out.sort(key=lambda x: x[0])
+    return out
+
+
+def _pick_top_spread(
+    candidates: List[Tuple[float, float]],
+    n: int,
+    duration: float,
+) -> List[float]:
+    """Pick `n` candidate timestamps that are (a) the highest-scoring and
+    (b) spread across time so we don't return near-duplicates from the
+    same camera cut.
+
+    Algorithm: greedy selection sorted by score desc, accept a candidate
+    only if its timestamp is at least `min_gap` seconds away from any
+    already-picked timestamp. `min_gap` = max(0.4, duration / (n*2)).
+    """
+    if not candidates:
+        return []
+    min_gap = max(0.4, duration / max(2 * n, 1))
+    by_score = sorted(candidates, key=lambda x: -x[1])
+    picked: List[float] = []
+    for t, _s in by_score:
+        if all(abs(t - p) >= min_gap for p in picked):
+            picked.append(t)
+            if len(picked) >= n:
+                break
+    picked.sort()
+    return picked
 
 
 async def _extract_one(vp: str, at_seconds: float, quality: int, td: str, idx: int) -> Optional[str]:
@@ -67,12 +150,12 @@ async def extract_frames_b64(
     n_frames: int = 4,
     quality: int = 6,
 ) -> List[str]:
-    """Extract `n_frames` evenly-spaced JPEG stills from `video_bytes`.
+    """Extract `n_frames` JPEG stills picked at scene-change peaks.
 
     Returns a list (possibly shorter than `n_frames` if some seeks fail).
-    For very short clips, the timestamps are clamped to span the available
-    duration. Falls back to a single frame at 1.5s if duration probe
-    fails — VAR clips are usually 5-30s so this is rare.
+    Falls back to uniform spacing when scene-detect yields too few
+    candidates (very-static clips). Behaviour is fully deterministic per
+    clip — same input → same frames.
     """
     if not video_bytes or n_frames < 1:
         return []
@@ -84,20 +167,41 @@ async def extract_frames_b64(
             f.write(video_bytes)
 
         duration = await _probe_duration(vp)
-        # Choose timestamps that bracket the action — skip the first
-        # 10% (logos/static intro) and the last 10% (slow-mo replays).
+        # Choose timestamps. Strategy: scene-detect first; uniform fallback.
+        timestamps: List[float] = []
         if duration <= 0:
             timestamps = [1.5]
         elif duration < 2.0:
             timestamps = [duration / 2]
         else:
-            start = max(0.4, duration * 0.10)
-            end = max(start + 0.5, duration * 0.90)
-            if n_frames == 1:
-                timestamps = [(start + end) / 2]
-            else:
-                step = (end - start) / (n_frames - 1)
-                timestamps = [round(start + i * step, 2) for i in range(n_frames)]
+            # ── Scene-change candidates ──
+            candidates = await _scene_candidates(vp, threshold=0.15)
+            picks = _pick_top_spread(candidates, n=n_frames, duration=duration)
+            # Always include the dead centre of the clip — for replays that
+            # cut to slow-mo right before impact, the scene-change pulse
+            # often misses the actual contact frame which sits between two
+            # cuts. The centre frame is a strong default.
+            mid = duration / 2
+            if all(abs(p - mid) >= max(0.4, duration / (2 * n_frames)) for p in picks):
+                picks.append(mid)
+            picks = sorted(picks)[:n_frames]
+
+            # Top up with evenly-spaced timestamps if scene-detect was sparse.
+            if len(picks) < n_frames:
+                start = max(0.4, duration * 0.10)
+                end = max(start + 0.5, duration * 0.90)
+                step = (end - start) / max(n_frames - 1, 1)
+                uniform = [round(start + i * step, 2) for i in range(n_frames)]
+                # Merge keeping unique timestamps separated by min_gap
+                min_gap = max(0.4, duration / (2 * n_frames))
+                merged = list(picks)
+                for u in uniform:
+                    if all(abs(u - m) >= min_gap for m in merged):
+                        merged.append(u)
+                    if len(merged) >= n_frames:
+                        break
+                picks = sorted(merged)[:n_frames]
+            timestamps = picks if picks else [duration / 2]
 
         # Run extractions in parallel — ffmpeg is I/O bound here.
         results = await asyncio.gather(

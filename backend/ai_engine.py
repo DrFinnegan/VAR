@@ -86,6 +86,64 @@ _DEFAULT_CITED_CLAUSE = {
 }
 
 
+def _violent_conduct_vision_instruction(incident_type: str, n_frames: int) -> str:
+    """Force the LLM to scan frames for violent-conduct vision triggers
+    (elbow-to-face, headbutt, stamp, punch, blood, holding-the-face) and
+    upgrade the verdict to RED CARD when ANY are observed.
+
+    The user reported that multi-angle ingestion was mis-classifying an
+    elbow-to-nose strike as YELLOW. Without explicit per-frame triggers,
+    GPT-5.2 averages across the clip and softens the verdict — so we
+    inject this instruction whenever frames are attached to a foul/red
+    card / contact incident.
+    """
+    if n_frames == 0:
+        return ""
+    if incident_type not in ("foul", "red_card", "card", "other", "penalty"):
+        return ""
+    return (
+        "═══ VIOLENT-CONDUCT VISION CHECK — NON-NEGOTIABLE ═══\n"
+        "Before settling on a verdict, scan EVERY attached frame for these "
+        "sending-off signals (IFAB Law 12 — Violent Conduct / Serious Foul Play). "
+        "If ANY single frame shows ANY of these, the verdict is RED CARD with "
+        "confidence ≥ 88%, regardless of what the other frames show:\n"
+        "  • ELBOW-TO-HEAD/FACE/NOSE — raised arm + impact on opponent's head, "
+        "    even with low force. Note the offender's elbow trajectory and the "
+        "    victim's recoil, blood, or hand-to-face reaction.\n"
+        "  • HEADBUTT — forehead-to-face contact off the ball. Note both heads "
+        "    converging at speed.\n"
+        "  • STAMP — boot deliberately placed on grounded opponent's body part, "
+        "    with the ball already gone or with no attempt to play the ball.\n"
+        "  • PUNCH / OFF-BALL STRIKE — closed fist, slap, or open-palm strike "
+        "    away from a contested ball.\n"
+        "  • TWO-FOOTED / SCISSOR / OVER-THE-TOP STUDS — both feet airborne, "
+        "    studs exposed, force into opponent's leg (Serious Foul Play).\n"
+        "  • SPITTING / BITING — saliva trajectory, mouth-to-skin contact.\n"
+        "  • CONTACT WITH MATCH OFFICIAL — push, shove, grab, strike on ref "
+        "    or assistant referee.\n\n"
+        "VICTIM-REACTION CUES that confirm head/face contact when occluded:\n"
+        "  • victim immediately holding their nose / face / head\n"
+        "  • visible blood on uniform, gloves, hands, or face\n"
+        "  • victim falling backward without independent cause\n"
+        "  • teammates rushing to confront the offender\n\n"
+        "When you observe any of the above in a SPECIFIC frame, set:\n"
+        "  • `suggested_decision` = 'Red Card - Violent Conduct' (or 'Red "
+        "    Card - Serious Foul Play' for two-footed lunges and stamps)\n"
+        "  • `confidence_score` ≥ 88\n"
+        "  • In the matching `frame_breakdown[i]` entry, NAME the body parts "
+        "    in contact and quote the cue (e.g. 'Frame 2: offender's right "
+        "    elbow strikes opponent's nose; opponent recoils holding face'); "
+        "    set `evidence_for_decision` = 'supports'.\n"
+        "  • In `cited_clause` quote 'IFAB Law 12 — Violent Conduct' or "
+        "    '...Serious Foul Play' as appropriate.\n"
+        "  • In `neo_cortex_notes` say which frame triggered the upgrade.\n"
+        "Operators have already noted the on-field referee's instant red — your "
+        "job is to FIND the visual evidence that justifies it across the clip, "
+        "NOT to soften the call to a yellow.\n\n"
+    )
+
+
+
 def _offside_marker_instruction(incident_type: str, n_frames: int) -> str:
     """Inject an explicit, non-optional block into the prompt that forces the
     LLM to populate `offside_markers` for every offside incident with frames
@@ -789,6 +847,58 @@ class NeoCortexAnalyzer:
         ),
     }
 
+    # ── Vision-trigger phrase library for post-LLM red-card escalation ──
+    # Each entry is a list of substrings; if ANY appear in the LLM's
+    # frame_breakdown observation text, we upgrade to RED. Phrases are
+    # ordered most-specific first so the trigger we surface is the most
+    # informative one.
+    _VIOLENT_VISION_TRIGGERS = [
+        # elbow strikes
+        "elbow to the face", "elbow to the head", "elbow to the nose",
+        "elbow strikes", "elbow strike", "raised elbow", "swinging elbow",
+        "elbow makes contact", "elbow contacts", "elbow connects",
+        "elbow into the face", "elbow into the head", "elbow into the nose",
+        # head / face contact
+        "headbutt", "head butt", "head-butt", "forehead-to-face",
+        "punched", "punch to the face", "fist to the face",
+        "off-ball strike", "off the ball strike",
+        "struck the opponent", "strikes the opponent",
+        # stamps
+        "stamp on", "stamping on", "stamps on", "studs on the chest",
+        "studs on the leg", "studs into the leg",
+        # two-footed / SFP
+        "two-footed lunge", "two footed lunge", "scissor tackle",
+        "studs over the top", "studs-up tackle",
+        # spitting / biting
+        "spat at", "spit at", "bites", "biting",
+        # victim-reaction confirmations
+        "blood on the face", "bleeding from the nose", "bloodied",
+        "holding his face", "holding their face", "holding his nose",
+        "holding their nose", "recoiling holding the face",
+        "recoils holding", "holding the head after impact",
+        # contact with officials
+        "shoves the referee", "pushes the referee", "grabs the referee",
+        "strikes the official", "strikes the linesman",
+    ]
+
+    @classmethod
+    def _check_violent_conduct_in_frames(cls, frame_breakdown):
+        """Scan the LLM's frame_breakdown[*]['observation'] for any of the
+        violent-conduct trigger phrases. Returns (escalated_bool, phrase_str).
+        """
+        if not isinstance(frame_breakdown, list) or not frame_breakdown:
+            return False, ""
+        for fb in frame_breakdown:
+            if not isinstance(fb, dict):
+                continue
+            obs = (fb.get("observation") or "").lower()
+            if not obs:
+                continue
+            for trig in cls._VIOLENT_VISION_TRIGGERS:
+                if trig in obs:
+                    return True, trig
+        return False, ""
+
     async def analyze(
         self,
         incident_type: str,
@@ -1060,6 +1170,7 @@ class NeoCortexAnalyzer:
                         "happening in a given frame, say so plainly. Do NOT fabricate. The "
                         "referee panel will read these and challenge any claim that does not "
                         "match the pixels.\n\n"
+                        + _violent_conduct_vision_instruction(incident_type, len(all_images))
                         + (_offside_marker_instruction(incident_type, len(all_images)))
                         + _single_angle_warning(all_images, has_image)
                     )
@@ -1070,6 +1181,7 @@ class NeoCortexAnalyzer:
                           "Single-frame evidence is a snapshot — the moment of pass / contact "
                           "/ ball-out cannot be confirmed from one image. Cap your confidence "
                           "and explain what additional frame would resolve the call.\n\n"
+                        + _violent_conduct_vision_instruction(incident_type, 1)
                         + (_offside_marker_instruction(incident_type, 1))
                         + _single_angle_warning([image_base64] if image_base64 else [], has_image)
                     )
@@ -1195,23 +1307,83 @@ class NeoCortexAnalyzer:
             except (TypeError, ValueError):
                 offside_markers = []
 
+            # ── OpenCV Hough auto-tilt fallback ──────────────────────
+            # If the LLM did not provide pitch_angle_deg, run our local
+            # Hough-line detector on the same frames so the SAW modal
+            # opens with lines already tilted to the broadcast camera's
+            # perspective. Saves the operator the manual slider step on
+            # most clips. Best-effort — skips silently on failure.
+            if (
+                incident_type == "offside"
+                and offside_markers
+                and all_images
+                and any(m.get("pitch_angle_deg") is None for m in offside_markers)
+            ):
+                try:
+                    from pitch_tilt import detect_pitch_tilt_deg
+                    for i, m in enumerate(offside_markers):
+                        if m.get("pitch_angle_deg") is None and i < len(all_images):
+                            tilt = detect_pitch_tilt_deg(all_images[i])
+                            if tilt is not None:
+                                m["pitch_angle_deg"] = tilt
+                except Exception as e:
+                    logger.debug("auto-tilt detect failed: %s", e)
+
+            # ── Post-LLM violent-conduct escalation ──────────────────
+            # Scan the frame_breakdown the LLM just produced for explicit
+            # signals that mean "this is a sending-off, not a yellow".
+            # If any frame mentions elbow-to-face/head/nose contact, a
+            # stamp, headbutt, off-ball strike, or victim holding face /
+            # blood, force the verdict to RED and floor confidence at 88.
+            #
+            # This is the safety-net for the user-reported case where
+            # multi-angle ingestion of an elbow-to-nose strike returned
+            # YELLOW because the LLM averaged across the clip. The on-
+            # field referee gave an instant red for a reason — we make
+            # sure OCTON catches the same evidence.
+            suggested_decision = str(
+                analysis_data.get("suggested_decision", "Review Required")
+            )
+            confidence_score = float(analysis_data.get("confidence_score", 50))
+            neo_notes = str(analysis_data.get("neo_cortex_notes", ""))
+            cited = cited_clause
+            if incident_type in ("foul", "red_card", "card", "other", "penalty"):
+                escalated, trigger_phrase = self._check_violent_conduct_in_frames(
+                    frame_breakdown
+                )
+                if escalated and "red card" not in suggested_decision.lower():
+                    logger.info(
+                        "Violent-conduct vision escalation fired: '%s' → "
+                        "upgrading '%s' to Red Card", trigger_phrase, suggested_decision
+                    )
+                    suggested_decision = (
+                        "Red Card - Violent Conduct"
+                        if "elbow" in trigger_phrase or "headbutt" in trigger_phrase
+                        or "punch" in trigger_phrase or "strike" in trigger_phrase
+                        else "Red Card - Serious Foul Play"
+                    )
+                    confidence_score = max(confidence_score, 88.0)
+                    if not cited or "law 12" not in cited.lower():
+                        cited = "IFAB Law 12 — Violent Conduct (vision-trigger upgrade)"
+                    neo_notes = (
+                        f"VIOLENT-CONDUCT VISION ESCALATION: '{trigger_phrase}' "
+                        f"observed in frame analysis — verdict upgraded to RED. "
+                        + (neo_notes or "")
+                    )
+
             return {
                 "stage": "neo_cortex",
-                "confidence_score": min(
-                    100, max(0, float(analysis_data.get("confidence_score", 50)))
-                ),
-                "suggested_decision": str(
-                    analysis_data.get("suggested_decision", "Review Required")
-                ),
+                "confidence_score": min(100, max(0, confidence_score)),
+                "suggested_decision": suggested_decision,
                 "reasoning": str(
                     analysis_data.get("reasoning", "Analysis completed")
                 ),
                 "key_factors": analysis_data.get(
                     "key_factors", ["Analysis performed"]
                 ),
-                "cited_clause": cited_clause,
+                "cited_clause": cited,
                 "risk_level": analysis_data.get("risk_level", "medium"),
-                "neo_cortex_notes": analysis_data.get("neo_cortex_notes", ""),
+                "neo_cortex_notes": neo_notes,
                 "angle_assessments": angle_assessments,
                 "angle_confidence_delta": angle_confidence_delta,
                 "angle_disagreement": angle_disagreement,
