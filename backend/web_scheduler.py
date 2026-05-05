@@ -46,6 +46,11 @@ SYSTEM_USER = {"id": "system-scheduler", "name": "OCTON Scheduler"}
 #     the day rather than once per 24h
 MIN_REFRESH_HOURS = 4
 SCHEDULE_INTERVAL_HOURS = 3
+# 2026-02 — auto-disable a feed after N consecutive runs that produce 0
+# usable cases. Conservative threshold: 7 (≈ 21 hours of no learning at
+# the 3-hour cadence) avoids flapping on temporary publisher hiccups
+# while still pruning truly dead links from the rotation.
+_AUTO_DISABLE_AFTER = 7
 
 
 DEFAULT_FEEDS: List[Dict] = [
@@ -340,12 +345,20 @@ async def delete_feed(db, feed_id: str) -> bool:
 
 async def run_scheduled_ingestion(db) -> Dict:
     """Single scheduled pass: ingest each enabled feed that hasn't been
-    successfully ingested in the last MIN_REFRESH_HOURS."""
+    successfully ingested in the last MIN_REFRESH_HOURS.
+
+    Auto-disable rule (added 2026-02): a feed that returns ZERO usable
+    extractions on `_AUTO_DISABLE_AFTER` consecutive runs is automatically
+    disabled (`enabled=False`) with `auto_disabled_at`+`auto_disabled_reason`
+    populated so the admin UI can re-enable manually if desired. Resets to
+    0 the moment a run produces ≥1 inserted case.
+    """
     feeds = await list_feeds(db)
     enabled = [f for f in feeds if f.get("enabled")]
     now = datetime.now(timezone.utc)
     processed: List[Dict] = []
     total_inserted = 0
+    auto_disabled: List[Dict] = []
     for f in enabled:
         # Rate-limit guard
         last = f.get("last_attempted_at")
@@ -361,30 +374,56 @@ async def run_scheduled_ingestion(db) -> Dict:
             result = await ingest_url(db, f["url"], SYSTEM_USER, auto_save=True)
             inserted = int(result.get("inserted", 0))
             total_inserted += inserted
-            await db.feeds.update_one(
-                {"id": f["id"]},
-                {"$set": {"last_attempted_at": now.isoformat(),
-                          "last_inserted_count": inserted}},
-            )
+            update = {
+                "last_attempted_at": now.isoformat(),
+                "last_inserted_count": inserted,
+            }
+            if inserted > 0:
+                update["consecutive_zero_runs"] = 0
+                update["last_error"] = None
+            else:
+                update["consecutive_zero_runs"] = int(f.get("consecutive_zero_runs", 0)) + 1
+                if update["consecutive_zero_runs"] >= _AUTO_DISABLE_AFTER:
+                    update["enabled"] = False
+                    update["auto_disabled_at"] = now.isoformat()
+                    update["auto_disabled_reason"] = (
+                        f"{_AUTO_DISABLE_AFTER} consecutive runs returned 0 cases"
+                    )
+                    auto_disabled.append({"url": f["url"], "label": f.get("label")})
+            await db.feeds.update_one({"id": f["id"]}, {"$set": update})
             processed.append({
                 "url": f["url"], "inserted": inserted,
                 "accepted": result.get("accepted", 0),
                 "extracted": result.get("extracted", 0),
+                "consecutive_zero_runs": update.get("consecutive_zero_runs", 0),
+                "auto_disabled": update.get("auto_disabled_at") is not None,
             })
         except Exception as e:
             logger.warning(f"scheduled ingest failed for {f['url']}: {e}")
-            await db.feeds.update_one(
-                {"id": f["id"]},
-                {"$set": {"last_attempted_at": now.isoformat(),
-                          "last_inserted_count": 0,
-                          "last_error": str(e)[:240]}},
-            )
-            processed.append({"url": f["url"], "error": str(e)[:120]})
+            cz = int(f.get("consecutive_zero_runs", 0)) + 1
+            update = {
+                "last_attempted_at": now.isoformat(),
+                "last_inserted_count": 0,
+                "last_error": str(e)[:240],
+                "consecutive_zero_runs": cz,
+            }
+            if cz >= _AUTO_DISABLE_AFTER:
+                update["enabled"] = False
+                update["auto_disabled_at"] = now.isoformat()
+                update["auto_disabled_reason"] = (
+                    f"{_AUTO_DISABLE_AFTER} consecutive runs failed/empty"
+                )
+                auto_disabled.append({"url": f["url"], "label": f.get("label")})
+            await db.feeds.update_one({"id": f["id"]}, {"$set": update})
+            processed.append({"url": f["url"], "error": str(e)[:120],
+                              "consecutive_zero_runs": cz,
+                              "auto_disabled": update.get("auto_disabled_at") is not None})
 
     summary = {
         "ran_at": now.isoformat(),
         "enabled_feeds": len(enabled),
         "total_inserted": total_inserted,
+        "auto_disabled": auto_disabled,
         "details": processed,
     }
     await db.schedule_config.update_one(
@@ -392,6 +431,12 @@ async def run_scheduled_ingestion(db) -> Dict:
         {"$set": {"last_run_at": now.isoformat(), "last_run_summary": summary}},
         upsert=True,
     )
+    if auto_disabled:
+        logger.info(
+            f"web-learning auto-disabled {len(auto_disabled)} feed(s) after "
+            f"{_AUTO_DISABLE_AFTER} empty runs: "
+            + ", ".join(d["url"] for d in auto_disabled)
+        )
     return summary
 
 

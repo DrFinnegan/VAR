@@ -26,6 +26,12 @@ Pure football VAR audit system. ID PROTECTION module has been separated into its
 - Storage: Emergent Object Storage
 
 ## Changelog
+- 2026-02 (Feb 5 — wave 3): **GAP auto-seed · Source quality · Auto-disable feeds**
+  1. **Auto-seed GAP types** — `POST /api/training/auto-seed-type` (admin-only) generates N canonical cases for an under-represented incident_type via Emergent LLM (GPT-5.2). Idempotent by title. New `+ AUTO-SEED 5` button on every GAP row in the Training Library telemetry panel; one click backfills the type in ≈10s. Verified: freekick (2 → 5 cases), card pending. Allowed types extended to `freekick`, `card`, `goal` so legacy corpus buckets are seedable.
+  2. **Per-source quality score** — `/api/training/stats` now returns `source_quality[{source, citation_count, avg_confidence}]`. Computed by joining recent incidents' cited precedents to their `created_by` bucket and averaging `final_confidence`. Surfaced as a per-source chip in the telemetry panel (`83.2% AVG ★` on web-learning, `55.1% AVG -28.1` on seed, `40.7% AVG -42.5` on operator). Best source flagged with `★`, others show pp-delta vs best.
+  3. **Auto-disable feeds after 7 empty runs** — `web_scheduler.run_scheduled_ingestion` now tracks `consecutive_zero_runs` per feed; resets to 0 on a successful run, increments on zero/error runs. At threshold (7) the feed is auto-disabled with `auto_disabled_at` + `auto_disabled_reason`. Threshold = `_AUTO_DISABLE_AFTER` (≈ 21h of idle at 3-h cadence). Summary now includes `auto_disabled[]` so admin-tools UI can surface freshly-disabled feeds.
+  4. Backend test suite green (34/34 — 5 new tests in `test_corpus_tooling.py`).
+
 - 2026-02 (Feb 5 — wave 2): **CORNER pill back · Corpus telemetry · Free-dataset enrichment**
   1. **CORNER pill re-introduced** on the LiveVAR header (purple `CORNER` button, `data-testid="quick-corner-button"`). Threshold met: `by_type[corner] >= 5`. New component `QuickCornerPill.jsx` mirrors offside contract — 4-frame burst from stage video, posts to `/api/quick/corner`, returns full incident with confidence + Law-17 citation. E2E test `quick-fire.spec.js` updated to assert pill IS visible. 7/7 quick-fire tests green.
   2. **Corpus telemetry panel** added to Training Library (`data-testid="corpus-telemetry-panel"`). Shows:

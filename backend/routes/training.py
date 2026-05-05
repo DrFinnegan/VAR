@@ -307,7 +307,209 @@ async def training_stats():
         "by_source": by_source,
         "last_24h": last_24h,
         "last_24h_web": last_24h_web,
+        "source_quality": await _compute_source_quality(),
     }
+
+
+async def _compute_source_quality() -> List[Dict]:
+    """Per-source quality: avg final_confidence of incidents whose
+    cited precedents trace back to each source bucket.
+
+    Pipeline:
+      1. Look up the last 200 incidents that have AI analysis with precedents_used.
+      2. For each precedent id, resolve `created_by` from training_cases.
+      3. Bucket by source (same buckets as by_source) and average final_confidence.
+    """
+    incidents = await db.incidents.find(
+        {"ai_analysis.precedents_used.0": {"$exists": True},
+         "ai_analysis.final_confidence": {"$exists": True}},
+        {"_id": 0, "ai_analysis.precedents_used.id": 1, "ai_analysis.final_confidence": 1},
+    ).sort("created_at", -1).to_list(200)
+    if not incidents:
+        return []
+    # Pre-fetch the created_by for every cited precedent in a single query.
+    all_ids = set()
+    for inc in incidents:
+        for p in inc.get("ai_analysis", {}).get("precedents_used", []):
+            if p.get("id"):
+                all_ids.add(p["id"])
+    if not all_ids:
+        return []
+    case_rows = await db.training_cases.find(
+        {"id": {"$in": list(all_ids)}},
+        {"_id": 0, "id": 1, "created_by": 1, "source": 1},
+    ).to_list(len(all_ids))
+    case_source = {}
+    for c in case_rows:
+        cb = (c.get("created_by") or "").strip()
+        src_field = (c.get("source") or "").strip()
+        if cb == "seed":
+            bucket = "seed"
+        elif cb in ("system-scheduler", "system"):
+            bucket = "web-learning"
+        elif cb == "operator-promoted" or src_field == "operator-promoted" or (cb and cb != "manual"):
+            bucket = "operator"
+        else:
+            bucket = "manual"
+        case_source[c["id"]] = bucket
+
+    # Aggregate per bucket: sum/count of final_confidence across citing incidents.
+    sums = {"seed": 0.0, "web-learning": 0.0, "operator": 0.0, "manual": 0.0}
+    counts = {"seed": 0, "web-learning": 0, "operator": 0, "manual": 0}
+    for inc in incidents:
+        conf = inc.get("ai_analysis", {}).get("final_confidence")
+        if conf is None:
+            continue
+        cited_buckets = set()
+        for p in inc.get("ai_analysis", {}).get("precedents_used", []):
+            b = case_source.get(p.get("id"))
+            if b:
+                cited_buckets.add(b)
+        for b in cited_buckets:
+            sums[b] += float(conf)
+            counts[b] += 1
+    out: List[Dict] = []
+    for b in ("seed", "web-learning", "operator", "manual"):
+        if counts[b] > 0:
+            out.append({
+                "source": b,
+                "citation_count": counts[b],
+                "avg_confidence": round(sums[b] / counts[b], 1),
+            })
+    return out
+
+
+# ── Auto-seed GAP types via LLM ─────────────────────────
+# Allowed types: extends the IncidentType enum to include legacy/derived
+# corpus buckets ("freekick", "card") so the GAP-row auto-seed can target
+# every type that surfaces in `/training/stats.by_type`.
+_AUTOSEED_ALLOWED = {
+    "offside", "handball", "foul", "penalty", "goal_line",
+    "red_card", "corner", "other", "freekick", "card", "goal",
+}
+
+
+class AutoSeedRequest(BaseModel):
+    incident_type: str
+    count: int = 5
+
+
+@api_router.post("/training/auto-seed-type")
+async def auto_seed_type(body: AutoSeedRequest, request: Request):
+    """Generate N canonical training cases for an under-represented incident
+    type. Used by the Training Library's GAP rows to one-click backfill.
+
+    Each generated case follows the CANONICAL_CASES schema and is tagged
+    `auto-seeded` so admins can audit / prune later. Idempotent by title
+    (LLM duplicates skip on insert).
+    """
+    user = await require_role(request, db, ["admin"])
+    inc_type = (body.incident_type or "").strip().lower()
+    if inc_type not in _AUTOSEED_ALLOWED:
+        raise HTTPException(
+            status_code=400,
+            detail=f"incident_type must be one of: {sorted(_AUTOSEED_ALLOWED)}",
+        )
+    n = max(1, min(15, int(body.count or 5)))
+    cases = await _llm_generate_canonical_cases(inc_type, n)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    inserted, skipped = 0, 0
+    for c in cases:
+        title = (c.get("title") or "").strip()
+        if not title or not c.get("correct_decision") or not c.get("rationale"):
+            skipped += 1
+            continue
+        existing = await db.training_cases.find_one({"title": title}, {"_id": 0, "id": 1})
+        if existing:
+            skipped += 1
+            continue
+        doc = {
+            "id": str(uuid.uuid4()),
+            "title": title,
+            "incident_type": inc_type,
+            "correct_decision": c.get("correct_decision"),
+            "rationale": c.get("rationale"),
+            "keywords": c.get("keywords") or [],
+            "tags": list(set(["auto-seeded", "gap-fill"] + (c.get("tags") or []))),
+            "match_context": c.get("match_context") or {},
+            "law_references": c.get("law_references") or [],
+            "outcome": c.get("outcome"),
+            "visual_tags": [],
+            "media_storage_path": None,
+            "thumbnail_storage_path": None,
+            "source": "auto-seeded",
+            "created_by": user.get("id") or "auto-seed",
+            "created_by_name": "OCTON Auto-Seed",
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+        await db.training_cases.insert_one(doc.copy())
+        inserted += 1
+    total = await db.training_cases.count_documents({"incident_type": inc_type})
+    return {
+        "incident_type": inc_type,
+        "requested": n,
+        "inserted": inserted,
+        "skipped": skipped,
+        "total_for_type": total,
+    }
+
+
+async def _llm_generate_canonical_cases(incident_type: str, count: int) -> List[Dict]:
+    """Single LLM call that returns `count` canonical VAR cases for the
+    given incident_type as a JSON array. Falls back to empty list if the
+    Emergent LLM key is missing or the response is unparseable — caller
+    handles the empty-result UX.
+    """
+    import os
+    import json
+    import re
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        logger.warning("EMERGENT_LLM_KEY missing — auto-seed cannot run")
+        return []
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+    except Exception as e:
+        logger.warning(f"emergentintegrations import failed: {e}")
+        return []
+    session_id = f"octon-autoseed-{int(datetime.now(timezone.utc).timestamp())}"
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=session_id,
+        system_message=(
+            "You are an IFAB / VAR archivist. Produce canonical training cases "
+            "for the OCTON VAR precedent corpus. Your output must be a single "
+            "JSON ARRAY only (no prose, no code fence). Each entry MUST contain: "
+            "title (string), correct_decision (string), rationale (string, 2-3 "
+            "sentences), keywords (string[]), tags (string[]), match_context "
+            "({teams,competition,year}), law_references (string[]), outcome "
+            "(string). The cases must be REAL or canonically-illustrative VAR "
+            "scenarios derived from publicly-known IFAB / FIFA / PGMOL training "
+            "material. Avoid duplicates. Do NOT mention 'Dr Finnegan' or any "
+            "individual designers/operators."
+        ),
+    ).with_model("openai", "gpt-5.2")
+    prompt = (
+        f"Produce {count} canonical training cases of incident_type='{incident_type}'.\n"
+        f"Each case must illustrate a distinct law application or VAR ruling pattern.\n"
+        f"Return JSON array only."
+    )
+    try:
+        resp = await chat.send_message(UserMessage(text=prompt))
+        text = (resp or "").strip()
+        # Strip code-fences if any
+        text = re.sub(r"^```[a-z]*\n?", "", text)
+        text = re.sub(r"\n?```$", "", text)
+        m = re.search(r"\[\s*{.*}\s*\]", text, re.DOTALL)
+        if not m:
+            return []
+        arr = json.loads(m.group(0))
+        if isinstance(arr, list):
+            return [c for c in arr if isinstance(c, dict)][:count]
+    except Exception as e:
+        logger.warning(f"LLM auto-seed parse failed: {e}")
+    return []
 
 
 @api_router.post("/training/retrieve")

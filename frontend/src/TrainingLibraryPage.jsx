@@ -654,7 +654,7 @@ export default function TrainingLibraryPage() {
       </div>
 
       {/* ── Corpus telemetry: composition by source + 24h growth ── */}
-      <CorpusTelemetryPanel stats={stats} />
+      <CorpusTelemetryPanel stats={stats} onAutoSeeded={load} />
 
       {/* Filter bar */}
       <div className="flex items-center gap-2">
@@ -892,12 +892,13 @@ function CaseRow({ c, isUploading, onUpload, onDelete }) {
  * Mounted inside the Training Library page. Read-only — no admin role gate
  * needed because the data is non-sensitive aggregate counts.
  */
-function CorpusTelemetryPanel({ stats }) {
+function CorpusTelemetryPanel({ stats, onAutoSeeded }) {
   const total = stats.total_cases || 0;
   const sources = stats.by_source || [];
   const types = stats.by_type || [];
   const last24 = stats.last_24h || 0;
   const last24Web = stats.last_24h_web || 0;
+  const sourceQuality = stats.source_quality || [];
   const sourceColors = {
     seed: "#00E5FF",
     "web-learning": "#B366FF",
@@ -910,6 +911,48 @@ function CorpusTelemetryPanel({ stats }) {
     operator: "OPERATOR · feedback",
     manual: "MANUAL · admin",
   };
+  // Quality lookup for rendering avg-conf chip alongside each bar.
+  const qByBucket = Object.fromEntries(
+    sourceQuality.map((q) => [q.source, q])
+  );
+  // Reference: highest avg_confidence across all sources, used to render
+  // the "delta vs best" hint so admins immediately see which source is
+  // pulling AI confidence up vs down.
+  const bestConf = sourceQuality.reduce(
+    (m, q) => (q.avg_confidence > m ? q.avg_confidence : m),
+    0
+  );
+
+  // ── Auto-seed action — used by GAP rows ──
+  const [seeding, setSeeding] = useState(null); // incident_type currently seeding
+  const seedGapType = async (incidentType) => {
+    setSeeding(incidentType);
+    try {
+      const { data } = await axios.post(
+        `${API}/training/auto-seed-type`,
+        { incident_type: incidentType, count: 5 },
+        { withCredentials: true }
+      );
+      const ins = data.inserted || 0;
+      if (ins > 0) {
+        toast.success(`Auto-seeded ${ins} ${incidentType} cases`, {
+          description: `Total ${incidentType} corpus: ${data.total_for_type}`,
+        });
+        if (onAutoSeeded) onAutoSeeded();
+      } else {
+        toast.warning(`No new ${incidentType} cases inserted`, {
+          description: `${data.skipped} skipped (duplicates / invalid). Try again.`,
+        });
+      }
+    } catch (e) {
+      toast.error("Auto-seed failed", {
+        description: e?.response?.data?.detail || e.message,
+      });
+    } finally {
+      setSeeding(null);
+    }
+  };
+
   return (
     <div
       className="grid grid-cols-1 lg:grid-cols-2 gap-3"
@@ -933,6 +976,8 @@ function CorpusTelemetryPanel({ stats }) {
               const pct = total > 0 ? (s.count / total) * 100 : 0;
               const color = sourceColors[s.source] || "#fff";
               const label = sourceLabels[s.source] || s.source.toUpperCase();
+              const q = qByBucket[s.source];
+              const delta = q && bestConf > 0 ? (q.avg_confidence - bestConf) : null;
               return (
                 <div
                   key={s.source}
@@ -941,10 +986,34 @@ function CorpusTelemetryPanel({ stats }) {
                 >
                   <div className="flex items-center justify-between text-[10px] font-mono">
                     <span style={{ color }}>{label}</span>
-                    <span className="text-gray-400">
-                      {s.count}{" "}
-                      <span className="text-gray-600">· {pct.toFixed(1)}%</span>
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {q && (
+                        <span
+                          className="text-[9px] font-mono px-1.5 py-0.5 border"
+                          style={{
+                            color,
+                            borderColor: `${color}40`,
+                            backgroundColor: `${color}10`,
+                          }}
+                          data-testid={`corpus-quality-${s.source}`}
+                          title={`Avg verdict confidence when this source was cited (${q.citation_count} citations)`}
+                        >
+                          {q.avg_confidence}% AVG
+                          {delta !== null && delta < 0 && (
+                            <span className="ml-1 text-[#FFB800]">
+                              {delta.toFixed(1)}
+                            </span>
+                          )}
+                          {delta !== null && delta === 0 && q.citation_count > 0 && (
+                            <span className="ml-1 text-[#00FF88]">★</span>
+                          )}
+                        </span>
+                      )}
+                      <span className="text-gray-400">
+                        {s.count}{" "}
+                        <span className="text-gray-600">· {pct.toFixed(1)}%</span>
+                      </span>
+                    </div>
                   </div>
                   <div className="h-1.5 bg-white/[0.04]">
                     <div
@@ -991,24 +1060,25 @@ function CorpusTelemetryPanel({ stats }) {
         </div>
       </div>
 
-      {/* By type — gap detector */}
+      {/* By type — gap detector with auto-seed */}
       <div className="border border-white/[0.08] bg-[#0A0A0A] p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-[9px] font-mono tracking-[0.28em] text-gray-500 uppercase">
             Composition · By Incident Type
           </p>
           <span className="text-[9px] font-mono text-gray-600">
-            gap = &lt; 5 cases
+            gap = &lt; 5 cases · click GAP to auto-seed
           </span>
         </div>
         {types.length === 0 ? (
           <p className="text-[11px] text-gray-500 font-mono">No type data.</p>
         ) : (
-          <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+          <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
             {types.map((t) => {
               const pct = total > 0 ? (t.count / total) * 100 : 0;
               const isGap = t.count < 5;
               const color = isGap ? "#FF6B6B" : "#00E5FF";
+              const isSeeding = seeding === t.incident_type;
               return (
                 <div
                   key={t.incident_type}
@@ -1034,12 +1104,23 @@ function CorpusTelemetryPanel({ stats }) {
                   >
                     {t.count}
                   </span>
-                  {isGap && (
-                    <span
-                      className="text-[8px] font-mono tracking-[0.2em] px-1 py-0.5 border border-[#FF6B6B]/40 text-[#FF6B6B] bg-[#FF6B6B]/[0.06]"
-                      data-testid={`corpus-gap-${t.incident_type}`}
+                  {isGap ? (
+                    <button
+                      onClick={() => seedGapType(t.incident_type)}
+                      disabled={isSeeding}
+                      className={`text-[9px] font-mono tracking-[0.2em] px-2 py-0.5 border transition-all ${
+                        isSeeding
+                          ? "text-gray-500 border-gray-500/40 bg-gray-500/[0.06] cursor-wait"
+                          : "text-[#FF6B6B] border-[#FF6B6B]/40 bg-[#FF6B6B]/[0.06] hover:bg-[#FF6B6B]/15 hover:border-[#FF6B6B]"
+                      }`}
+                      data-testid={`corpus-gap-seed-${t.incident_type}`}
+                      title={`Auto-seed 5 ${t.incident_type} cases via LLM`}
                     >
-                      GAP
+                      {isSeeding ? "SEEDING…" : "+ AUTO-SEED 5"}
+                    </button>
+                  ) : (
+                    <span className="text-[8px] font-mono tracking-[0.15em] text-gray-600 w-20 text-right">
+                      OK
                     </span>
                   )}
                 </div>
