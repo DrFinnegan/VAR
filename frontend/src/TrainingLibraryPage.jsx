@@ -30,7 +30,7 @@ const emptyForm = () => ({
 
 export default function TrainingLibraryPage() {
   const [cases, setCases] = useState([]);
-  const [stats, setStats] = useState({ total_cases: 0, by_type: [], with_media: 0, by_source: [], last_24h: 0, last_24h_web: 0 });
+  const [stats, setStats] = useState({ total_cases: 0, by_type: [], with_media: 0, by_source: [], last_24h: 0, last_24h_web: 0, source_quality: [], vision_escalations: { total: 0, last_24h: 0, top_triggers: [] } });
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState("all");
   const [search, setSearch] = useState("");
@@ -153,7 +153,7 @@ export default function TrainingLibraryPage() {
         axios.get(`${API}/training/stats`, { withCredentials: true }),
       ]);
       setCases(listRes.data || []);
-      setStats(statsRes.data || { total_cases: 0, by_type: [], with_media: 0, by_source: [], last_24h: 0, last_24h_web: 0 });
+      setStats(statsRes.data || { total_cases: 0, by_type: [], with_media: 0, by_source: [], last_24h: 0, last_24h_web: 0, source_quality: [], vision_escalations: { total: 0, last_24h: 0, top_triggers: [] } });
     } catch (e) {
       toast.error("Failed to load training library");
     } finally {
@@ -656,6 +656,9 @@ export default function TrainingLibraryPage() {
       {/* ── Corpus telemetry: composition by source + 24h growth ── */}
       <CorpusTelemetryPanel stats={stats} onAutoSeeded={load} />
 
+      {/* ── Vision-escalation telemetry ── */}
+      <VisionEscalationsPanel data={stats.vision_escalations} />
+
       {/* Filter bar */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1 max-w-md">
@@ -1132,3 +1135,94 @@ function CorpusTelemetryPanel({ stats, onAutoSeeded }) {
     </div>
   );
 }
+
+/**
+ * VisionEscalationsPanel — surfaces how often OCTON's post-LLM
+ * violent-conduct safety-net upgraded a YELLOW/REVIEW verdict to RED.
+ *
+ * Two big counters (TOTAL / 24h) + a top-triggers list so admins see
+ * which phrases (e.g. 'elbow strikes', 'stamp on') keep firing the
+ * safety-net. Useful as a heat-map for officiating training (clusters
+ * of stamps in a given week → emphasise SFP in the ref briefing).
+ */
+function VisionEscalationsPanel({ data }) {
+  const total = data?.total || 0;
+  const last24h = data?.last_24h || 0;
+  const triggers = data?.top_triggers || [];
+  const has24h = last24h > 0;
+  const accent = "#FF6B6B";
+  return (
+    <div
+      className="border border-white/[0.08] bg-[#0A0A0A] p-4"
+      data-testid="vision-escalations-panel"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[9px] font-mono tracking-[0.28em] text-gray-500 uppercase">
+          Vision Escalations · YELLOW → RED safety-net
+        </p>
+        <span
+          className={`text-[9px] font-mono tracking-[0.2em] px-2 py-1 border ${
+            has24h
+              ? "text-[#FF6B6B] border-[#FF6B6B]/40 bg-[#FF6B6B]/[0.06]"
+              : "text-gray-500 border-white/[0.06] bg-white/[0.02]"
+          }`}
+          data-testid="vision-escalation-status"
+        >
+          {has24h ? "ACTIVE" : "QUIET"}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-[1px] bg-white/[0.04] mb-4">
+        <div className="bg-[#0A0A0A] p-3" data-testid="vision-escalation-total">
+          <p className="text-[8px] font-mono tracking-[0.28em] text-gray-500 uppercase">
+            Total
+          </p>
+          <p className="text-2xl font-mono mt-1" style={{ color: accent }}>
+            {total}
+          </p>
+          <p className="text-[8px] font-mono text-gray-600 mt-0.5">// all-time RED upgrades</p>
+        </div>
+        <div className="bg-[#0A0A0A] p-3" data-testid="vision-escalation-24h">
+          <p className="text-[8px] font-mono tracking-[0.28em] text-gray-500 uppercase">
+            Last 24h
+          </p>
+          <p className="text-2xl font-mono mt-1" style={{ color: accent }}>
+            {last24h}
+          </p>
+          <p className="text-[8px] font-mono text-gray-600 mt-0.5">// recent activity</p>
+        </div>
+        <div className="bg-[#0A0A0A] p-3 col-span-2">
+          <p className="text-[8px] font-mono tracking-[0.28em] text-gray-500 uppercase mb-2">
+            Top triggers
+          </p>
+          {triggers.length === 0 ? (
+            <p className="text-[10px] font-mono text-gray-500">
+              No vision-escalations yet — the safety-net hasn't fired.
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {triggers.map((t, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-2"
+                  data-testid={`vision-escalation-trigger-${i}`}
+                >
+                  <span
+                    className="text-[10px] font-mono uppercase tracking-[0.1em] truncate"
+                    style={{ color: "#FFB8B8" }}
+                    title={t.trigger}
+                  >
+                    {t.trigger}
+                  </span>
+                  <span className="text-[10px] font-mono text-gray-400">
+                    × {t.count}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+

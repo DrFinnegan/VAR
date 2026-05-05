@@ -40,6 +40,12 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
   // Operator drags the TILT slider to align with a reference line on the
   // pitch (centre line, byline, six-yard box etc).
   const [dragLines, setDragLines] = useState({ def: 0.48, att: 0.52, tilt: 0 });
+  // tiltSource: 'auto' (OpenCV/AI), 'consensus' (median across frames),
+  // 'llm' (GPT-5.2 returned a value), 'manual' (operator overrode).
+  // Drives the small badge next to the angle chip in the SAW modal so
+  // the operator immediately knows whether the line is computed or
+  // hand-set. Resets to 'manual' the moment the slider is touched.
+  const [tiltSource, setTiltSource] = useState(null);
   const [dragging, setDragging] = useState(null); // 'def' | 'att' | 'tilt' | null
   const dragRef = useRef(null);
 
@@ -67,6 +73,9 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
       ? Math.max(-30, Math.min(30, m.pitch_angle_deg))
       : 0;
     setDragLines({ def: defX, att: attX, tilt });
+    // Source badge: read from server when present; otherwise null until
+    // the operator interacts with the slider (which sets to 'manual').
+    setTiltSource(m && m.tilt_source ? m.tilt_source : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, idx, analysis?.offside_markers]);
 
@@ -147,13 +156,17 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
       const x = (e.clientX - rect.left) / rect.width; // 0..1
       const deg = Math.max(-30, Math.min(30, (x - 0.5) * 60));
       setDragLines((s) => ({ ...s, tilt: deg }));
+      setTiltSource("manual");
       return;
     }
     const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     setDragLines((s) => ({ ...s, [dragging]: x }));
   };
   const onMouseUpFrame = () => setDragging(null);
-  const resetTilt = () => setDragLines((s) => ({ ...s, tilt: 0 }));
+  const resetTilt = () => {
+    setDragLines((s) => ({ ...s, tilt: 0 }));
+    setTiltSource("manual");
+  };
 
   const downloadEvidence = async () => {
     if (!frames.length) return;
@@ -423,7 +436,10 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
                   max="30"
                   step="0.5"
                   value={mk.pitch_angle_deg || 0}
-                  onChange={(e) => setDragLines((s) => ({ ...s, tilt: parseFloat(e.target.value) }))}
+                  onChange={(e) => {
+                    setDragLines((s) => ({ ...s, tilt: parseFloat(e.target.value) }));
+                    setTiltSource("manual");
+                  }}
                   className="w-32 accent-[#FFB800]"
                   data-testid="octon-offside-tilt-slider"
                   title="Drag to align lines with the goal line / centre line under camera perspective"
@@ -437,6 +453,31 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
                 >
                   {(mk.pitch_angle_deg || 0).toFixed(1)}°
                 </button>
+                {tiltSource && (
+                  <span
+                    className={`text-[8px] font-mono tracking-[0.2em] px-1 py-0.5 border ${
+                      tiltSource === "auto"
+                        ? "text-[#00E5FF] border-[#00E5FF]/40 bg-[#00E5FF]/10"
+                        : tiltSource === "consensus"
+                        ? "text-[#B366FF] border-[#B366FF]/40 bg-[#B366FF]/10"
+                        : tiltSource === "llm"
+                        ? "text-[#00FF88] border-[#00FF88]/40 bg-[#00FF88]/10"
+                        : "text-[#FFB800] border-[#FFB800]/40 bg-[#FFB800]/10"
+                    }`}
+                    data-testid={`octon-offside-tilt-source-${tiltSource}`}
+                    title={
+                      tiltSource === "auto"
+                        ? "Computed by OpenCV Hough-line detector on the broadcast frame"
+                        : tiltSource === "consensus"
+                        ? "Median tilt across multiple frames"
+                        : tiltSource === "llm"
+                        ? "Pre-filled by GPT-5.2 from visible pitch markings"
+                        : "Operator-set"
+                    }
+                  >
+                    {tiltSource.toUpperCase()}
+                  </span>
+                )}
               </div>
             )}
             {mk?.verdict && (

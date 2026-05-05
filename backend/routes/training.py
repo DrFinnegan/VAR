@@ -300,6 +300,33 @@ async def training_stats():
         {"created_at": {"$gte": cutoff}, "created_by": "system-scheduler"}
     )
 
+    # ── Vision-escalation telemetry ──
+    # Count incidents whose AI analysis fired the violent-conduct safety-net.
+    # Surfaced in the operator's Training Library so admin can spot trends
+    # (e.g. "23 escalations in last 24h" → broadcast may have a series of
+    # heavy clashes worth reviewing).
+    vision_total = await db.incidents.count_documents(
+        {"ai_analysis.vision_escalation.triggered": True}
+    )
+    vision_24h_cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    vision_24h = await db.incidents.count_documents(
+        {"ai_analysis.vision_escalation.triggered": True,
+         "created_at": {"$gte": vision_24h_cutoff}}
+    )
+    # Top trigger phrases that fired the safety-net.
+    trigger_pipe = [
+        {"$match": {"ai_analysis.vision_escalation.triggered": True}},
+        {"$group": {"_id": "$ai_analysis.vision_escalation.trigger_phrase",
+                    "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 6},
+    ]
+    top_triggers_raw = await db.incidents.aggregate(trigger_pipe).to_list(6)
+    top_triggers = [
+        {"trigger": t["_id"], "count": t["count"]}
+        for t in top_triggers_raw if t.get("_id")
+    ]
+
     return {
         "total_cases": total,
         "by_type": [{"incident_type": b["_id"], "count": b["count"]} for b in by_type],
@@ -308,6 +335,11 @@ async def training_stats():
         "last_24h": last_24h,
         "last_24h_web": last_24h_web,
         "source_quality": await _compute_source_quality(),
+        "vision_escalations": {
+            "total": vision_total,
+            "last_24h": vision_24h,
+            "top_triggers": top_triggers,
+        },
     }
 
 

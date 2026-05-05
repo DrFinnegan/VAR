@@ -96,7 +96,7 @@ async def seed_admin(db):
             {
                 "email": admin_email,
                 "password_hash": hashed,
-                "name": "Dr Finnegan",
+                "name": "OCTON Admin",
                 "role": "admin",
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }

@@ -28,6 +28,7 @@ import asyncio
 import base64
 import io
 import logging
+from datetime import datetime, timezone
 from typing import Optional, Dict, List
 
 logger = logging.getLogger(__name__)
@@ -1307,18 +1308,28 @@ class NeoCortexAnalyzer:
             except (TypeError, ValueError):
                 offside_markers = []
 
-            # ── OpenCV Hough auto-tilt fallback ──────────────────────
-            # If the LLM did not provide pitch_angle_deg, run our local
-            # Hough-line detector on the same frames so the SAW modal
-            # opens with lines already tilted to the broadcast camera's
-            # perspective. Saves the operator the manual slider step on
-            # most clips. Best-effort — skips silently on failure.
+            # ── OpenCV Hough auto-tilt fallback + cross-frame consensus ──
+            # Strategy:
+            #   1. For every offside marker that has no `pitch_angle_deg`,
+            #      run the OpenCV detector on that frame.
+            #   2. Tag each marker with `tilt_source` = 'llm' (from GPT-5.2),
+            #      'auto' (OpenCV Hough) or null (no value at all).
+            #   3. Compute a CONSENSUS median across all populated values
+            #      and apply it to every marker. The broadcast camera tilt
+            #      is the same for every frame in a single replay, so a
+            #      median across frames is more robust than per-frame
+            #      readings (one bad Hough sample shouldn't tilt the line
+            #      on a confident frame).
             if (
                 incident_type == "offside"
                 and offside_markers
                 and all_images
-                and any(m.get("pitch_angle_deg") is None for m in offside_markers)
             ):
+                # Tag whatever the LLM produced.
+                for m in offside_markers:
+                    if m.get("pitch_angle_deg") is not None:
+                        m["tilt_source"] = "llm"
+                # Hough fallback for missing values.
                 try:
                     from pitch_tilt import detect_pitch_tilt_deg
                     for i, m in enumerate(offside_markers):
@@ -1326,8 +1337,28 @@ class NeoCortexAnalyzer:
                             tilt = detect_pitch_tilt_deg(all_images[i])
                             if tilt is not None:
                                 m["pitch_angle_deg"] = tilt
+                                m["tilt_source"] = "auto"
                 except Exception as e:
                     logger.debug("auto-tilt detect failed: %s", e)
+
+                # Cross-frame consensus median.
+                vals = [m["pitch_angle_deg"] for m in offside_markers
+                        if isinstance(m.get("pitch_angle_deg"), (int, float))]
+                if vals:
+                    vals_sorted = sorted(vals)
+                    mid = len(vals_sorted) // 2
+                    median = (
+                        vals_sorted[mid] if len(vals_sorted) % 2
+                        else (vals_sorted[mid - 1] + vals_sorted[mid]) / 2
+                    )
+                    median = round(max(-30.0, min(30.0, float(median))), 1)
+                    for m in offside_markers:
+                        m["pitch_angle_deg"] = median
+                        # Mark as consensus when we overrode a per-frame reading.
+                        if "tilt_source" in m:
+                            m["tilt_source"] = (
+                                "consensus" if len(vals) > 1 else m["tilt_source"]
+                            )
 
             # ── Post-LLM violent-conduct escalation ──────────────────
             # Scan the frame_breakdown the LLM just produced for explicit
@@ -1347,6 +1378,7 @@ class NeoCortexAnalyzer:
             confidence_score = float(analysis_data.get("confidence_score", 50))
             neo_notes = str(analysis_data.get("neo_cortex_notes", ""))
             cited = cited_clause
+            vision_escalation = None  # populated when our safety-net fires
             if incident_type in ("foul", "red_card", "card", "other", "penalty"):
                 escalated, trigger_phrase = self._check_violent_conduct_in_frames(
                     frame_breakdown
@@ -1356,6 +1388,8 @@ class NeoCortexAnalyzer:
                         "Violent-conduct vision escalation fired: '%s' → "
                         "upgrading '%s' to Red Card", trigger_phrase, suggested_decision
                     )
+                    original_decision = suggested_decision
+                    original_confidence = confidence_score
                     suggested_decision = (
                         "Red Card - Violent Conduct"
                         if "elbow" in trigger_phrase or "headbutt" in trigger_phrase
@@ -1370,6 +1404,15 @@ class NeoCortexAnalyzer:
                         f"observed in frame analysis — verdict upgraded to RED. "
                         + (neo_notes or "")
                     )
+                    vision_escalation = {
+                        "triggered": True,
+                        "trigger_phrase": trigger_phrase,
+                        "original_decision": original_decision,
+                        "upgraded_decision": suggested_decision,
+                        "original_confidence": original_confidence,
+                        "upgraded_confidence": confidence_score,
+                        "trigger_at": datetime.now(timezone.utc).isoformat(),
+                    }
 
             return {
                 "stage": "neo_cortex",
@@ -1389,6 +1432,7 @@ class NeoCortexAnalyzer:
                 "angle_disagreement": angle_disagreement,
                 "frame_breakdown": frame_breakdown,
                 "offside_markers": offside_markers,
+                "vision_escalation": vision_escalation,
                 "processing_time_ms": processing_ms,
             }
 
