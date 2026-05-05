@@ -26,6 +26,13 @@ Pure football VAR audit system. ID PROTECTION module has been separated into its
 - Storage: Emergent Object Storage
 
 ## Changelog
+- 2026-02 (Feb 5 — wave 4): **Offside lines respect broadcast-camera perspective**
+  1. **Bug**: offside DEFENDER + ATTACKER lines were drawn purely vertical (`y1=0 → y2=100`), ignoring the perspective tilt of the broadcast camera. On any standard main-camera shot the goal line is at a slight angle and the offside lines visually appeared rotated relative to the centre/halfway line.
+  2. **Fix**: introduced a shared `tilt` (degrees, ±30°) on the OCTON SAW modal that rotates BOTH lines around their midpoint via SVG `transform="rotate(angle, x, 50)"`. Operator drags the new TILT slider (`data-testid="octon-offside-tilt-slider"`) to align with the visible pitch geometry; double-click reset to 0°. PNG export applies the same canvas rotation so referee reports keep the corrected angle.
+  3. **AI hint**: extended the LLM offside-marker contract with optional `pitch_angle_deg` so GPT-5.2 can pre-fill the tilt from any visible halfway/byline. Backend parser clamps to ±30° via new `_clamp_angle` helper.
+  4. New regression test `offside-tilt.spec.js` (seeds incident, opens modal, drives slider, asserts SVG `<g>` receives `rotate(12,...)`).
+  5. Frontend Playwright suite green 15/15. Backend pytest still 34/34.
+
 - 2026-02 (Feb 5 — wave 3): **GAP auto-seed · Source quality · Auto-disable feeds**
   1. **Auto-seed GAP types** — `POST /api/training/auto-seed-type` (admin-only) generates N canonical cases for an under-represented incident_type via Emergent LLM (GPT-5.2). Idempotent by title. New `+ AUTO-SEED 5` button on every GAP row in the Training Library telemetry panel; one click backfills the type in ≈10s. Verified: freekick (2 → 5 cases), card pending. Allowed types extended to `freekick`, `card`, `goal` so legacy corpus buckets are seedable.
   2. **Per-source quality score** — `/api/training/stats` now returns `source_quality[{source, citation_count, avg_confidence}]`. Computed by joining recent incidents' cited precedents to their `created_by` bucket and averaging `final_confidence`. Surfaced as a per-source chip in the telemetry panel (`83.2% AVG ★` on web-learning, `55.1% AVG -28.1` on seed, `40.7% AVG -42.5` on operator). Best source flagged with `★`, others show pp-delta vs best.

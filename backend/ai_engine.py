@@ -125,6 +125,17 @@ def _offside_marker_instruction(incident_type: str, n_frames: int) -> str:
         "reference is visible at all.\n"
         "  • `note` = one short phrase (e.g. 'shoulder past centre-back at pass', "
         "'estimated from wide angle, operator please verify').\n"
+        "  • `pitch_angle_deg` (OPTIONAL but recommended) = the perspective "
+        "tilt of the goal line in the frame, in degrees, where 0 = vertical "
+        "on screen, positive = top of line leans right (broadcast camera "
+        "right of midfield), negative = top leans left. Typical broadcast "
+        "main-camera angles are between -25 and +25. Estimate from any "
+        "visible pitch markings (halfway line, byline, six-yard box, "
+        "penalty arc). The frontend will rotate BOTH offside lines by this "
+        "angle so they remain parallel to the goal line — without this "
+        "value the lines render straight up/down and look 'wrong' on any "
+        "broadcast frame. If the frame is a top-down tactical view (rare), "
+        "set this to 0.\n"
         "\n"
         "RULE OF THUMB for null vs estimate:\n"
         "  ✓ ESTIMATE (provide numbers, verdict: unclear): grass/pitch visible, "
@@ -1150,6 +1161,17 @@ class NeoCortexAnalyzer:
                     if v != v:  # NaN
                         return None
                     return max(0.0, min(1.0, v))
+
+                def _clamp_angle(v):
+                    """Clamp pitch_angle_deg to a safe broadcast range.
+                    None when unparseable so the frontend falls back to 0°."""
+                    try:
+                        v = float(v)
+                    except (TypeError, ValueError):
+                        return None
+                    if v != v:  # NaN
+                        return None
+                    return max(-30.0, min(30.0, v))
                 for om in analysis_data.get("offside_markers") or []:
                     if not isinstance(om, dict):
                         continue
@@ -1168,6 +1190,7 @@ class NeoCortexAnalyzer:
                         "verdict": verdict,
                         "daylight_cm": dl,
                         "note": str(om.get("note", ""))[:160] if om.get("note") else None,
+                        "pitch_angle_deg": _clamp_angle(om.get("pitch_angle_deg")),
                     })
             except (TypeError, ValueError):
                 offside_markers = []

@@ -31,10 +31,16 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
   const [cinema, setCinema] = useState(false);
   const [fading, setFading] = useState(false);
   const dialogRef = useRef(null);
-  // Offside drag-calibration state — declared BEFORE any early return to
+  // ── Offside drag-calibration state — declared BEFORE any early return to
   // comply with rules-of-hooks. Values are computed conditionally below.
-  const [dragLines, setDragLines] = useState({ def: 0.48, att: 0.52 });
-  const [dragging, setDragging] = useState(null); // 'def' | 'att' | null
+  // 2026-02 fix: lines previously rendered purely vertical, which is wrong
+  // for any broadcast camera (the goal line and halfway line are tilted in
+  // the frame due to camera perspective). `tilt` (degrees) rotates BOTH
+  // lines around their midpoint so they stay parallel to the goal line.
+  // Operator drags the TILT slider to align with a reference line on the
+  // pitch (centre line, byline, six-yard box etc).
+  const [dragLines, setDragLines] = useState({ def: 0.48, att: 0.52, tilt: 0 });
+  const [dragging, setDragging] = useState(null); // 'def' | 'att' | 'tilt' | null
   const dragRef = useRef(null);
 
   useEffect(() => {
@@ -55,7 +61,12 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
     const m = markers[idx];
     const defX = m && typeof m.offside_line_x === "number" ? m.offside_line_x : 0.48;
     const attX = m && typeof m.attacker_x === "number" ? m.attacker_x : 0.52;
-    setDragLines({ def: defX, att: attX });
+    // pitch_angle_deg is optional — AI may infer broadcast-camera tilt.
+    // Clamp to reasonable bounds so we never spin lines absurdly.
+    const tilt = m && typeof m.pitch_angle_deg === "number"
+      ? Math.max(-30, Math.min(30, m.pitch_angle_deg))
+      : 0;
+    setDragLines({ def: defX, att: attX, tilt });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, idx, analysis?.offside_markers]);
 
@@ -116,6 +127,7 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
   const mk = isOffside ? {
     offside_line_x: dragLines.def,
     attacker_x: dragLines.att,
+    pitch_angle_deg: dragLines.tilt,
     verdict: hasLlmCoords ? rawMk.verdict : "estimate",
     daylight_cm: hasLlmCoords ? rawMk.daylight_cm : null,
     note: hasLlmCoords ? rawMk.note : "ESTIMATE — drag the amber DEFENDER and cyan ATTACKER lines to calibrate",
@@ -129,10 +141,19 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
   const onMouseMoveFrame = (e) => {
     if (!dragging || !dragRef.current) return;
     const rect = dragRef.current.getBoundingClientRect();
+    if (dragging === "tilt") {
+      // Map horizontal cursor displacement from frame centre to ±30° tilt.
+      // Drag right of centre → positive tilt (top of line leans right).
+      const x = (e.clientX - rect.left) / rect.width; // 0..1
+      const deg = Math.max(-30, Math.min(30, (x - 0.5) * 60));
+      setDragLines((s) => ({ ...s, tilt: deg }));
+      return;
+    }
     const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     setDragLines((s) => ({ ...s, [dragging]: x }));
   };
   const onMouseUpFrame = () => setDragging(null);
+  const resetTilt = () => setDragLines((s) => ({ ...s, tilt: 0 }));
 
   const downloadEvidence = async () => {
     if (!frames.length) return;
@@ -186,42 +207,56 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
     ctx.drawImage(im, 0, 0, W, H);
 
     // Draw offside lines if this is an offside frame and we have markers.
+    // Both lines share `pitch_angle_deg` (degrees) so they stay parallel to
+    // the goal line under broadcast-camera perspective. We rotate the
+    // canvas around each line's midpoint so the line itself tilts but the
+    // background image stays untouched.
     if (mk) {
+      const tiltDeg = mk.pitch_angle_deg || 0;
+      const tiltRad = (tiltDeg * Math.PI) / 180;
       // Defender line — amber dashed
       if (typeof mk.offside_line_x === "number") {
         const x = mk.offside_line_x * W;
+        ctx.save();
+        ctx.translate(x, H / 2);
+        ctx.rotate(tiltRad);
         ctx.strokeStyle = "#FFB800";
         ctx.lineWidth = Math.max(2, W / 600);
         ctx.setLineDash([10, 6]);
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, -H / 2); ctx.lineTo(0, H / 2); ctx.stroke();
         ctx.setLineDash([]);
         ctx.fillStyle = "#000";
-        ctx.fillRect(x - 56, 8, 112, 22);
+        ctx.fillRect(-56, -H / 2 + 8, 112, 22);
         ctx.strokeStyle = "#FFB800"; ctx.lineWidth = 1;
-        ctx.strokeRect(x - 56, 8, 112, 22);
+        ctx.strokeRect(-56, -H / 2 + 8, 112, 22);
         ctx.fillStyle = "#FFB800";
         ctx.font = "bold 13px monospace";
         ctx.textAlign = "center";
-        ctx.fillText("DEFENDER", x, 24);
+        ctx.fillText("DEFENDER", 0, -H / 2 + 24);
+        ctx.restore();
       }
       // Attacker line — cyan dashed
       if (typeof mk.attacker_x === "number") {
         const x = mk.attacker_x * W;
+        ctx.save();
+        ctx.translate(x, H / 2);
+        ctx.rotate(tiltRad);
         ctx.strokeStyle = "#00E5FF";
         ctx.lineWidth = Math.max(2, W / 600);
         ctx.setLineDash([10, 6]);
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, -H / 2); ctx.lineTo(0, H / 2); ctx.stroke();
         ctx.setLineDash([]);
         ctx.fillStyle = "#000";
-        ctx.fillRect(x - 56, 36, 112, 22);
+        ctx.fillRect(-56, -H / 2 + 36, 112, 22);
         ctx.strokeStyle = "#00E5FF"; ctx.lineWidth = 1;
-        ctx.strokeRect(x - 56, 36, 112, 22);
+        ctx.strokeRect(-56, -H / 2 + 36, 112, 22);
         ctx.fillStyle = "#00E5FF";
         ctx.font = "bold 13px monospace";
         ctx.textAlign = "center";
-        ctx.fillText("ATTACKER", x, 52);
+        ctx.fillText("ATTACKER", 0, -H / 2 + 52);
+        ctx.restore();
       }
-      // Verdict pill (bottom-right of image)
+      // Verdict pill (bottom-right of image) — NOT rotated, always level
       if (mk.verdict) {
         const v = mk.verdict.toUpperCase();
         const vc = mk.verdict === "offside" ? "#FF3333"
@@ -333,11 +368,19 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
                 #{idx + 1} / {frames.length}
               </span>
             )}
-            {/* Auto offside markers overlay for offside incidents — draggable */}
+            {/* Auto offside markers overlay for offside incidents — draggable.
+                Both lines share a single `tilt` (degrees) so they remain
+                parallel to the goal line under broadcast-camera perspective.
+                The rotation pivot is the midpoint of each line (cx, 50). */}
             {frames.length > 0 && mk && (
               <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ pointerEvents: 'none' }}>
                 {typeof mk.offside_line_x === "number" && (
-                  <g opacity={mk.verdict === "estimate" ? 0.65 : 0.95} style={{ pointerEvents: 'auto', cursor: 'ew-resize' }} onMouseDown={onMouseDownLine('def')}>
+                  <g
+                    opacity={mk.verdict === "estimate" ? 0.65 : 0.95}
+                    style={{ pointerEvents: 'auto', cursor: 'ew-resize' }}
+                    onMouseDown={onMouseDownLine('def')}
+                    transform={`rotate(${mk.pitch_angle_deg || 0}, ${mk.offside_line_x * 100}, 50)`}
+                  >
                     {/* 3-wide transparent hit zone so the 0.35 stroke is grab-able */}
                     <line x1={mk.offside_line_x * 100} y1="0" x2={mk.offside_line_x * 100} y2="100" stroke="transparent" strokeWidth="3" />
                     <line x1={mk.offside_line_x * 100} y1="0" x2={mk.offside_line_x * 100} y2="100" stroke="#FFB800" strokeWidth="0.35" strokeDasharray="1.5 0.8" />
@@ -348,7 +391,12 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
                   </g>
                 )}
                 {typeof mk.attacker_x === "number" && (
-                  <g opacity={mk.verdict === "estimate" ? 0.65 : 0.95} style={{ pointerEvents: 'auto', cursor: 'ew-resize' }} onMouseDown={onMouseDownLine('att')}>
+                  <g
+                    opacity={mk.verdict === "estimate" ? 0.65 : 0.95}
+                    style={{ pointerEvents: 'auto', cursor: 'ew-resize' }}
+                    onMouseDown={onMouseDownLine('att')}
+                    transform={`rotate(${mk.pitch_angle_deg || 0}, ${mk.attacker_x * 100}, 50)`}
+                  >
                     <line x1={mk.attacker_x * 100} y1="0" x2={mk.attacker_x * 100} y2="100" stroke="transparent" strokeWidth="3" />
                     <line x1={mk.attacker_x * 100} y1="0" x2={mk.attacker_x * 100} y2="100" stroke="#00E5FF" strokeWidth="0.35" strokeDasharray="1.5 0.8" />
                     <rect x={mk.attacker_x * 100 - 7} y="8" width="14" height="4" fill="#000" stroke="#00E5FF" strokeWidth="0.15" />
@@ -358,6 +406,38 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
                   </g>
                 )}
               </svg>
+            )}
+            {/* TILT calibration slider — adjusts perspective angle of both
+                offside lines simultaneously so they remain parallel to the
+                pitch's goal line under broadcast-camera perspective. */}
+            {frames.length > 0 && mk && (
+              <div
+                className="absolute left-2 bottom-2 flex items-center gap-2 px-2 py-1 bg-black/85 border border-[#94A3B8]/40"
+                style={{ pointerEvents: 'auto' }}
+                data-testid="octon-offside-tilt-control"
+              >
+                <span className="text-[9px] font-mono tracking-[0.2em] text-[#94A3B8]">TILT</span>
+                <input
+                  type="range"
+                  min="-30"
+                  max="30"
+                  step="0.5"
+                  value={mk.pitch_angle_deg || 0}
+                  onChange={(e) => setDragLines((s) => ({ ...s, tilt: parseFloat(e.target.value) }))}
+                  className="w-32 accent-[#FFB800]"
+                  data-testid="octon-offside-tilt-slider"
+                  title="Drag to align lines with the goal line / centre line under camera perspective"
+                />
+                <button
+                  onClick={resetTilt}
+                  onDoubleClick={resetTilt}
+                  className="text-[8px] font-mono tracking-[0.2em] text-gray-400 hover:text-[#FFB800] px-1 border border-white/10 hover:border-[#FFB800]/40"
+                  data-testid="octon-offside-tilt-reset"
+                  title="Reset tilt to 0°"
+                >
+                  {(mk.pitch_angle_deg || 0).toFixed(1)}°
+                </button>
+              </div>
             )}
             {mk?.verdict && (
               <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/90 border pointer-events-none"
