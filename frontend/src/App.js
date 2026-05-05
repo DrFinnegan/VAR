@@ -49,6 +49,7 @@ import AuditChainPill from "./components/AuditChainPill";
 import LiveIngestPanel from "./components/LiveIngestPanel";
 import BoothActivityPage from "./pages/BoothActivityPage";
 import ChangedMindToaster from "./components/ChangedMindToaster";
+import VisionEscalationToaster from "./components/VisionEscalationToaster";
 
 // ── Voice widget mounting helper ──────────────────────────
 function MountedVoiceWidget() {
@@ -710,6 +711,7 @@ function App() {
                     </Routes>
                     <MountedVoiceWidget />
                     <ChangedMindToaster />
+                    <VisionEscalationToaster />
                   </div>
                 </ProtectedRoute>
               } />

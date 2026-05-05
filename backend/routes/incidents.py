@@ -298,6 +298,29 @@ async def create_incident(data: IncidentCreate, request: Request):
     }
     await ws_manager.send_incident_created(ws_data, match_id=incident_doc.get("match_id"))
 
+    # ── Live vision-escalation toast ──────────────────────────────────
+    # When the post-LLM violent-conduct safety-net upgraded a verdict to
+    # RED, broadcast a global event so admins see an instant toast on
+    # whatever page they happen to be viewing. Mirrors the
+    # ChangedMindToaster contract.
+    ve = (analysis_result or {}).get("vision_escalation") or {}
+    if ve.get("triggered"):
+        try:
+            await ws_manager.broadcast({
+                "type": "vision_escalation",
+                "incident_id": incident_id,
+                "match_id": incident_doc.get("match_id"),
+                "trigger_phrase": ve.get("trigger_phrase"),
+                "original_decision": ve.get("original_decision"),
+                "upgraded_decision": ve.get("upgraded_decision"),
+                "upgraded_confidence": ve.get("upgraded_confidence"),
+                "team_involved": data.team_involved,
+                "timestamp_in_match": data.timestamp_in_match,
+                "at": now,
+            })
+        except Exception as e:
+            logger.warning(f"vision_escalation broadcast failed: {e}")
+
     if storage_warnings:
         try:
             await ws_manager.send_system_health({
@@ -354,6 +377,78 @@ async def get_incident(incident_id: str):
     if not doc:
         raise HTTPException(status_code=404, detail="Incident not found")
     return doc
+
+
+@api_router.get("/incidents-by-vision-trigger")
+async def incidents_by_vision_trigger(
+    trigger: str = Query(..., min_length=1, max_length=120),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """Drill-down for the Training Library's Vision-Escalations panel.
+
+    Returns the most recent incidents whose post-LLM safety-net fired with
+    the supplied `trigger` phrase. Used when the operator clicks a row in
+    the top-triggers list to inspect the actual incidents that fired it.
+    """
+    docs = await db.incidents.find(
+        {"ai_analysis.vision_escalation.triggered": True,
+         "ai_analysis.vision_escalation.trigger_phrase": trigger},
+        {"_id": 0,
+         "id": 1, "incident_type": 1, "team_involved": 1, "match_id": 1,
+         "timestamp_in_match": 1, "created_at": 1,
+         "ai_analysis.suggested_decision": 1,
+         "ai_analysis.final_confidence": 1,
+         "ai_analysis.vision_escalation": 1},
+    ).sort("created_at", -1).to_list(limit)
+    return docs
+
+
+class OffsideTiltOverride(BaseModel):
+    frame_index: int = 0
+    pitch_angle_deg: float
+    tilt_source: str = "manual"  # 'manual' typically, but allow 'auto' too
+
+
+@api_router.patch("/incidents/{incident_id}/offside-tilt")
+async def update_offside_tilt(incident_id: str, body: OffsideTiltOverride, request: Request):
+    """Persist an operator-provided pitch-angle override on a specific
+    offside frame so the SAW modal can restore it on re-open.
+
+    Conservative: only updates the marker at `frame_index`, leaves all
+    other markers and the verdict untouched. The override applies to ALL
+    markers since the broadcast camera tilt is a per-clip property — but
+    we record the source on the touched frame so the badge shows MANUAL.
+    """
+    user = await require_role(request, db, ["admin", "var_official", "operator"])
+    inc = await db.incidents.find_one({"id": incident_id}, {"_id": 0, "ai_analysis": 1})
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    markers = (inc.get("ai_analysis") or {}).get("offside_markers") or []
+    if not markers:
+        raise HTTPException(status_code=400, detail="Incident has no offside_markers to update")
+
+    angle = max(-30.0, min(30.0, float(body.pitch_angle_deg)))
+    src = body.tilt_source if body.tilt_source in ("manual", "auto", "consensus", "llm") else "manual"
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Apply to ALL frames (camera tilt is shared) but tag only the
+    # frame the operator was looking at as the override origin.
+    fi = max(0, min(len(markers) - 1, int(body.frame_index)))
+    for i, m in enumerate(markers):
+        m["pitch_angle_deg"] = angle
+        m["tilt_source"] = src
+        if i == fi:
+            m["operator_tilt_override"] = {
+                "pitch_angle_deg": angle,
+                "set_at": now,
+                "set_by": user.get("email") or user.get("id") or "operator",
+            }
+
+    await db.incidents.update_one(
+        {"id": incident_id},
+        {"$set": {"ai_analysis.offside_markers": markers, "updated_at": now}},
+    )
+    return {"ok": True, "pitch_angle_deg": angle, "tilt_source": src, "applied_to_frames": len(markers)}
 
 
 @api_router.post("/incidents/{incident_id}/ofr-bookmark")

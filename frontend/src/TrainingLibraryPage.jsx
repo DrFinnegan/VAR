@@ -1151,6 +1151,31 @@ function VisionEscalationsPanel({ data }) {
   const triggers = data?.top_triggers || [];
   const has24h = last24h > 0;
   const accent = "#FF6B6B";
+
+  // Drill-down state
+  const [drillTrigger, setDrillTrigger] = useState(null);
+  const [drillIncidents, setDrillIncidents] = useState([]);
+  const [drillLoading, setDrillLoading] = useState(false);
+
+  const openDrill = async (trigger) => {
+    setDrillTrigger(trigger);
+    setDrillLoading(true);
+    setDrillIncidents([]);
+    try {
+      const { data: rows } = await axios.get(
+        `${API}/incidents-by-vision-trigger`,
+        { params: { trigger, limit: 30 } }
+      );
+      setDrillIncidents(rows || []);
+    } catch (e) {
+      toast.error("Failed to load incidents", {
+        description: e?.response?.data?.detail || e.message,
+      });
+    } finally {
+      setDrillLoading(false);
+    }
+  };
+
   return (
     <div
       className="border border-white/[0.08] bg-[#0A0A0A] p-4"
@@ -1192,7 +1217,7 @@ function VisionEscalationsPanel({ data }) {
         </div>
         <div className="bg-[#0A0A0A] p-3 col-span-2">
           <p className="text-[8px] font-mono tracking-[0.28em] text-gray-500 uppercase mb-2">
-            Top triggers
+            Top triggers · click to drill
           </p>
           {triggers.length === 0 ? (
             <p className="text-[10px] font-mono text-gray-500">
@@ -1201,27 +1226,130 @@ function VisionEscalationsPanel({ data }) {
           ) : (
             <div className="space-y-1">
               {triggers.map((t, i) => (
-                <div
+                <button
                   key={i}
-                  className="flex items-center justify-between gap-2"
+                  onClick={() => openDrill(t.trigger)}
+                  className="w-full flex items-center justify-between gap-2 px-1 py-0.5 hover:bg-[#FF6B6B]/[0.06] border border-transparent hover:border-[#FF6B6B]/30 transition-all"
                   data-testid={`vision-escalation-trigger-${i}`}
+                  title={`Drill into incidents that fired '${t.trigger}'`}
                 >
                   <span
-                    className="text-[10px] font-mono uppercase tracking-[0.1em] truncate"
+                    className="text-[10px] font-mono uppercase tracking-[0.1em] truncate text-left"
                     style={{ color: "#FFB8B8" }}
-                    title={t.trigger}
                   >
                     {t.trigger}
                   </span>
-                  <span className="text-[10px] font-mono text-gray-400">
+                  <span className="text-[10px] font-mono text-gray-400 flex-none">
                     × {t.count}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {drillTrigger && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-6"
+          onClick={() => setDrillTrigger(null)}
+          data-testid="vision-escalation-drill-modal"
+        >
+          <div
+            className="bg-[#0A0A0A] border border-[#FF6B6B]/40 max-w-3xl w-full max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">
+              <div>
+                <p className="text-[9px] font-mono tracking-[0.28em] text-gray-500 uppercase">
+                  Vision Escalation · Drill-down
+                </p>
+                <p
+                  className="text-[14px] font-mono text-[#FF6B6B] mt-1 truncate"
+                  data-testid="vision-escalation-drill-title"
+                >
+                  {drillTrigger.toUpperCase()}
+                </p>
+              </div>
+              <button
+                onClick={() => setDrillTrigger(null)}
+                className="text-gray-400 hover:text-white text-[18px] px-2"
+                data-testid="vision-escalation-drill-close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="overflow-y-auto p-3 space-y-2">
+              {drillLoading ? (
+                <p className="text-[11px] font-mono text-gray-500 p-4">Loading…</p>
+              ) : drillIncidents.length === 0 ? (
+                <p className="text-[11px] font-mono text-gray-500 p-4">
+                  No incidents found for this trigger.
+                </p>
+              ) : (
+                drillIncidents.map((inc) => (
+                  <div
+                    key={inc.id}
+                    className="border border-white/[0.06] hover:border-[#FF6B6B]/40 bg-white/[0.02] p-3 transition-all"
+                    data-testid={`vision-drill-row-${inc.id?.slice(0, 8)}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-mono text-white truncate">
+                          {inc.ai_analysis?.suggested_decision || "Verdict pending"}
+                        </p>
+                        <div className="flex items-center gap-2 flex-wrap mt-1">
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 border border-[#FF6B6B]/30 text-[#FF6B6B] bg-[#FF6B6B]/10">
+                            {(inc.incident_type || "—").toUpperCase()}
+                          </span>
+                          {inc.team_involved && (
+                            <span className="text-[9px] font-mono text-gray-400">
+                              {inc.team_involved}
+                            </span>
+                          )}
+                          {inc.timestamp_in_match && (
+                            <span className="text-[9px] font-mono text-gray-500">
+                              {inc.timestamp_in_match}
+                            </span>
+                          )}
+                          {typeof inc.ai_analysis?.final_confidence === "number" && (
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 border border-[#FFB800]/30 text-[#FFB800] bg-[#FFB800]/10">
+                              {inc.ai_analysis.final_confidence.toFixed(0)}%
+                            </span>
+                          )}
+                        </div>
+                        {inc.ai_analysis?.vision_escalation?.original_decision && (
+                          <p className="text-[9px] font-mono text-gray-500 mt-1">
+                            UPGRADED FROM: {inc.ai_analysis.vision_escalation.original_decision}
+                          </p>
+                        )}
+                      </div>
+                      <a
+                        href={`/?incident=${encodeURIComponent(inc.id)}`}
+                        className="text-[9px] font-mono tracking-[0.2em] px-2 py-1 border border-[#00E5FF]/40 text-[#00E5FF] hover:bg-[#00E5FF]/10 flex-none"
+                        data-testid={`vision-drill-open-${inc.id?.slice(0, 8)}`}
+                      >
+                        OPEN →
+                      </a>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="border-t border-white/[0.06] p-2 flex items-center justify-between">
+              <p className="text-[9px] font-mono text-gray-500 px-2">
+                {drillIncidents.length} incident{drillIncidents.length === 1 ? "" : "s"}
+              </p>
+              <button
+                onClick={() => setDrillTrigger(null)}
+                className="text-[9px] font-mono tracking-[0.2em] px-3 py-1.5 border border-white/[0.1] text-gray-400 hover:text-white hover:border-white/30"
+              >
+                CLOSE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

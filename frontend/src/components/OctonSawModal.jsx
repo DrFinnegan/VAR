@@ -14,8 +14,11 @@
  * panel, or by clicking the "EXPLAIN" button on the SELECTED INCIDENT.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import axios from "axios";
 import { ChevronLeft, ChevronRight, Play, Pause, X, Download, Eye } from "lucide-react";
 import { Button } from "./ui/button";
+
+const API = process.env.REACT_APP_BACKEND_URL + "/api";
 
 const ev = {
   supports:    { color: "#00FF88", label: "SUPPORTS"  },
@@ -48,6 +51,35 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
   const [tiltSource, setTiltSource] = useState(null);
   const [dragging, setDragging] = useState(null); // 'def' | 'att' | 'tilt' | null
   const dragRef = useRef(null);
+
+  // ── Persist operator's tilt override so it survives modal re-open ──
+  // Hooks must be declared BEFORE the early `if (!open) return null`
+  // below to satisfy rules-of-hooks. Debounced so a slider drag
+  // generating dozens of onChange events only fires one PATCH.
+  const persistTimer = useRef(null);
+  const persistTiltOverride = useCallback((degrees) => {
+    const id = incident?.id;
+    if (!id) return;
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    const i = idx;
+    persistTimer.current = setTimeout(async () => {
+      try {
+        await axios.patch(
+          `${API}/incidents/${id}/offside-tilt`,
+          {
+            frame_index: i,
+            pitch_angle_deg: degrees,
+            tilt_source: "manual",
+          },
+          { withCredentials: true }
+        );
+      } catch (e) {
+        // Best-effort — don't disrupt operator UX with toast errors.
+        // eslint-disable-next-line no-console
+        console.warn("tilt-override persist failed", e?.message);
+      }
+    }, 350);
+  }, [incident?.id, idx]);
 
   useEffect(() => {
     if (open) {
@@ -162,10 +194,19 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
     const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     setDragLines((s) => ({ ...s, [dragging]: x }));
   };
-  const onMouseUpFrame = () => setDragging(null);
+  const onMouseUpFrame = () => {
+    // If the operator was tilt-dragging, persist the override now that
+    // they've released. We store on every frame so the consensus
+    // remains coherent across the clip.
+    if (dragging === "tilt" && incident?.id) {
+      persistTiltOverride(dragLines.tilt);
+    }
+    setDragging(null);
+  };
   const resetTilt = () => {
     setDragLines((s) => ({ ...s, tilt: 0 }));
     setTiltSource("manual");
+    if (incident?.id) persistTiltOverride(0);
   };
 
   const downloadEvidence = async () => {
@@ -437,8 +478,10 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
                   step="0.5"
                   value={mk.pitch_angle_deg || 0}
                   onChange={(e) => {
-                    setDragLines((s) => ({ ...s, tilt: parseFloat(e.target.value) }));
+                    const v = parseFloat(e.target.value);
+                    setDragLines((s) => ({ ...s, tilt: v }));
                     setTiltSource("manual");
+                    persistTiltOverride(v);
                   }}
                   className="w-32 accent-[#FFB800]"
                   data-testid="octon-offside-tilt-slider"
