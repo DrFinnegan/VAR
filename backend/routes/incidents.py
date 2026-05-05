@@ -430,10 +430,13 @@ async def update_offside_tilt(incident_id: str, body: OffsideTiltOverride, reque
     angle = max(-30.0, min(30.0, float(body.pitch_angle_deg)))
     src = body.tilt_source if body.tilt_source in ("manual", "auto", "consensus", "llm") else "manual"
     now = datetime.now(timezone.utc).isoformat()
+    actor = user.get("email") or user.get("id") or "operator"
 
     # Apply to ALL frames (camera tilt is shared) but tag only the
     # frame the operator was looking at as the override origin.
     fi = max(0, min(len(markers) - 1, int(body.frame_index)))
+    prev_angle = markers[fi].get("pitch_angle_deg")
+    prev_source = markers[fi].get("tilt_source")
     for i, m in enumerate(markers):
         m["pitch_angle_deg"] = angle
         m["tilt_source"] = src
@@ -441,14 +444,130 @@ async def update_offside_tilt(incident_id: str, body: OffsideTiltOverride, reque
             m["operator_tilt_override"] = {
                 "pitch_angle_deg": angle,
                 "set_at": now,
-                "set_by": user.get("email") or user.get("id") or "operator",
+                "set_by": actor,
             }
 
+    # ── Tilt-override audit ledger ────────────────────────────────
+    # Persist a chronological history of every operator tilt edit on
+    # the incident so the verdict-card can render an audit trail
+    # ("set by anna@octon.fc · 2 mins ago · 12.5° → 14°"). Conservatism:
+    # capped at 50 entries to keep the document size bounded.
+    ledger_entry = {
+        "at": now,
+        "by": actor,
+        "frame_index": fi,
+        "from_pitch_angle_deg": prev_angle,
+        "from_tilt_source": prev_source,
+        "to_pitch_angle_deg": angle,
+        "to_tilt_source": src,
+    }
     await db.incidents.update_one(
         {"id": incident_id},
-        {"$set": {"ai_analysis.offside_markers": markers, "updated_at": now}},
+        {
+            "$set": {"ai_analysis.offside_markers": markers, "updated_at": now},
+            "$push": {
+                "ai_analysis.tilt_override_history": {
+                    "$each": [ledger_entry],
+                    "$slice": -50,
+                }
+            },
+        },
     )
     return {"ok": True, "pitch_angle_deg": angle, "tilt_source": src, "applied_to_frames": len(markers)}
+
+
+class VisionFalseAlarmBody(BaseModel):
+    operator_note: Optional[str] = None
+    correct_decision: Optional[str] = None  # admin's preferred verdict
+
+
+@api_router.post("/incidents/{incident_id}/vision-escalation/false-alarm")
+async def mark_vision_escalation_false_alarm(
+    incident_id: str,
+    body: VisionFalseAlarmBody,
+    request: Request,
+):
+    """Operator marks an auto-RED escalation as a false alarm. We:
+      1. Stamp the incident's vision_escalation block with `false_alarm`.
+      2. Roll the verdict back to the LLM's original suggestion.
+      3. Insert a counter-example training case so the safety-net learns
+         to be more conservative on similar phrasings.
+    """
+    user = await require_role(request, db, ["admin", "var_official", "operator"])
+    inc = await db.incidents.find_one({"id": incident_id}, {"_id": 0})
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    ai = inc.get("ai_analysis") or {}
+    ve = ai.get("vision_escalation") or {}
+    if not ve.get("triggered"):
+        raise HTTPException(status_code=400, detail="Incident has no vision escalation to revert")
+    if ve.get("false_alarm"):
+        raise HTTPException(status_code=409, detail="Already marked as false alarm")
+
+    now = datetime.now(timezone.utc).isoformat()
+    actor = user.get("email") or user.get("id") or "operator"
+    rolled_back_decision = body.correct_decision or ve.get("original_decision") or "Review Required"
+    rolled_back_confidence = ve.get("original_confidence") or ai.get("final_confidence") or 60
+
+    # Build the full update payload.
+    ve.update({
+        "false_alarm": True,
+        "false_alarm_at": now,
+        "false_alarm_by": actor,
+        "false_alarm_note": (body.operator_note or "")[:240] or None,
+    })
+    update_set = {
+        "ai_analysis.vision_escalation": ve,
+        "ai_analysis.suggested_decision": rolled_back_decision,
+        "ai_analysis.final_confidence": rolled_back_confidence,
+        "ai_analysis.confidence_score": rolled_back_confidence,
+        "ai_analysis.neo_cortex_notes": (
+            f"FALSE-ALARM REVERT @ {now} by {actor}: rolled back from "
+            f"'{ve.get('upgraded_decision')}' to '{rolled_back_decision}'. "
+            + (ai.get("neo_cortex_notes") or "")
+        )[:2400],
+        "updated_at": now,
+    }
+    await db.incidents.update_one({"id": incident_id}, {"$set": update_set})
+
+    # Insert a counter-example training case so the AI learns this
+    # trigger phrase isn't always sending-off material in this context.
+    try:
+        case_id = str(uuid.uuid4())
+        await db.training_cases.insert_one({
+            "id": case_id,
+            "title": f"False-alarm counter-example — {ve.get('trigger_phrase', 'vision-trigger')}",
+            "incident_type": inc.get("incident_type") or "foul",
+            "correct_decision": rolled_back_decision,
+            "rationale": (
+                f"Operator-flagged as false-alarm escalation. Trigger phrase "
+                f"'{ve.get('trigger_phrase')}' fired but the visual evidence "
+                f"did NOT support a sending-off — operator's note: "
+                f"{body.operator_note or '(no note provided)'}"
+            ),
+            "keywords": ["false-alarm", "counter-example", ve.get("trigger_phrase") or ""],
+            "tags": ["false-alarm", "counter-example", "operator-promoted"],
+            "match_context": {},
+            "law_references": [],
+            "outcome": rolled_back_decision,
+            "visual_tags": [],
+            "media_storage_path": None,
+            "thumbnail_storage_path": None,
+            "source": "false-alarm-counter-example",
+            "created_by": actor,
+            "created_by_name": actor,
+            "created_at": now,
+            "updated_at": now,
+        })
+    except Exception as e:
+        logger.warning(f"counter-example insert failed: {e}")
+
+    return {
+        "ok": True,
+        "rolled_back_to": rolled_back_decision,
+        "rolled_back_confidence": rolled_back_confidence,
+        "counter_example_recorded": True,
+    }
 
 
 @api_router.post("/incidents/{incident_id}/ofr-bookmark")

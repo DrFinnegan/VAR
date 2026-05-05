@@ -1176,6 +1176,47 @@ function VisionEscalationsPanel({ data }) {
     }
   };
 
+  const markFalseAlarm = async (inc) => {
+    const note = window.prompt(
+      "Why is this a false alarm? (optional — added to the counter-example training case)",
+      ""
+    );
+    if (note === null) return; // operator cancelled
+    try {
+      const { data } = await axios.post(
+        `${API}/incidents/${inc.id}/vision-escalation/false-alarm`,
+        { operator_note: note },
+        { withCredentials: true }
+      );
+      toast.success("Marked as false alarm", {
+        description: `Rolled back to "${data.rolled_back_to}". Counter-example added to training.`,
+      });
+      // Optimistically reflect in the drill list
+      setDrillIncidents((prev) =>
+        prev.map((p) =>
+          p.id === inc.id
+            ? {
+                ...p,
+                ai_analysis: {
+                  ...(p.ai_analysis || {}),
+                  suggested_decision: data.rolled_back_to,
+                  final_confidence: data.rolled_back_confidence,
+                  vision_escalation: {
+                    ...(p.ai_analysis?.vision_escalation || {}),
+                    false_alarm: true,
+                  },
+                },
+              }
+            : p
+        )
+      );
+    } catch (e) {
+      toast.error("False-alarm action failed", {
+        description: e?.response?.data?.detail || e.message,
+      });
+    }
+  };
+
   return (
     <div
       className="border border-white/[0.08] bg-[#0A0A0A] p-4"
@@ -1317,6 +1358,14 @@ function VisionEscalationsPanel({ data }) {
                               {inc.ai_analysis.final_confidence.toFixed(0)}%
                             </span>
                           )}
+                          {inc.ai_analysis?.vision_escalation?.false_alarm && (
+                            <span
+                              className="text-[9px] font-mono px-1.5 py-0.5 border border-gray-500/40 text-gray-400 bg-white/5"
+                              data-testid={`vision-drill-false-alarm-${inc.id?.slice(0, 8)}`}
+                            >
+                              FALSE ALARM
+                            </span>
+                          )}
                         </div>
                         {inc.ai_analysis?.vision_escalation?.original_decision && (
                           <p className="text-[9px] font-mono text-gray-500 mt-1">
@@ -1324,13 +1373,25 @@ function VisionEscalationsPanel({ data }) {
                           </p>
                         )}
                       </div>
-                      <a
-                        href={`/?incident=${encodeURIComponent(inc.id)}`}
-                        className="text-[9px] font-mono tracking-[0.2em] px-2 py-1 border border-[#00E5FF]/40 text-[#00E5FF] hover:bg-[#00E5FF]/10 flex-none"
-                        data-testid={`vision-drill-open-${inc.id?.slice(0, 8)}`}
-                      >
-                        OPEN →
-                      </a>
+                      <div className="flex flex-col gap-1 flex-none">
+                        <a
+                          href={`/?incident=${encodeURIComponent(inc.id)}`}
+                          className="text-[9px] font-mono tracking-[0.2em] px-2 py-1 border border-[#00E5FF]/40 text-[#00E5FF] hover:bg-[#00E5FF]/10 text-center"
+                          data-testid={`vision-drill-open-${inc.id?.slice(0, 8)}`}
+                        >
+                          OPEN →
+                        </a>
+                        {!inc.ai_analysis?.vision_escalation?.false_alarm && (
+                          <button
+                            onClick={() => markFalseAlarm(inc)}
+                            className="text-[9px] font-mono tracking-[0.2em] px-2 py-1 border border-gray-500/40 text-gray-400 hover:text-[#FFB800] hover:border-[#FFB800]/60 hover:bg-[#FFB800]/10"
+                            data-testid={`vision-drill-mark-false-alarm-${inc.id?.slice(0, 8)}`}
+                            title="Mark as false alarm — rolls back the verdict and adds a counter-example to training"
+                          >
+                            FALSE ALARM
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))

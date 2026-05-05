@@ -29,6 +29,7 @@ const ev = {
 export default function OctonSawModal({ open, onClose, analysis, incident, initialCinema = false, autoPlay = false }) {
   const frames = analysis?.analysed_frames_b64 || [];
   const breakdown = analysis?.frame_breakdown || [];
+  const tiltLedger = analysis?.tilt_override_history || [];
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [cinema, setCinema] = useState(false);
@@ -49,6 +50,7 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
   // the operator immediately knows whether the line is computed or
   // hand-set. Resets to 'manual' the moment the slider is touched.
   const [tiltSource, setTiltSource] = useState(null);
+  const [showLedger, setShowLedger] = useState(false);
   const [dragging, setDragging] = useState(null); // 'def' | 'att' | 'tilt' | null
   const dragRef = useRef(null);
 
@@ -521,6 +523,71 @@ export default function OctonSawModal({ open, onClose, analysis, incident, initi
                     {tiltSource.toUpperCase()}
                   </span>
                 )}
+                {tiltLedger && tiltLedger.length > 0 && (
+                  <button
+                    onClick={() => setShowLedger((v) => !v)}
+                    className="text-[8px] font-mono tracking-[0.2em] text-gray-400 hover:text-[#00E5FF] px-1 border border-white/10 hover:border-[#00E5FF]/40"
+                    data-testid="octon-offside-tilt-ledger-toggle"
+                    title={`${tiltLedger.length} operator override${tiltLedger.length === 1 ? "" : "s"} on file`}
+                  >
+                    LEDGER ({tiltLedger.length})
+                  </button>
+                )}
+              </div>
+            )}
+            {/* Audit ledger popover */}
+            {showLedger && tiltLedger && tiltLedger.length > 0 && (
+              <div
+                className="absolute left-2 bottom-12 w-[340px] max-h-[260px] overflow-y-auto bg-[#0A0A0A] border border-[#00E5FF]/40 p-3 z-30"
+                style={{ pointerEvents: 'auto' }}
+                data-testid="octon-offside-tilt-ledger"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[9px] font-mono tracking-[0.28em] text-[#00E5FF] uppercase">
+                    Tilt Override Ledger
+                  </p>
+                  <button
+                    onClick={() => setShowLedger(false)}
+                    className="text-gray-400 hover:text-white text-[14px] leading-none"
+                    aria-label="Close"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="space-y-1.5">
+                  {tiltLedger.slice().reverse().map((entry, i) => (
+                    <div
+                      key={i}
+                      className="border border-white/[0.06] p-2"
+                      data-testid={`octon-offside-tilt-ledger-row-${i}`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[9px] font-mono text-white truncate">
+                          {entry.by || "operator"}
+                        </span>
+                        <span className="text-[9px] font-mono text-gray-500 flex-none">
+                          {entry.at?.replace("T", " ").slice(0, 19)}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-2 text-[9px] font-mono">
+                        <span className="text-gray-500">
+                          {typeof entry.from_pitch_angle_deg === "number"
+                            ? `${entry.from_pitch_angle_deg.toFixed(1)}°`
+                            : "—"}
+                        </span>
+                        <span className="text-gray-600">→</span>
+                        <span className="text-[#FFB800]">
+                          {typeof entry.to_pitch_angle_deg === "number"
+                            ? `${entry.to_pitch_angle_deg.toFixed(1)}°`
+                            : "—"}
+                        </span>
+                        <span className="text-gray-600 truncate">
+                          [frame {(entry.frame_index ?? 0) + 1}]
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             {mk?.verdict && (

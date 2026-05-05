@@ -57,30 +57,47 @@ _SCENE_RE = re.compile(
 )
 
 
-async def _scene_candidates(vp: str, threshold: float = 0.15) -> List[Tuple[float, float]]:
+async def _scene_candidates(vp: str, threshold: float = 0.15, time_cap: float = 30.0) -> List[Tuple[float, float]]:
     """Return a list of (timestamp_s, scene_score) tuples for frames whose
     inter-frame change exceeds `threshold`. The list is sorted by time.
 
-    A typical broadcast clip with one impact moment yields 3-15 candidates
-    spanning the camera cuts, slow-mo replays and the impact itself —
-    plenty of coverage for selecting the most informative N frames.
+    Performance budget (2026-02 fix):
+      • Cap analysis to the first `time_cap` seconds of the clip — most
+        VAR replays are < 30 s and the operator-relevant moment is at
+        the start of the clip.
+      • Hard timeout 6 s — if scene-detect can't return in 6 s, the
+        caller falls back to uniform sampling. We never block uploads.
+      • `-skip_frame nokey` analyses only keyframes which is ≥ 4× faster
+        than full decode and still catches the motion peaks we need.
     """
+    cmd = [
+        "ffmpeg",
+        "-skip_frame", "nokey",
+        "-t", str(int(time_cap)),
+        "-i", vp,
+        "-vf", f"select='gt(scene\\,{threshold})',metadata=print",
+        "-an", "-sn",
+        "-f", "null", "-",
+    ]
     try:
         proc = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-i", vp,
-            "-vf", f"select='gt(scene\\,{threshold})',metadata=print",
-            "-an", "-f", "null", "-",
+            *cmd,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
-        _, err = await asyncio.wait_for(proc.communicate(), timeout=30)
+        _, err = await asyncio.wait_for(proc.communicate(), timeout=6.0)
         text = err.decode("utf-8", errors="ignore")
+    except asyncio.TimeoutError:
+        logger.info("scene-detect over budget — falling back to uniform")
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        return []
     except Exception as e:
         logger.warning("scene-detect failed: %s", e)
         return []
     out: List[Tuple[float, float]] = []
-    # FFmpeg prints metadata in two-line blocks per frame; the regex above
-    # is single-line so we collapse \n → " " and walk groups.
     flat = text.replace("\n", " ")
     for m in _SCENE_RE.finditer(flat):
         try:
@@ -156,6 +173,12 @@ async def extract_frames_b64(
     Falls back to uniform spacing when scene-detect yields too few
     candidates (very-static clips). Behaviour is fully deterministic per
     clip — same input → same frames.
+
+    Performance contract (2026-02 wave-8 fix):
+      • Single-frame requests skip scene-detect entirely.
+      • Multi-frame requests run probe + scene-detect IN PARALLEL.
+      • Scene-detect has a hard 6 s timeout; a slow detect never blocks
+        the upload — we fall back to uniform spacing instead.
     """
     if not video_bytes or n_frames < 1:
         return []
@@ -166,16 +189,28 @@ async def extract_frames_b64(
         with open(vp, "wb") as f:
             f.write(video_bytes)
 
-        duration = await _probe_duration(vp)
-        # Choose timestamps. Strategy: scene-detect first; uniform fallback.
+        # Single-frame path: skip scene-detect, just grab the midpoint.
+        # Used by the legacy `extract_frame_b64` helper. No reason to pay
+        # the scene-detect tax when only one frame is needed.
+        if n_frames == 1:
+            duration = await _probe_duration(vp)
+            mid = duration / 2 if duration > 0 else 1.5
+            f1 = await _extract_one(vp, max(0.4, mid), quality, td, 0)
+            return [f1] if f1 else []
+
+        # Parallelise: probe duration AND scene-detect run concurrently.
+        # The probe is essentially free (~50ms); scene-detect is the
+        # expensive call and is now hard-capped at 6 s.
+        duration, candidates = await asyncio.gather(
+            _probe_duration(vp),
+            _scene_candidates(vp, threshold=0.15),
+        )
         timestamps: List[float] = []
         if duration <= 0:
             timestamps = [1.5]
         elif duration < 2.0:
             timestamps = [duration / 2]
         else:
-            # ── Scene-change candidates ──
-            candidates = await _scene_candidates(vp, threshold=0.15)
             picks = _pick_top_spread(candidates, n=n_frames, duration=duration)
             # Always include the dead centre of the clip — for replays that
             # cut to slow-mo right before impact, the scene-change pulse

@@ -30,6 +30,32 @@ export default function VisionEscalationToaster() {
       const team = msg.team_involved;
       const ts = msg.timestamp_in_match;
 
+      // ── Audible cue for the booth ──
+      // Two-tone WebAudio beep — distinctive enough to grab attention
+      // in a noisy referee booth without being startling. Best-effort:
+      // browsers that block audio without user gesture silently no-op.
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) {
+          const ctx = new Ctx();
+          const gain = ctx.createGain();
+          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.0);
+          gain.connect(ctx.destination);
+          const make = (freq, start) => {
+            const o = ctx.createOscillator();
+            o.type = "square";
+            o.frequency.setValueAtTime(freq, ctx.currentTime + start);
+            o.connect(gain);
+            o.start(ctx.currentTime + start);
+            o.stop(ctx.currentTime + start + 0.18);
+          };
+          make(880, 0);    // E5-ish
+          make(1175, 0.22); // D6-ish, urgent rise
+          setTimeout(() => { try { ctx.close(); } catch { /* */ } }, 1300);
+        }
+      } catch { /* audio blocked — visual toast still fires */ }
+
       toast.custom(
         (t) => (
           <div
