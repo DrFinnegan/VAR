@@ -26,7 +26,16 @@ Pure football VAR audit system. ID PROTECTION module has been separated into its
 - Storage: Emergent Object Storage
 
 ## Changelog
-- 2026-02 (Feb 5): **Match-Wall deep-link fix + corpus boost + offside frame export**
+- 2026-02 (Feb 5 — wave 2): **CORNER pill back · Corpus telemetry · Free-dataset enrichment**
+  1. **CORNER pill re-introduced** on the LiveVAR header (purple `CORNER` button, `data-testid="quick-corner-button"`). Threshold met: `by_type[corner] >= 5`. New component `QuickCornerPill.jsx` mirrors offside contract — 4-frame burst from stage video, posts to `/api/quick/corner`, returns full incident with confidence + Law-17 citation. E2E test `quick-fire.spec.js` updated to assert pill IS visible. 7/7 quick-fire tests green.
+  2. **Corpus telemetry panel** added to Training Library (`data-testid="corpus-telemetry-panel"`). Shows:
+     - Composition by source (seed / web-learning / operator / manual) with %-bars
+     - 24h growth ribbon (`+174 ALL · +93 WEB-LEARNING`) + `WEB-LEARNING HEALTHY` health badge
+     - Per-incident-type bar chart with `GAP` flags on types with <5 precedents (CARD=4, FREEKICK=2 currently flagged; CORNER=5 cleared)
+     Backend `/api/training/stats` extended with `by_source`, `last_24h`, `last_24h_web` (regression test in `test_corpus_telemetry.py`).
+  3. **Continuous self-learning enrichment** — 14 new VAR-specific public-data URLs added to `web_scheduler.CURATED_ARTICLE_URLS` (round 5): PGMOL Wiki, IFAB Laws of the Game, PL Match Centre, 2024-26 PL/UCL/La Liga seasons, GoalControl, Semi-Automated Offside, Penalty Shoot-out (Law 14), Corner Kick (Law 17), Throw-in (Law 15), Goal Kick (Law 16). All idempotently seeded into `feeds` collection on next boot.
+
+- 2026-02 (Feb 5 — wave 1): **Match-Wall deep-link fix + corpus boost + offside frame export**
   1. **Match Wall click bug** fixed — `GET /api/incidents` now accepts `match_id` and mirrors the `/matches/live` aggregator's `$or` lookup (incidents with that `match_id` OR `team_involved` matching either team). Previously the endpoint ignored the param and the latest-100 sort dropped older matches' incidents, leaving the page empty when a tile was clicked. Regression tests added in `/app/backend/tests/test_match_wall_filter.py` (4 tests, all green). Verified end-to-end: clicking Chelsea vs Arsenal tile (`incidents_total=8`) now loads the scoped match in LiveVAR with the verdict ticker populated.
   2. **Training corpus boosted** from 234 → 306 cases. `training_seed.py` grew from 79 → 109 canonical cases with 30 new entries spanning offside (5 new), handball (5), penalty-area fouls (5), DOGSO 4-D's (4), goal-line tech (3), misconduct (4), set-piece restarts (4). All entries pulled from publicly-available IFAB/PGMOL referee training material.
   3. **Single-frame referee export** (PNG) added to OCTON SAW modal — when the incident is offside, a new "FRAME" button (data-testid: `octon-saw-export-frame`) downloads the CURRENT frame with the amber DEFENDER + cyan ATTACKER offside lines, verdict pill (e.g. "OFFSIDE 4cm BEYOND"), and a referee-export footer strip burned in. Complements the existing multi-frame evidence pack download.

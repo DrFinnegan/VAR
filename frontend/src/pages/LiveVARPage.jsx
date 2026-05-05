@@ -45,6 +45,7 @@ import ConfidenceBreakdownTooltip from "../components/ConfidenceBreakdownTooltip
 import RefereeCitationReasoning from "../components/RefereeCitationReasoning";
 import AuditChainDrawer from "../components/AuditChainDrawer";
 import GoLiveButton from "../components/GoLiveButton";
+import QuickCornerPill from "../components/QuickCornerPill";
 import OctonSawStrip from "../components/OctonSawStrip";
 import OctonSawModal from "../components/OctonSawModal";
 import HippocampusNeocortexHeader from "../components/HippocampusNeocortexHeader";
@@ -475,6 +476,11 @@ export const LiveVARPage = () => {
             {wsConnected && <span className="w-1.5 h-1.5 bg-[#00FF88] animate-pulse rounded-full" />}
           </div>
           <Button onClick={() => setShowComparison(!showComparison)} className={`rounded-none font-heading font-bold text-xs tracking-[0.1em] h-9 px-4 active:scale-[0.98] transition-all ${showComparison ? 'bg-[#00E5FF] text-black hover:bg-[#00E5FF]/90' : 'bg-transparent text-[#00E5FF] border border-[#00E5FF]/30 hover:bg-[#00E5FF]/10 hover:border-[#00E5FF]/60'}`} data-testid="comparison-mode-toggle"><Columns className="w-3.5 h-3.5 mr-2" />COMPARE</Button>
+          <QuickCornerPill
+            matchId={matchFilterId}
+            currentMatch={matches.find((m) => m.id === matchFilterId)}
+            onIncidentCreated={() => fetchData()}
+          />
           <GoLiveButton onLiveStart={(s) => setLiveStream(s)} onLiveEnd={() => setLiveStream(null)} />
           {liveRecording && (
             <span

@@ -250,16 +250,63 @@ async def seed_training_cases(request: Request):
 @api_router.get("/training/stats")
 async def training_stats():
     total = await db.training_cases.count_documents({})
-    pipeline = [
+    by_type_pipe = [
         {"$group": {"_id": "$incident_type", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}},
     ]
-    by_type = await db.training_cases.aggregate(pipeline).to_list(20)
+    by_type = await db.training_cases.aggregate(by_type_pipe).to_list(20)
     with_media = await db.training_cases.count_documents({"media_storage_path": {"$ne": None}})
+
+    # ── Corpus telemetry: composition by source/origin ───────────────
+    # `created_by` distinguishes:
+    #   "seed"             → bootstrap CANONICAL_CASES (training_seed.py)
+    #   "system-scheduler" → web-learning auto-ingest (Wikipedia / RSS)
+    #   "operator-promoted" / user-id → operator feedback loop
+    #   anything else      → manual admin entry
+    # We collapse user-ids under "operator" so the breakdown is readable.
+    by_source_pipe = [
+        {"$group": {"_id": "$created_by", "count": {"$sum": 1}}},
+    ]
+    raw_by_source = await db.training_cases.aggregate(by_source_pipe).to_list(50)
+    bucket = {"seed": 0, "web-learning": 0, "operator": 0, "manual": 0}
+    for row in raw_by_source:
+        cb = (row.get("_id") or "").strip()
+        n = row.get("count", 0)
+        if cb == "seed":
+            bucket["seed"] += n
+        elif cb in ("system-scheduler", "system"):
+            bucket["web-learning"] += n
+        elif cb == "operator-promoted" or (cb and cb != "manual" and cb != "seed"):
+            # any user-id ends up here (operator feedback loop)
+            bucket["operator"] += n
+        else:
+            bucket["manual"] += n
+    # Operator-promoted incidents are also tagged via the `source` field
+    # ("operator-promoted") for cases inserted before created_by was rich.
+    promoted_legacy = await db.training_cases.count_documents(
+        {"source": "operator-promoted", "created_by": {"$in": [None, "", "manual"]}}
+    )
+    if promoted_legacy:
+        bucket["operator"] += promoted_legacy
+        bucket["manual"] = max(0, bucket["manual"] - promoted_legacy)
+    by_source = [{"source": k, "count": v} for k, v in bucket.items() if v > 0]
+    by_source.sort(key=lambda x: -x["count"])
+
+    # Recent (last 24h) growth — useful for the "is web-learning healthy?" tile.
+    from datetime import datetime, timedelta, timezone
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    last_24h = await db.training_cases.count_documents({"created_at": {"$gte": cutoff}})
+    last_24h_web = await db.training_cases.count_documents(
+        {"created_at": {"$gte": cutoff}, "created_by": "system-scheduler"}
+    )
+
     return {
         "total_cases": total,
         "by_type": [{"incident_type": b["_id"], "count": b["count"]} for b in by_type],
         "with_media": with_media,
+        "by_source": by_source,
+        "last_24h": last_24h,
+        "last_24h_web": last_24h_web,
     }
 
 

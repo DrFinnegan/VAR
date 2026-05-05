@@ -19,12 +19,12 @@ test.describe("offside / corner fast-path (post-redesign)", () => {
     await expect(pill).toHaveCount(0);
   });
 
-  test("CORNER pill is still removed from the front page", async ({ page }) => {
+  test("CORNER pill is mounted on the front page (re-introduced 2026-02)", async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto("/");
     await page.waitForLoadState("networkidle");
     const pill = page.locator('[data-testid="quick-corner-button"]');
-    await expect(pill).toHaveCount(0);
+    await pill.waitFor({ state: "visible", timeout: 10_000 });
   });
 
   test("GO LIVE button is wired on the stage toolbar", async ({ page }) => {

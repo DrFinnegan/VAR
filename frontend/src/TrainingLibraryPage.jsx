@@ -30,7 +30,7 @@ const emptyForm = () => ({
 
 export default function TrainingLibraryPage() {
   const [cases, setCases] = useState([]);
-  const [stats, setStats] = useState({ total_cases: 0, by_type: [], with_media: 0 });
+  const [stats, setStats] = useState({ total_cases: 0, by_type: [], with_media: 0, by_source: [], last_24h: 0, last_24h_web: 0 });
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState("all");
   const [search, setSearch] = useState("");
@@ -153,7 +153,7 @@ export default function TrainingLibraryPage() {
         axios.get(`${API}/training/stats`, { withCredentials: true }),
       ]);
       setCases(listRes.data || []);
-      setStats(statsRes.data || { total_cases: 0, by_type: [], with_media: 0 });
+      setStats(statsRes.data || { total_cases: 0, by_type: [], with_media: 0, by_source: [], last_24h: 0, last_24h_web: 0 });
     } catch (e) {
       toast.error("Failed to load training library");
     } finally {
@@ -653,6 +653,9 @@ export default function TrainingLibraryPage() {
         <StatTile label="Strongest Category" value={stats.by_type?.[0]?.incident_type?.replace("_", " ") || "—"} valueIsText value2={stats.by_type?.[0]?.count} icon={Database} color="#B366FF" hint="// most precedents" />
       </div>
 
+      {/* ── Corpus telemetry: composition by source + 24h growth ── */}
+      <CorpusTelemetryPanel stats={stats} />
+
       {/* Filter bar */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1 max-w-md">
@@ -873,6 +876,177 @@ function CaseRow({ c, isUploading, onUpload, onDelete }) {
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * CorpusTelemetryPanel — admin-facing breakdown of how the training corpus
+ * was assembled. Three signals:
+ *   1. Composition by source (seed / web-learning / operator / manual)
+ *   2. Growth in last 24h (total + web-only)
+ *   3. Per-incident-type bar chart so admin spots gaps (e.g. <5 corners)
+ *
+ * Mounted inside the Training Library page. Read-only — no admin role gate
+ * needed because the data is non-sensitive aggregate counts.
+ */
+function CorpusTelemetryPanel({ stats }) {
+  const total = stats.total_cases || 0;
+  const sources = stats.by_source || [];
+  const types = stats.by_type || [];
+  const last24 = stats.last_24h || 0;
+  const last24Web = stats.last_24h_web || 0;
+  const sourceColors = {
+    seed: "#00E5FF",
+    "web-learning": "#B366FF",
+    operator: "#00FF88",
+    manual: "#FFB800",
+  };
+  const sourceLabels = {
+    seed: "SEED · canonical",
+    "web-learning": "WEB · scheduler",
+    operator: "OPERATOR · feedback",
+    manual: "MANUAL · admin",
+  };
+  return (
+    <div
+      className="grid grid-cols-1 lg:grid-cols-2 gap-3"
+      data-testid="corpus-telemetry-panel"
+    >
+      {/* Composition by source */}
+      <div className="border border-white/[0.08] bg-[#0A0A0A] p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[9px] font-mono tracking-[0.28em] text-gray-500 uppercase">
+            Corpus Composition · By Source
+          </p>
+          <span className="text-[9px] font-mono text-gray-600" data-testid="corpus-total">
+            {total} cases
+          </span>
+        </div>
+        {sources.length === 0 ? (
+          <p className="text-[11px] text-gray-500 font-mono">No corpus data yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {sources.map((s) => {
+              const pct = total > 0 ? (s.count / total) * 100 : 0;
+              const color = sourceColors[s.source] || "#fff";
+              const label = sourceLabels[s.source] || s.source.toUpperCase();
+              return (
+                <div
+                  key={s.source}
+                  data-testid={`corpus-source-${s.source}`}
+                  className="space-y-1"
+                >
+                  <div className="flex items-center justify-between text-[10px] font-mono">
+                    <span style={{ color }}>{label}</span>
+                    <span className="text-gray-400">
+                      {s.count}{" "}
+                      <span className="text-gray-600">· {pct.toFixed(1)}%</span>
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-white/[0.04]">
+                    <div
+                      className="h-full transition-all"
+                      style={{ width: `${pct}%`, backgroundColor: color }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* 24h growth ribbon */}
+        <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div>
+              <p className="text-[9px] font-mono tracking-[0.2em] text-gray-500 uppercase">
+                LAST 24h · ALL
+              </p>
+              <p className="text-[14px] font-mono text-[#00FF88] mt-0.5" data-testid="corpus-last-24h">
+                +{last24}
+              </p>
+            </div>
+            <div>
+              <p className="text-[9px] font-mono tracking-[0.2em] text-gray-500 uppercase">
+                WEB-LEARNING
+              </p>
+              <p className="text-[14px] font-mono text-[#B366FF] mt-0.5" data-testid="corpus-last-24h-web">
+                +{last24Web}
+              </p>
+            </div>
+          </div>
+          <span
+            className={`text-[9px] font-mono tracking-[0.2em] px-2 py-1 border ${
+              last24Web > 0
+                ? "text-[#00FF88] border-[#00FF88]/40 bg-[#00FF88]/[0.05]"
+                : "text-[#FFB800] border-[#FFB800]/40 bg-[#FFB800]/[0.05]"
+            }`}
+            data-testid="corpus-web-health"
+          >
+            {last24Web > 0 ? "WEB-LEARNING HEALTHY" : "WEB-LEARNING IDLE"}
+          </span>
+        </div>
+      </div>
+
+      {/* By type — gap detector */}
+      <div className="border border-white/[0.08] bg-[#0A0A0A] p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[9px] font-mono tracking-[0.28em] text-gray-500 uppercase">
+            Composition · By Incident Type
+          </p>
+          <span className="text-[9px] font-mono text-gray-600">
+            gap = &lt; 5 cases
+          </span>
+        </div>
+        {types.length === 0 ? (
+          <p className="text-[11px] text-gray-500 font-mono">No type data.</p>
+        ) : (
+          <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+            {types.map((t) => {
+              const pct = total > 0 ? (t.count / total) * 100 : 0;
+              const isGap = t.count < 5;
+              const color = isGap ? "#FF6B6B" : "#00E5FF";
+              return (
+                <div
+                  key={t.incident_type}
+                  className="flex items-center gap-2"
+                  data-testid={`corpus-type-${t.incident_type}`}
+                >
+                  <span
+                    className="text-[10px] font-mono uppercase tracking-[0.15em] w-24 truncate"
+                    style={{ color: isGap ? "#FF8A8A" : "#fff" }}
+                    title={isGap ? "Gap — fewer than 5 precedents" : ""}
+                  >
+                    {t.incident_type?.replace("_", " ") || "—"}
+                  </span>
+                  <div className="flex-1 h-1.5 bg-white/[0.04]">
+                    <div
+                      className="h-full transition-all"
+                      style={{ width: `${pct}%`, backgroundColor: color }}
+                    />
+                  </div>
+                  <span
+                    className="text-[10px] font-mono w-10 text-right"
+                    style={{ color: isGap ? "#FF8A8A" : "#94A3B8" }}
+                  >
+                    {t.count}
+                  </span>
+                  {isGap && (
+                    <span
+                      className="text-[8px] font-mono tracking-[0.2em] px-1 py-0.5 border border-[#FF6B6B]/40 text-[#FF6B6B] bg-[#FF6B6B]/[0.06]"
+                      data-testid={`corpus-gap-${t.incident_type}`}
+                    >
+                      GAP
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
