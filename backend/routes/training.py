@@ -305,27 +305,57 @@ async def training_stats():
     # Surfaced in the operator's Training Library so admin can spot trends
     # (e.g. "23 escalations in last 24h" → broadcast may have a series of
     # heavy clashes worth reviewing).
-    vision_total = await db.incidents.count_documents(
-        {"ai_analysis.vision_escalation.triggered": True}
-    )
+    # Wave-10: split into two distinct safety-nets.
+    #   • vision_escalations  — violent-conduct (elbow / stamp / strike)
+    #   • consequence_corrections — handball-in-box upgrade + no-goal veto
+    # Each has its own filter so admin sees independent hit-rates.
     vision_24h_cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-    vision_24h = await db.incidents.count_documents(
-        {"ai_analysis.vision_escalation.triggered": True,
-         "created_at": {"$gte": vision_24h_cutoff}}
+
+    vc_filter = {
+        "ai_analysis.vision_escalation.triggered": True,
+        "ai_analysis.vision_escalation.kind": "violent_conduct",
+    }
+    vc_total = await db.incidents.count_documents(vc_filter)
+    vc_24h = await db.incidents.count_documents(
+        {**vc_filter, "created_at": {"$gte": vision_24h_cutoff}}
     )
-    # Top trigger phrases that fired the safety-net.
-    trigger_pipe = [
-        {"$match": {"ai_analysis.vision_escalation.triggered": True}},
+    vc_top_pipe = [
+        {"$match": vc_filter},
         {"$group": {"_id": "$ai_analysis.vision_escalation.trigger_phrase",
                     "count": {"$sum": 1}}},
         {"$sort": {"count": -1}},
         {"$limit": 6},
     ]
-    top_triggers_raw = await db.incidents.aggregate(trigger_pipe).to_list(6)
-    top_triggers = [
+    vc_top = [
         {"trigger": t["_id"], "count": t["count"]}
-        for t in top_triggers_raw if t.get("_id")
+        for t in await db.incidents.aggregate(vc_top_pipe).to_list(6)
+        if t.get("_id")
     ]
+
+    cc_filter = {"ai_analysis.consequence_correction.triggered": True}
+    cc_total = await db.incidents.count_documents(cc_filter)
+    cc_24h = await db.incidents.count_documents(
+        {**cc_filter, "created_at": {"$gte": vision_24h_cutoff}}
+    )
+    cc_top_pipe = [
+        {"$match": cc_filter},
+        {"$group": {"_id": "$ai_analysis.consequence_correction.trigger_phrase",
+                    "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 6},
+    ]
+    cc_top = [
+        {"trigger": t["_id"], "count": t["count"]}
+        for t in await db.incidents.aggregate(cc_top_pipe).to_list(6)
+        if t.get("_id")
+    ]
+
+    # Backwards-compat: keep the legacy `vision_escalations` totals
+    # counting BOTH classes so existing dashboards don't break, and add
+    # the new `consequence_corrections` block alongside it.
+    vision_total = vc_total + cc_total
+    vision_24h = vc_24h + cc_24h
+    top_triggers = sorted(vc_top + cc_top, key=lambda r: -r["count"])[:6]
 
     return {
         "total_cases": total,
@@ -339,6 +369,15 @@ async def training_stats():
             "total": vision_total,
             "last_24h": vision_24h,
             "top_triggers": top_triggers,
+            # Sub-breakdown for the new dedicated panels.
+            "violent_conduct": {
+                "total": vc_total, "last_24h": vc_24h, "top_triggers": vc_top,
+            },
+        },
+        "consequence_corrections": {
+            "total": cc_total,
+            "last_24h": cc_24h,
+            "top_triggers": cc_top,
         },
     }
 

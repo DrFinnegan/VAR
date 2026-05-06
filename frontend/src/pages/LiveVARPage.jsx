@@ -805,6 +805,7 @@ export const LiveVARPage = () => {
                       </div>
                     </div>
                   )}
+                  <WhyThisVerdict analysis={analysis} />
                   {analysis.training_case_archived_id && (
                     <div
                       className="mt-2 flex items-start gap-2 px-2 py-1.5 border-l-2 border-[#B366FF]/60 bg-[#B366FF]/[0.04]"
@@ -1137,5 +1138,127 @@ export const LiveVARPage = () => {
     </div>
   );
 };
+
+/**
+ * WhyThisVerdict — small expandable card explaining the verdict.
+ * Surfaces the consequence-correlation matrix row that fired (when
+ * either the LLM or the safety-net populated `matrix_row`), the
+ * structured `location` + `offender_team` declarations, and the full
+ * elaborated `neo_cortex_notes` deliberation.
+ *
+ * Hidden when none of these signals are populated to keep the verdict
+ * card compact for low-info incidents.
+ */
+function WhyThisVerdict({ analysis }) {
+  const [open, setOpen] = useState(false);
+  const matrixRow = analysis?.matrix_row;
+  const location = analysis?.location;
+  const offenderTeam = analysis?.offender_team;
+  const notes = analysis?.neo_cortex_notes;
+  const consequenceCorrection = analysis?.consequence_correction;
+  const visionEscalation = analysis?.vision_escalation;
+  const hasContent =
+    matrixRow ||
+    (location && location !== "ambiguous") ||
+    (offenderTeam && offenderTeam !== "unclear") ||
+    (notes && notes.length > 60);
+  if (!hasContent) return null;
+  const locColor =
+    location === "inside_penalty_area"
+      ? "#FF6B6B"
+      : location === "outside_penalty_area"
+      ? "#00E5FF"
+      : "#94A3B8";
+  const teamColor = offenderTeam === "defending" ? "#FF6B6B" : offenderTeam === "attacking" ? "#FFB800" : "#94A3B8";
+  return (
+    <div
+      className="mt-2 border border-white/[0.08] bg-white/[0.02]"
+      data-testid="why-this-verdict"
+    >
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-2.5 py-1.5 hover:bg-white/[0.04]"
+        data-testid="why-this-verdict-toggle"
+      >
+        <span className="text-[8px] font-mono tracking-[0.25em] text-[#94A3B8] uppercase">
+          Why this verdict?
+        </span>
+        <span className="text-[9px] font-mono text-gray-500">{open ? "−" : "+"}</span>
+      </button>
+      {open && (
+        <div className="px-2.5 pb-2.5 pt-0 space-y-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {location && (
+              <span
+                className="text-[9px] font-mono px-1.5 py-0.5 border"
+                style={{ color: locColor, borderColor: `${locColor}40`, backgroundColor: `${locColor}10` }}
+                data-testid="why-location"
+              >
+                LOC: {location.replace(/_/g, " ").toUpperCase()}
+              </span>
+            )}
+            {offenderTeam && (
+              <span
+                className="text-[9px] font-mono px-1.5 py-0.5 border"
+                style={{ color: teamColor, borderColor: `${teamColor}40`, backgroundColor: `${teamColor}10` }}
+                data-testid="why-offender-team"
+              >
+                OFFENDER: {offenderTeam.toUpperCase()}
+              </span>
+            )}
+            {visionEscalation?.kind && (
+              <span
+                className="text-[9px] font-mono px-1.5 py-0.5 border border-[#FF3333]/40 text-[#FF6B6B] bg-[#FF3333]/10"
+                data-testid="why-safety-net-tag"
+              >
+                {visionEscalation.kind === "violent_conduct"
+                  ? "SAFETY-NET: VIOLENT CONDUCT"
+                  : "SAFETY-NET: CONSEQUENCE CORRECTION"}
+              </span>
+            )}
+          </div>
+          {matrixRow && (
+            <div
+              className="border-l-2 border-[#00E5FF]/60 bg-[#00E5FF]/[0.04] px-2 py-1.5"
+              data-testid="why-matrix-row"
+            >
+              <p className="text-[8px] font-mono tracking-[0.25em] text-[#00E5FF]/80 uppercase mb-0.5">
+                Consequence Matrix Row
+              </p>
+              <p className="text-[10.5px] font-mono text-[#7FECFF] leading-snug">{matrixRow}</p>
+            </div>
+          )}
+          {consequenceCorrection?.original_decision && (
+            <div
+              className="border-l-2 border-[#FFB800]/60 bg-[#FFB800]/[0.04] px-2 py-1.5"
+              data-testid="why-consequence-correction"
+            >
+              <p className="text-[8px] font-mono tracking-[0.25em] text-[#FFB800]/80 uppercase mb-0.5">
+                Safety-net override
+              </p>
+              <p className="text-[10px] font-mono text-[#FFD466] leading-snug">
+                {consequenceCorrection.original_decision} → {consequenceCorrection.upgraded_decision}
+              </p>
+            </div>
+          )}
+          {notes && (
+            <div
+              className="border-l-2 border-white/20 bg-white/[0.02] px-2 py-1.5"
+              data-testid="why-neo-cortex-notes"
+            >
+              <p className="text-[8px] font-mono tracking-[0.25em] text-gray-500 uppercase mb-0.5">
+                Neo-Cortex deliberation
+              </p>
+              <p className="text-[10px] font-body text-gray-300 leading-relaxed whitespace-pre-line">
+                {notes}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 export default LiveVARPage;

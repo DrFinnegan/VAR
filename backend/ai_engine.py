@@ -1186,7 +1186,15 @@ class NeoCortexAnalyzer:
                     '  "key_factors": ["specific factual factors from the description"],\n'
                     '  "cited_clause": "Short reference to the IFAB law/clause applied (e.g. \'Law 12 §1 — Serious Foul Play, two-footed lunge\', \'Law 11 — Offside, daylight beyond second-last defender\', \'Law 14 — DOGSO inside area, no attempt to play ball\'). Max 90 chars.",\n'
                     '  "risk_level": "low|medium|high|critical",\n'
-                    '  "neo_cortex_notes": "any caveats, what additional evidence would help",\n'
+                    '  "neo_cortex_notes": "ELABORATED operator-facing deliberation — ≥ 6 sentences covering: '
+                    'what made you confident, what made you uncertain, which precedents were most/least persuasive, '
+                    'what an opposing referee panel might argue, what ADDITIONAL evidence (specific extra angle / '
+                    'frame / context) would unlock 95%+ confidence, and any explicit contradiction between frames '
+                    'or angles. Operators read this on big-screen and use it to defend the verdict to broadcasters; '
+                    'a two-line note is a referee-grade FAILURE.",\n'
+                    '  "location": "inside_penalty_area | outside_penalty_area | ambiguous — REQUIRED for handball/foul/penalty/red_card incidents",\n'
+                    '  "offender_team": "attacking | defending | unclear — REQUIRED for handball/foul/penalty/red_card incidents",\n'
+                    '  "matrix_row": "OPTIONAL but RECOMMENDED — the exact row label from the consequence-correlation matrix you applied (e.g. \'Defender deliberate handball INSIDE own penalty area → Penalty\'). This is shown in the WHY-THIS-VERDICT panel.",\n'
                     '  "angle_assessments": [\n'
                     '     // OPTIONAL — only populate when 2+ camera angles are attached.\n'
                     '     // One object per angle in the order provided (broadcast, tactical, tight, goal_line).\n'
@@ -1530,6 +1538,12 @@ class NeoCortexAnalyzer:
                         f"observed in frame analysis — verdict upgraded to RED. "
                         + (neo_notes or "")
                     )
+                    # Overwrite matrix_row — the LLM's row no longer matches the
+                    # upgraded verdict, so we replace it with the safety-net's reasoning.
+                    analysis_data["matrix_row"] = (
+                        f"Violent conduct ({trigger_phrase}) → "
+                        f"{'Red Card - Violent Conduct' if 'elbow' in trigger_phrase or 'headbutt' in trigger_phrase or 'punch' in trigger_phrase or 'strike' in trigger_phrase else 'Red Card - Serious Foul Play'}"
+                    )
                     vision_escalation = {
                         "triggered": True,
                         "trigger_phrase": trigger_phrase,
@@ -1574,6 +1588,9 @@ class NeoCortexAnalyzer:
                         f"in frame analysis — verdict upgraded from "
                         f"'{original_decision}' to PENALTY. "
                         + (neo_notes or "")
+                    )
+                    analysis_data["matrix_row"] = (
+                        "Defender deliberate handball INSIDE own penalty area → Penalty"
                     )
                     # Reuse the same telemetry container so the
                     # /training/stats vision_escalations panel sees both
@@ -1635,6 +1652,35 @@ class NeoCortexAnalyzer:
                             "trigger_at": datetime.now(timezone.utc).isoformat(),
                         }
 
+            # Pull the new structured fields from the LLM response.
+            # When the LLM omits them, default to "ambiguous"/"unclear" so
+            # the UI badge degrades gracefully instead of disappearing.
+            location = str(analysis_data.get("location") or "ambiguous").strip().lower()
+            if location not in ("inside_penalty_area", "outside_penalty_area", "ambiguous"):
+                location = "ambiguous"
+            offender_team = str(analysis_data.get("offender_team") or "unclear").strip().lower()
+            if offender_team not in ("attacking", "defending", "unclear"):
+                offender_team = "unclear"
+            matrix_row = analysis_data.get("matrix_row")
+            if matrix_row:
+                matrix_row = str(matrix_row)[:240]
+
+            # ── Split telemetry: violent-conduct vs consequence-correction
+            # `vision_escalation` historically combined both kinds. Wave-10
+            # introduces a parallel `consequence_correction` field so the
+            # Training Library panel can audit each safety-net's hit-rate.
+            consequence_correction = None
+            if vision_escalation and vision_escalation.get("trigger_phrase"):
+                phrase = vision_escalation["trigger_phrase"]
+                kind = (
+                    "consequence_correction"
+                    if phrase.startswith(("handball-in-box:", "no-goal-evidence"))
+                    else "violent_conduct"
+                )
+                vision_escalation["kind"] = kind
+                if kind == "consequence_correction":
+                    consequence_correction = dict(vision_escalation)
+
             return {
                 "stage": "neo_cortex",
                 "confidence_score": min(100, max(0, confidence_score)),
@@ -1648,12 +1694,16 @@ class NeoCortexAnalyzer:
                 "cited_clause": cited,
                 "risk_level": analysis_data.get("risk_level", "medium"),
                 "neo_cortex_notes": neo_notes,
+                "location": location,
+                "offender_team": offender_team,
+                "matrix_row": matrix_row,
                 "angle_assessments": angle_assessments,
                 "angle_confidence_delta": angle_confidence_delta,
                 "angle_disagreement": angle_disagreement,
                 "frame_breakdown": frame_breakdown,
                 "offside_markers": offside_markers,
                 "vision_escalation": vision_escalation,
+                "consequence_correction": consequence_correction,
                 "processing_time_ms": processing_ms,
             }
 
