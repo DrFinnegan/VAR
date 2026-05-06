@@ -87,6 +87,57 @@ _DEFAULT_CITED_CLAUSE = {
 }
 
 
+def _consequence_correlation_instruction(incident_type: str) -> str:
+    """Inject an explicit foul × location → consequence map so the LLM
+    cannot produce contradictory outputs like "handball in penalty area
+    → free kick" or "goal disallowed" when no goal was actually scored.
+
+    Added 2026-02 wave-9 after user-reported case where a defender's
+    in-the-box handball returned the wrong consequence AND a bogus
+    'goal disallowed' note.
+    """
+    if incident_type not in ("handball", "foul", "penalty", "red_card", "card", "other"):
+        return ""
+    return (
+        "═══ CONSEQUENCE × LOCATION CORRELATION (REFEREE DECISION MATRIX) ═══\n"
+        "Before writing the verdict, you MUST decide TWO things explicitly:\n"
+        "  (1) WHERE did the offence occur? Observe the nearest pitch marking: penalty "
+        "      spot, 6-yard box, 18-yard box, edge of area, D, halfway line. State this "
+        "      in neo_cortex_notes as `LOCATION: inside_penalty_area` or "
+        "      `LOCATION: outside_penalty_area` or `LOCATION: ambiguous`.\n"
+        "  (2) Which TEAM is the OFFENDER on? State `OFFENDER_TEAM: attacking|defending`.\n\n"
+        "Then apply the matrix (IFAB Law 12/14) strictly:\n"
+        "  ┌─────────────────────────────────┬─────────────────────────┬──────────────────────────────────┐\n"
+        "  │ Offence                         │ Where                   │ Correct verdict                  │\n"
+        "  ├─────────────────────────────────┼─────────────────────────┼──────────────────────────────────┤\n"
+        "  │ Defender deliberate handball    │ INSIDE own pen. area    │ PENALTY + yellow (if SPA/DOGSO)  │\n"
+        "  │ Defender unnatural-position HB  │ INSIDE own pen. area    │ PENALTY                          │\n"
+        "  │ Defender raised-arm-above-sh HB │ INSIDE own pen. area    │ PENALTY                          │\n"
+        "  │ Defender DOGSO-via-handball     │ INSIDE own pen. area    │ PENALTY + RED CARD               │\n"
+        "  │ Defender handball               │ OUTSIDE pen. area       │ DIRECT FREE KICK                 │\n"
+        "  │ Attacker handball (immediate)   │ Anywhere — leads to goal│ GOAL DISALLOWED — Attacker HB   │\n"
+        "  │ Attacker handball (no goal)     │ Anywhere                │ DIRECT FREE KICK to defenders   │\n"
+        "  │ Defender foul inside own box    │ INSIDE own pen. area    │ PENALTY (+ card by severity)     │\n"
+        "  │ Defender foul outside own box   │ OUTSIDE pen. area       │ DIRECT FREE KICK (+ card)        │\n"
+        "  │ Ball-to-hand, natural position  │ Anywhere                │ NO OFFENCE — PLAY ON             │\n"
+        "  └─────────────────────────────────┴─────────────────────────┴──────────────────────────────────┘\n\n"
+        "HARD RULES — these CANNOT be violated:\n"
+        "  • A DELIBERATE handball by a DEFENDER INSIDE their own penalty area ALWAYS "
+        "    results in a PENALTY. Never `Direct Free Kick` for a handball in the box.\n"
+        "  • `GOAL DISALLOWED` / `Goal Overturned` is ONLY valid when a frame actually "
+        "    shows the ball crossing the goal line OR a celebrating attacker with ball "
+        "    clearly in the net. If NO frame shows a goal being scored, you CANNOT use "
+        "    `Goal Disallowed` — use `No Goal` / `Play On` / `Free Kick` / `Penalty` "
+        "    depending on the actual incident. Misapplying `Goal Disallowed` to a "
+        "    no-goal situation is a CRITICAL error.\n"
+        "  • If LOCATION is ambiguous and the incident TYPE is handball, lean toward "
+        "    the MORE conservative outcome and state it in neo_cortex_notes. Do NOT "
+        "    pick a penalty decision with confidence >80 when you cannot see where "
+        "    the ball met the hand.\n\n"
+    )
+
+
+
 def _violent_conduct_vision_instruction(incident_type: str, n_frames: int) -> str:
     """Force the LLM to scan frames for violent-conduct vision triggers
     (elbow-to-face, headbutt, stamp, punch, blood, holding-the-face) and
@@ -900,6 +951,79 @@ class NeoCortexAnalyzer:
                     return True, trig
         return False, ""
 
+    # ── Trigger-phrase library for HANDBALL-IN-BOX → PENALTY upgrade ──
+    # If the LLM observed a defender handball + penalty-area location
+    # cues in the frame_breakdown but emitted only 'Free Kick' / 'Review',
+    # we push the verdict to 'Penalty'. Mirrors the violent-conduct
+    # safety-net pattern.
+    _HANDBALL_IN_BOX_CUES = [
+        "inside the penalty area", "inside the box", "within the penalty area",
+        "in the penalty area", "inside his own penalty area",
+        "inside their penalty area", "in the box",
+        "defender handles inside", "defender's hand inside the area",
+        "blocks the ball with his hand in the area",
+        "blocks the ball with his hand in the penalty area",
+        "defender blocks the ball with hand in the box",
+        "handball in the penalty area", "handball inside the box",
+    ]
+
+    # Phrases that CONFIRM a goal was actually scored. A verdict of
+    # 'Goal Disallowed' requires at least one of these; otherwise the
+    # post-LLM sanity check downgrades the verdict.
+    _GOAL_CONFIRMATION_CUES = [
+        "ball crosses the goal line", "ball in the net",
+        "ball hits the back of the net", "ball crosses the line",
+        "whole of the ball crosses", "ball over the line",
+        "goal is scored", "scores a goal", "scored a goal",
+        "celebration by the attacker", "celebrating the goal",
+        "attacker wheels away in celebration", "ball nestles in the net",
+    ]
+
+    @classmethod
+    def _check_handball_in_box_in_frames(cls, frame_breakdown):
+        """Returns (True, matched_phrase) if any frame explicitly observes
+        a handball inside the penalty area. Defender vs attacker is the
+        caller's job to disambiguate (via the incident description).
+        """
+        if not isinstance(frame_breakdown, list) or not frame_breakdown:
+            return False, ""
+        for fb in frame_breakdown:
+            if not isinstance(fb, dict):
+                continue
+            obs = (fb.get("observation") or "").lower()
+            if not obs:
+                continue
+            # Need EITHER 'handball' OR 'hand blocks'/'arm blocks' AND a
+            # penalty-area cue in the same observation.
+            has_handball = (
+                "handball" in obs
+                or ("hand" in obs and ("block" in obs or "stop" in obs or "touches" in obs))
+                or ("arm" in obs and ("block" in obs or "stop" in obs or "deflect" in obs))
+            )
+            if not has_handball:
+                continue
+            for cue in cls._HANDBALL_IN_BOX_CUES:
+                if cue in obs:
+                    return True, cue
+        return False, ""
+
+    @classmethod
+    def _check_goal_actually_scored(cls, frame_breakdown):
+        """Return True if any frame shows clear visual evidence of a
+        completed goal. Used to veto bogus `Goal Disallowed` verdicts."""
+        if not isinstance(frame_breakdown, list) or not frame_breakdown:
+            return False
+        for fb in frame_breakdown:
+            if not isinstance(fb, dict):
+                continue
+            obs = (fb.get("observation") or "").lower()
+            if not obs:
+                continue
+            for cue in cls._GOAL_CONFIRMATION_CUES:
+                if cue in obs:
+                    return True
+        return False
+
     async def analyze(
         self,
         incident_type: str,
@@ -1172,6 +1296,7 @@ class NeoCortexAnalyzer:
                         "referee panel will read these and challenge any claim that does not "
                         "match the pixels.\n\n"
                         + _violent_conduct_vision_instruction(incident_type, len(all_images))
+                        + _consequence_correlation_instruction(incident_type)
                         + (_offside_marker_instruction(incident_type, len(all_images)))
                         + _single_angle_warning(all_images, has_image)
                     )
@@ -1183,6 +1308,7 @@ class NeoCortexAnalyzer:
                           "/ ball-out cannot be confirmed from one image. Cap your confidence "
                           "and explain what additional frame would resolve the call.\n\n"
                         + _violent_conduct_vision_instruction(incident_type, 1)
+                        + _consequence_correlation_instruction(incident_type)
                         + (_offside_marker_instruction(incident_type, 1))
                         + _single_angle_warning([image_base64] if image_base64 else [], has_image)
                     )
@@ -1413,6 +1539,101 @@ class NeoCortexAnalyzer:
                         "upgraded_confidence": confidence_score,
                         "trigger_at": datetime.now(timezone.utc).isoformat(),
                     }
+
+            # ── Handball-in-box → PENALTY safety-net ─────────────────
+            # If the LLM observed a defender handball inside the area but
+            # emitted only a Free Kick / Review verdict, force the
+            # consequence to PENALTY. Mirrors violent-conduct pattern.
+            if incident_type == "handball":
+                in_box, hb_phrase = self._check_handball_in_box_in_frames(
+                    frame_breakdown
+                )
+                desc_lower = (description or "").lower()
+                # Defender-side detection: explicit operator hint OR
+                # absence of attacker-cues. We default to "defender" when
+                # the team is the defending side at the foul moment.
+                desc_attacker = any(c in desc_lower for c in (
+                    "attacker handball", "striker handles", "forward handles",
+                    "his own goal from his hand", "scores with the hand",
+                    "goal from his hand",
+                ))
+                verdict_low = suggested_decision.lower()
+                if in_box and not desc_attacker and "penalty" not in verdict_low and "no offence" not in verdict_low:
+                    logger.info(
+                        "Handball-in-box escalation fired: '%s' → upgrading "
+                        "'%s' to Penalty", hb_phrase, suggested_decision
+                    )
+                    original_decision = suggested_decision
+                    original_confidence = confidence_score
+                    suggested_decision = "Penalty - Defender Handball Inside Penalty Area"
+                    confidence_score = max(confidence_score, 86.0)
+                    if not cited or "law 12" not in cited.lower():
+                        cited = "IFAB Law 12 — Handball (deliberate / unnatural; defender in own penalty area = penalty)"
+                    neo_notes = (
+                        f"HANDBALL-IN-BOX ESCALATION: '{hb_phrase}' observed "
+                        f"in frame analysis — verdict upgraded from "
+                        f"'{original_decision}' to PENALTY. "
+                        + (neo_notes or "")
+                    )
+                    # Reuse the same telemetry container so the
+                    # /training/stats vision_escalations panel sees both
+                    # categories. The trigger phrase identifies the kind.
+                    vision_escalation = {
+                        "triggered": True,
+                        "trigger_phrase": f"handball-in-box: {hb_phrase}",
+                        "original_decision": original_decision,
+                        "upgraded_decision": suggested_decision,
+                        "original_confidence": original_confidence,
+                        "upgraded_confidence": confidence_score,
+                        "trigger_at": datetime.now(timezone.utc).isoformat(),
+                    }
+
+            # ── 'Goal Disallowed' sanity check ───────────────────────
+            # Veto a `Goal Disallowed` verdict if no frame_breakdown entry
+            # actually shows a goal being scored. Misapplying this label
+            # (e.g. "Goal Disallowed - Defender Handball" when there was
+            # no goal) is a known LLM hallucination pattern that this
+            # check catches before it reaches the operator UI.
+            if (
+                "goal disallowed" in suggested_decision.lower()
+                or "goal overturned" in suggested_decision.lower()
+            ):
+                if not self._check_goal_actually_scored(frame_breakdown):
+                    logger.warning(
+                        "Sanity-check veto: '%s' rejected — no frame shows "
+                        "an actual goal being scored. Downgrading.",
+                        suggested_decision,
+                    )
+                    original_decision = suggested_decision
+                    # Pick a sensible downgrade based on incident_type.
+                    if incident_type == "handball":
+                        # Defender handball without a goal in the box → penalty
+                        # already handled above; fall through to free kick
+                        # for outside-the-box.
+                        suggested_decision = "Direct Free Kick - Handball (no goal scored)"
+                    elif incident_type == "offside":
+                        suggested_decision = "Offside - Play Stopped (no goal in frame evidence)"
+                    elif incident_type == "foul":
+                        suggested_decision = "Foul - Free Kick (no goal scored)"
+                    else:
+                        suggested_decision = "Review Required - Verdict Mislabelled"
+                    confidence_score = min(confidence_score, 65.0)
+                    neo_notes = (
+                        f"VERDICT SANITY-CHECK: '{original_decision}' "
+                        f"rejected because no frame showed an actual goal "
+                        f"being scored. Downgraded to '{suggested_decision}'. "
+                        + (neo_notes or "")
+                    )
+                    if not vision_escalation:
+                        vision_escalation = {
+                            "triggered": True,
+                            "trigger_phrase": "no-goal-evidence sanity-check",
+                            "original_decision": original_decision,
+                            "upgraded_decision": suggested_decision,
+                            "original_confidence": confidence_score,
+                            "upgraded_confidence": confidence_score,
+                            "trigger_at": datetime.now(timezone.utc).isoformat(),
+                        }
 
             return {
                 "stage": "neo_cortex",
